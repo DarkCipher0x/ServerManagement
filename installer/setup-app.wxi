@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ServerManagement's settings for the DarkCipher Setup template (installer\Setup\Bundle.wxs). Per app; the template
+     itself names no app. BundleUpgradeCode is the setup's permanent identity (separate from the MSI's UpgradeCode):
+     never change it. Paths are under AppRoot, the repository folder the build passes in (-d AppRoot=...). -->
+<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <?define AppName = "ServerManagement" ?>
+  <?define Manufacturer = "DarkCipher Systems" ?>
+  <?define BundleUpgradeCode = "dc5144b0-240e-42cf-a17c-507e2864d614" ?>
+  <?define AboutUrl = "https://darkciphersystems.com" ?>
+  <?define AppIcon = "$(var.AppRoot)\src\DcxManager\Assets\app.ico" ?>
+  <?define AppLogo = "$(var.AppRoot)\src\DcxManager\Assets\logo.png" ?>
+  <?define LicenseFile = "$(var.AppRoot)\LICENSE" ?>
+  <?define SetupConfig = "$(var.AppRoot)\installer\setup-app.json" ?>
+  <?define AppMsiProperties = "$(var.AppRoot)\installer\setup-app.properties.wxi" ?>
+  <?define AppPackages = "$(var.AppRoot)\installer\setup-app.packages.wxi" ?>
+  <?define InstallFolderProperty = "INSTALLFOLDER" ?>
+  <?define DefaultInstallFolder = "[ProgramFiles64Folder]DarkCipher Systems\ServerManagement" ?>
+  <?define LaunchTarget = "[InstallFolder]\DcxServerManager.exe" ?>
+</Include>

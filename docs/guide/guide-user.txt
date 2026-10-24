@@ -1,0 +1,38 @@
+# The User Guide PDF (tools\make-guide.ps1 -Spec docs\guide\guide-user.txt -Suffix User-Guide). Same format as guide.txt.
+TITLE User guide
+SUBTITLE User guide — version {VERSION}
+COVERS Overview · every screen and feature (the in-app help) · AI · known limitations · what changed in {VERSION}
+PART Part 1 — Overview
+DOC docs/guide/00-about.md
+DOC README.md title="Overview"
+PART Part 2 — User guide
+DOC src/Dcx.Core/Assets/help/help.md title="User guide" dropkeywords
+DOC docs/guide/15-ai.md
+PART Part 3 — Known limitations
+DOC docs/guide/30-limitations.md
+PART Part 4 — What changed in {VERSION}
+DOC docs/release-notes/0.6.12.md
+DOC docs/release-notes/0.6.11.md
+DOC docs/release-notes/0.6.10.md
+DOC docs/release-notes/0.6.9.md
+DOC docs/release-notes/0.6.8.md
+DOC docs/release-notes/0.6.7.md
+DOC docs/release-notes/0.6.6.md
+DOC docs/release-notes/0.6.5.md
+DOC docs/release-notes/0.6.4.md
+DOC docs/release-notes/0.6.3.md
+DOC docs/release-notes/0.6.2.md
+DOC docs/release-notes/0.6.1.md
+DOC docs/release-notes/0.6.0.md
+DOC docs/release-notes/0.5.9.md
+DOC docs/release-notes/0.5.8.md
+DOC docs/release-notes/0.5.7.md
+DOC docs/release-notes/0.5.5.md
+DOC docs/release-notes/0.5.4.md
+DOC docs/release-notes/0.5.3.md
+DOC docs/release-notes/0.5.2.md
+DOC docs/release-notes/0.5.1.md
+DOC docs/release-notes/0.5.0.md
+DOC docs/release-notes/0.4.0.md
+PART Appendix
+DOC THIRD-PARTY-NOTICES.md

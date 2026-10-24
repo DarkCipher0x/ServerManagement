@@ -1,0 +1,41 @@
+# The Developer Guide PDF (tools\make-guide.ps1 -Spec docs\guide\guide-developer.txt -Suffix Developer-Guide).
+TITLE Developer guide
+SUBTITLE Developer guide — version {VERSION}
+COVERS Repository layout and coding rules · the source file by file · building and releasing · the architecture decisions (ADR-001 to ADR-058) · provider API coverage · add-ons and the SDK · the self-test
+PART Part 1 — Developer reference
+DOC docs/guide/20-developer.md
+DOC docs/PROJECT-TREE.md title="Project structure and how it is built out"
+DOC docs/SOURCE.md title="Source code reference"
+DOC docs/BUILD.md title="Building and releasing"
+PART Part 2 — Architecture
+DOC docs/ARCHITECTURE.md title="Architecture and decisions (ADR-001 to ADR-058)" toc=4
+DOC docs/PROVIDER-API-COVERAGE.md title="Provider API coverage"
+PART Part 3 — Extending
+DOC docs/ADDONS.md title="Add-ons and the SDK (API 2)"
+PART Part 4 — Testing
+DOC docs/TESTING.md
+PART Appendix
+DOC docs/release-notes/0.6.12.md
+DOC docs/release-notes/0.6.11.md
+DOC docs/release-notes/0.6.10.md
+DOC docs/release-notes/0.6.9.md
+DOC docs/release-notes/0.6.8.md
+DOC docs/release-notes/0.6.7.md
+DOC docs/release-notes/0.6.6.md
+DOC docs/release-notes/0.6.5.md
+DOC docs/release-notes/0.6.4.md
+DOC docs/release-notes/0.6.3.md
+DOC docs/release-notes/0.6.2.md
+DOC docs/release-notes/0.6.1.md
+DOC docs/release-notes/0.6.0.md
+DOC docs/release-notes/0.5.9.md
+DOC docs/release-notes/0.5.8.md
+DOC docs/release-notes/0.5.7.md
+DOC docs/release-notes/0.5.5.md
+DOC docs/release-notes/0.5.4.md
+DOC docs/release-notes/0.5.3.md
+DOC docs/release-notes/0.5.2.md
+DOC docs/release-notes/0.5.1.md
+DOC docs/release-notes/0.5.0.md
+DOC docs/release-notes/0.4.0.md
+DOC THIRD-PARTY-NOTICES.md

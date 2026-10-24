@@ -1,0 +1,97 @@
+<UserControl x:Class="DcxManager.Views.HostsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="clr-namespace:DcxManager.Views" xmlns:ui="clr-namespace:DcxManager.Views;assembly=Dcx.Ui">
+    <DockPanel Margin="14,12">
+        <DockPanel x:Name="HeaderRow" DockPanel.Dock="Top" Margin="0,0,0,10">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="VIEW" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="ViewBox" Width="150" SelectionChanged="OnViewChanged" ToolTip="How the tree on the left organises your hosts">
+                    <ComboBoxItem Content="Folders" Tag="folders" IsSelected="True"/>
+                    <ComboBoxItem Content="Platform (Linux / Windows / Network)" Tag="platform"/>
+                    <ComboBoxItem Content="Protocol (SSH / RDP)" Tag="protocol"/>
+                    <ComboBoxItem Content="Tags" Tag="tags"/>
+                    <ComboBoxItem Content="Jump host" Tag="jump"/>
+                </ComboBox>
+                <TextBox x:Name="Search" Width="220" Margin="10,0,0,0" Padding="5,4" TextChanged="OnFilter" ToolTip="Filter by name, address, user, tag or notes" ui:Hint.Text="Filter hosts…"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Hosts" Style="{StaticResource H1}"/>
+                <TextBlock x:Name="CountText" Style="{StaticResource Hint}" VerticalAlignment="Bottom" Margin="10,0,0,2"/>
+            </StackPanel>
+        </DockPanel>
+        <!-- Primary actions only; everything else is under More ▾ (and in the right-click menu). One toolbar size, like
+             every other screen: connect actions first, editing next, Delete last. -->
+        <WrapPanel x:Name="ToolbarRow" DockPanel.Dock="Top" Margin="0,0,0,10">
+            <Button Content="＋ Add host" Style="{StaticResource SmallPrimaryButton}" Click="OnAdd" Margin="0,0,12,4" ToolTip="SSH (Linux) or Remote Desktop (Windows) — choose at the top of the dialog"/>
+            <Button Content="⌨ Connect" Style="{StaticResource SmallButton}" Click="OnTerminal" Margin="0,0,4,4" ToolTip="SSH terminal — or Remote Desktop for a Windows host (double-click a host does the same)"/>
+            <Button Content="⇅ Files" Style="{StaticResource SmallButton}" Click="OnFiles" Margin="0,0,4,4" ToolTip="SFTP file browser"/>
+            <Button Content="▣ Manage" Style="{StaticResource SmallButton}" Click="OnManage" Margin="0,0,12,4" ToolTip="Dashboard, services, processes, logs, packages, Docker, users, firewall, insights"/>
+            <Button Content="✎ Edit" Style="{StaticResource SmallButton}" Click="OnEdit" Margin="0,0,4,4"/>
+            <ContentControl x:Name="MoreSlot" Margin="0,0,12,4"/>
+            <Button Content="✕ Delete" Style="{StaticResource SmallDangerButton}" Click="OnDelete" Margin="0,0,4,4"/>
+        </WrapPanel>
+        <Grid x:Name="BodyGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="FolderCol" Width="230" MinWidth="120"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <!-- The folder pane, pinned or auto-collapsing INSIDE this page (0.6.2, DarkCipher0x: "INSIDE the tab/window of hosts ...
+                 able to collapse within itself"; HostsView.FolderPane.cs). Pinned: it has its column, as always. Auto: the
+                 column is a narrow strip; pointing at it slides the pane out over the host list until the pointer leaves. -->
+            <!-- The collapsed pane: a slim, flush "Hosts" tab (0.6.2, DarkCipher0x: "just like a compact 'hosts' and a little more
+                 integrated"); drawn in HostsView.FolderPane.cs. -->
+            <Border x:Name="FolderStrip" Grid.Column="0" Visibility="Collapsed" Margin="0,0,6,0" Cursor="Hand" AllowDrop="True"
+                    Background="Transparent" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Line}"
+                    AutomationProperties.Name="Show the hosts folders" ToolTip="Hosts folders: point here to slide them out"/>
+            <Border x:Name="FolderHost" Grid.Column="0" Background="Transparent">
+                <DockPanel x:Name="FolderPane">
+                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" LastChildFill="False">
+                        <Button x:Name="PinButton" DockPanel.Dock="Left" Content="📌" Style="{StaticResource SmallButton}" Click="OnPinToggle"/>
+                        <TextBlock DockPanel.Dock="Left" Text="HOSTS" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </DockPanel>
+                    <!-- 0.6.7 (DarkCipher0x: "it needs to be a fully working hosts pane"): hosts inside their folders, a filter, ＋ Host. -->
+                    <TextBox x:Name="TreeFilter" DockPanel.Dock="Top" Margin="0,0,0,4" Padding="5,3" ui:Hint.Text="Filter hosts…" ToolTip="Show only hosts whose name, address, user, tag or folder matches"/>
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                        <Button x:Name="NewHostBtn" Content="＋ Host" Style="{StaticResource SmallButton}" Click="OnNewHostInTree" Margin="0,0,4,0" ToolTip="Add a host in the selected folder"/>
+                        <Button x:Name="NewFolderBtn" Content="＋ Folder" Style="{StaticResource SmallButton}" Click="OnNewFolder" ToolTip="New folder inside the selected one"/>
+                    </WrapPanel>
+                    <TreeView x:Name="Folders" SelectedItemChanged="OnFolderSelected" AllowDrop="True"/>
+                </DockPanel>
+            </Border>
+            <GridSplitter x:Name="FolderSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext" Background="Transparent"/>
+        <!-- 0.6.7 (ADR-086): sessions opened from this page open as tabs in here, beside the folder pane; the host list is
+             its first tab ("All hosts"). Settings → Navigation → Open sessions from Hosts: inside the Hosts tab / separate tabs. -->
+        <Border x:Name="SessionArea" Grid.Column="2" Visibility="Collapsed"/>
+        <ListView Grid.Column="2" x:Name="List" MouseDoubleClick="OnTerminal" SelectionMode="Extended">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="" Width="26" DisplayMemberBinding="{Binding Star}"/>
+                    <GridViewColumn Header="Name" Width="190" DisplayMemberBinding="{Binding Name}"/>
+                    <GridViewColumn Header="Environment" Width="110">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border Background="{Binding EnvBrush}" CornerRadius="2" Padding="6,0" HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding EnvText}" FontWeight="Bold" FontSize="{DynamicResource FsMicro}" Foreground="{DynamicResource Bg}"/>
+                                </Border>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Folder" Width="140" DisplayMemberBinding="{Binding Host.Group}"/>
+                    <GridViewColumn Header="Proto" Width="52" DisplayMemberBinding="{Binding Proto}"/>
+                    <GridViewColumn Header="Platform" Width="80" DisplayMemberBinding="{Binding PlatformText}"/>
+                    <GridViewColumn Header="Address" Width="170" DisplayMemberBinding="{Binding Host.Address}"/>
+                    <GridViewColumn Header="Port" Width="50" DisplayMemberBinding="{Binding Host.Port}"/>
+                    <GridViewColumn Header="User" Width="90" DisplayMemberBinding="{Binding Host.Username}"/>
+                    <GridViewColumn Header="Auth" Width="190" DisplayMemberBinding="{Binding AuthText}"/>
+                    <GridViewColumn Header="Via" Width="110" DisplayMemberBinding="{Binding JumpText}"/>
+                    <GridViewColumn Header="Tags" Width="130" DisplayMemberBinding="{Binding Host.Tags}"/>
+                    <GridViewColumn Header="Reachable" Width="150" DisplayMemberBinding="{Binding Reach}"/>
+                    <GridViewColumn Header="Last connected" Width="130" DisplayMemberBinding="{Binding LastText}"/>
+                </GridView>
+            </ListView.View>
+        </ListView>
+        </Grid>
+    </DockPanel>
+</UserControl>

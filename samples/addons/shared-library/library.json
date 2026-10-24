@@ -1,0 +1,4 @@
+{
+  "name": "Shared library",
+  "notes": "The general add-on: it names no library, it only switches the Shared library screen on. A team's own add-on (made by Create a library… or Export team add-on…) adds libraryId, path and ownerFingerprint."
+}

@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Core (0.2.0 phase 6a, docs/PLAN-0.2.0.md): the encrypted store and keyring, settings and every stored record,
+       the audit log, offline mode and the network policy, the capability registry, secret masking, the AI switch and its
+       lock, the contracts modules fill (the assistant, the report analyst), help search, notes, incidents and documents.
+       No WPF, and no reference to any project above it: the compiler keeps it that way. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DcxManager</RootNamespace>
+    <AssemblyName>Dcx.Core</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Built-in help / FAQ articles: read by the offline help search (HelpKb), so they ship with it -->
+    <None Remove="Assets\help\**" />
+    <EmbeddedResource Include="Assets\help\**" LogicalName="help/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The projects above Core (and the self-test inside the app) use its internal members, as they did in one project -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+    <InternalsVisibleTo Include="Dcx.Ai" />
+    <InternalsVisibleTo Include="Dcx.Browser" />
+    <InternalsVisibleTo Include="Dcx.Library" />
+    <InternalsVisibleTo Include="Dcx.Addons" />
+    <InternalsVisibleTo Include="Dcx.Connectivity" />
+    <InternalsVisibleTo Include="Dcx.Ui" />
+    <InternalsVisibleTo Include="Dcx.Infra" />
+    <InternalsVisibleTo Include="Dcx.Cloud" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <!-- 0.6.12 post-quantum (ML-KEM-768, ML-DSA-65): the same version SSH.NET already brings in (no new dependency). -->
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
+    <!-- 0.3.0 §23: LDAPS / StartTLS sign-in (Microsoft, part of dotnet/runtime; the only new dependency of the release). -->
+    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.13" />
+  </ItemGroup>
+
+</Project>

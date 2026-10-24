@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Browser (0.2.0 phase 6e, docs/PLAN-0.2.0.md): the portal browser engine (ADR-032) â€” bookmarks, profiles per environment, pinned self-signed certificates, the browser add-on kind. Its screens (WebView2) are in the app. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DcxManager</RootNamespace>
+    <AssemblyName>Dcx.Browser</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+    <ProjectReference Include="..\Dcx.Connectivity\Dcx.Connectivity.csproj" />
+    <ProjectReference Include="..\Dcx.Ui\Dcx.Ui.csproj" />
+    <ProjectReference Include="..\Dcx.Infra\Dcx.Infra.csproj" />
+    <ProjectReference Include="..\Dcx.Addons\Dcx.Addons.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The projects above (and the self-test inside the app) use its internal members, as they did in one project -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+    <InternalsVisibleTo Include="Dcx.Ai" />
+  </ItemGroup>
+
+</Project>

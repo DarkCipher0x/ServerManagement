@@ -1,0 +1,92 @@
+# The complete PDF guide (tools\make-guide.ps1). Each DOC's H1 becomes a chapter under the PART before it.
+# Options: title="…" (chapter title), dropkeywords (help.md search lines), cut="<heading>" / take="<heading>" (a section
+# out / only that section), top=N (move the first heading to level N). TITLE / SUBTITLE / COVERS set the cover page.
+# The release bundle's other PDFs have their own manifests here: guide-user, guide-developer, guide-business,
+# guide-security-report, guide-project (0.4.0 rule; build.ps1 makes all of them).
+TITLE Complete guide
+SUBTITLE Complete guide — version {VERSION}
+COVERS Overview · User guide · Administration · For the organisation · Security and the security report · Developer reference · Release notes · Known limitations
+PART Part 1 — Overview
+DOC docs/guide/00-about.md
+DOC README.md title="Overview"
+PART Part 2 — User guide
+DOC src/Dcx.Core/Assets/help/help.md title="User guide" dropkeywords
+DOC docs/guide/15-ai.md
+PART Part 3 — Administration
+DOC docs/guide/10-admin.md
+DOC docs/guide/40-business.md
+DOC docs/POLICIES.md title="Group Policy reference"
+PART Part 4 — Security
+DOC docs/SECURITY.md
+DOC docs/SECURITY-REPORT.md
+PART Part 5 — Developer reference
+DOC docs/guide/20-developer.md
+DOC docs/PROJECT-TREE.md title="Project structure and how it is built out"
+DOC docs/SOURCE.md title="Source code reference"
+DOC docs/BUILD.md title="Building and releasing"
+DOC docs/ARCHITECTURE.md title="Architecture and decisions (ADR-001 to ADR-058)" toc=4
+DOC docs/PROVIDER-API-COVERAGE.md title="Provider API coverage"
+DOC docs/ADDONS.md title="Add-ons and the SDK (API 2)"
+DOC docs/TESTING.md
+PART Part 6 — Release notes
+DOC docs/release-notes/0.6.12.md
+DOC docs/release-notes/0.6.11.md
+DOC docs/release-notes/0.6.10.md
+DOC docs/release-notes/0.6.9.md
+DOC docs/release-notes/0.6.8.md
+DOC docs/release-notes/0.6.7.md
+DOC docs/release-notes/0.6.6.md
+DOC docs/release-notes/0.6.5.md
+DOC docs/release-notes/0.6.4.md
+DOC docs/release-notes/0.6.3.md
+DOC docs/release-notes/0.6.2.md
+DOC docs/release-notes/0.6.1.md
+DOC docs/release-notes/0.6.0.md
+DOC docs/release-notes/0.5.9.md
+DOC docs/release-notes/0.5.8.md
+DOC docs/release-notes/0.5.7.md
+DOC docs/release-notes/0.5.5.md
+DOC docs/release-notes/0.5.4.md
+DOC docs/release-notes/0.5.3.md
+DOC docs/release-notes/0.5.2.md
+DOC docs/release-notes/0.5.1.md
+DOC docs/release-notes/0.5.0.md
+DOC docs/release-notes/0.4.0.md
+DOC docs/release-notes/0.3.1.md
+DOC docs/release-notes/0.3.0.md
+DOC docs/release-notes/0.3.0-preview.4.md
+DOC docs/release-notes/0.3.0-preview.3.md
+DOC docs/release-notes/0.3.0-preview.2.md
+DOC docs/release-notes/0.3.0-preview.1.md
+DOC docs/release-notes/0.2.2.md
+DOC docs/release-notes/0.2.1.md
+DOC docs/release-notes/0.2.0.md
+DOC docs/release-notes/0.2.0-preview.4.md
+DOC docs/release-notes/0.2.0-preview.3.md
+DOC docs/release-notes/0.2.0-preview.2.md
+DOC docs/release-notes/0.2.0-preview.1.md
+DOC docs/release-notes/0.1.20.md
+DOC docs/release-notes/0.1.19.md
+DOC docs/release-notes/0.1.18.md
+DOC docs/release-notes/0.1.17.md
+DOC docs/release-notes/0.1.16.md
+DOC docs/release-notes/0.1.15.md
+DOC docs/release-notes/0.1.14.md
+DOC docs/release-notes/0.1.13.md
+DOC docs/release-notes/0.1.12.md
+DOC docs/release-notes/0.1.11.md
+DOC docs/release-notes/0.1.10.md
+DOC docs/release-notes/0.1.9.md
+DOC docs/release-notes/0.1.8.md
+DOC docs/release-notes/0.1.7.md
+DOC docs/release-notes/0.1.6.md
+DOC docs/release-notes/0.1.5.md
+DOC docs/release-notes/0.1.4.md
+DOC docs/release-notes/0.1.3.md
+DOC docs/release-notes/0.1.2.md
+DOC docs/release-notes/0.1.1.md
+DOC docs/release-notes/0.1.0.md
+PART Part 7 — Known limitations
+DOC docs/guide/30-limitations.md
+PART Appendix
+DOC THIRD-PARTY-NOTICES.md

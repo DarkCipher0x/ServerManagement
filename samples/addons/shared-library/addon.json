@@ -1,0 +1,9 @@
+{
+  "api": 2,
+  "id": "com.darkcipher.shared-library",
+  "name": "Shared library",
+  "version": "1.0.1",
+  "publisher": "DarkCipher Systems",
+  "description": "Switches on the Shared library: hosts and team credentials shared through a folder or file share, end-to-end encrypted per member. Create a library on the Shared library screen; each library then gives you its own add-on to hand to your team. No program and no permissions.",
+  "library": "library.json"
+}

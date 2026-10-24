@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Addons (0.2.0 phase 6e, docs/PLAN-0.2.0.md): add-on packages (inspect, install, verify, sealed data files, the data add-on kinds features register), the Low-integrity sandbox and job, the encrypted bridge (API 2), the add-on host and its method table (app.call through the capability registry), theme add-ons. Depends on Core, Connectivity and Ui; the shared library and the portal browser sit above it. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DcxManager</RootNamespace>
+    <AssemblyName>Dcx.Addons</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+    <ProjectReference Include="..\Dcx.Connectivity\Dcx.Connectivity.csproj" />
+    <ProjectReference Include="..\Dcx.Ui\Dcx.Ui.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The projects above (and the self-test inside the app) use its internal members, as they did in one project -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+    <InternalsVisibleTo Include="Dcx.Ai" />
+    <InternalsVisibleTo Include="Dcx.Library" />
+    <InternalsVisibleTo Include="Dcx.Browser" />
+  </ItemGroup>
+
+</Project>

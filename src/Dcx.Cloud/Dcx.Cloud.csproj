@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Cloud (0.2.0 phase 6d, docs/PLAN-0.2.0.md): the provider-neutral cloud layer (ADR-020: catalog, hardened HTTP with
+       retries, JSON helpers, the provider contract and its forms) and the providers on it — Vultr, Hetzner Cloud, Contabo
+       (and, from step 6d+, Azure and Google Cloud), one file per concern. WPF only for the providers' own forms and menu
+       items; the resource screens are in the app. Depends on Dcx.Core, Dcx.Connectivity and Dcx.Ui. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DcxManager</RootNamespace>
+    <AssemblyName>Dcx.Cloud</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+    <ProjectReference Include="..\Dcx.Connectivity\Dcx.Connectivity.csproj" />
+    <ProjectReference Include="..\Dcx.Ui\Dcx.Ui.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The projects above (and the self-test inside the app) use its internal members, as they did in one project -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+    <InternalsVisibleTo Include="Dcx.Ai" />
+  </ItemGroup>
+
+</Project>

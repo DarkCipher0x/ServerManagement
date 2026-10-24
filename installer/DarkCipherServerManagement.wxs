@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DarkCipher ServerManagement MSI (WiX Toolset 5). Build with ..\build.ps1 -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <!-- UpgradeCode is the permanent identity of the product: never change it,
+       or new versions will install side-by-side instead of upgrading. -->
+  <Package Name="ServerManagement"
+           Manufacturer="DarkCipher Systems"
+           Version="$(var.Version)"
+           UpgradeCode="6b7ac824-8e15-4fe4-ba73-d3fc492b50e3"
+           Scope="perMachine"
+           Compressed="yes"
+           Language="1033">
+
+    <SummaryInformation Description="ServerManagement $(var.Version) Installer" Manufacturer="DarkCipher Systems" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of ServerManagement is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- Same minimum as the app: Windows 10 1809 (build 17763) or later, 64-bit -->
+    <Launch Condition="Installed OR VersionNT64" Message="ServerManagement needs 64-bit Windows 10 (1809) or Windows 11." />
+    <Property Id="WINBUILD">
+      <RegistrySearch Id="FindWinBuild" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" />
+    </Property>
+    <Launch Condition="Installed OR WINBUILD &gt;= 17763" Message="ServerManagement needs Windows 10 version 1809 or later." />
+
+    <Icon Id="AppIcon" SourceFile="src\DcxManager\Assets\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPCONTACT" Value="DarkCipher Systems" />
+    <Property Id="ARPURLINFOABOUT" Value="https://darkciphersystems.com" />
+    <Property Id="ARPCOMMENTS" Value="Server Management by DarkCipher Systems" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <!-- C:\Program Files\DarkCipher Systems\ServerManagement (until 0.1.5 "Server Management"; the major upgrade removes the old folder) -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="CompanyFolder" Name="DarkCipher Systems">
+        <Directory Id="INSTALLFOLDER" Name="ServerManagement" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- ===== Detection ===== -->
+    <!-- Microsoft Edge WebView2 Runtime (terminal, Vultr console, portal). Built into Windows 11; may be missing on Windows 10. -->
+    <Property Id="WEBVIEW2_MACHINE">
+      <RegistrySearch Id="FindWebView2Machine" Root="HKLM" Key="SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" Name="pv" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="WEBVIEW2_USER">
+      <RegistrySearch Id="FindWebView2User" Root="HKCU" Key="Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" Name="pv" Type="raw" />
+    </Property>
+    <!-- Pre-tick "install WebView2" only when neither the machine-wide nor the per-user runtime is present -->
+    <SetProperty Id="INSTALLWEBVIEW2" Value="1" After="AppSearch" Sequence="first"
+                 Condition="NOT Installed AND (NOT WEBVIEW2_MACHINE OR WEBVIEW2_MACHINE = &quot;0.0.0.0&quot;) AND (NOT WEBVIEW2_USER OR WEBVIEW2_USER = &quot;0.0.0.0&quot;)" />
+    <!-- 0.5.9 (DarkCipher0x: "don't tick the options if they are already installed"): the companions below are ticked only when
+         missing, the same way as WebView2. winget (App Installer) and Foundry Local are packaged apps that register their
+         command under the user's App Paths. A value given on the msiexec command line (INSTALLWINGET=0 or =1) always wins:
+         these only fill an empty property. -->
+    <Property Id="WINGET_FOUND">
+      <RegistrySearch Id="FindWinget" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\winget.exe" Type="raw" />
+    </Property>
+    <Property Id="FOUNDRY_FOUND">
+      <RegistrySearch Id="FindFoundry" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\foundry.exe" Type="raw" />
+    </Property>
+    <SetProperty Id="INSTALLWINGET" Value="1" After="AppSearch" Sequence="first" Condition="NOT Installed AND NOT INSTALLWINGET AND NOT WINGET_FOUND" />
+    <SetProperty Id="INSTALLFOUNDRY" Value="1" After="AppSearch" Sequence="first" Condition="NOT Installed AND NOT INSTALLFOUNDRY AND NOT FOUNDRY_FOUND" />
+
+    <!-- ===== Options chosen in the installer ===== -->
+    <Property Id="INSTALLDESKTOPSHORTCUT" Value="1" Secure="yes" />
+    <Property Id="INSTALLWEBVIEW2" Secure="yes" />
+    <!-- 0.5.1 #13: recommended companions; each is an msiexec property (INSTALLNMAP=0 etc. turns one off in a silent
+         deployment; docs/guide/10-admin.md). Since 0.5.9 they are ticked only when missing (Detection above). winget = App
+         Installer registered for the installing user. Ollama is optional and unticked: Foundry Local is the default AI
+         engine (ADR-023). -->
+    <Property Id="INSTALLWINGET" Secure="yes" />
+    <!-- 0.6.1: INSTALLNMAP is accepted but does nothing in the MSI. Nmap's free installer (and its Npcap) can't install
+         silently, and winget's Insecure.Nmap is stuck at 7.80 (2019); the old winget action ran unelevated and failed
+         unseen. The Setup program installs the current Nmap from nmap.org (hash-pinned, its own wizard). -->
+    <Property Id="INSTALLNMAP" Secure="yes" />
+    <Property Id="INSTALLFOUNDRY" Secure="yes" />
+    <Property Id="INSTALLOLLAMA" Secure="yes" />
+    <!-- 0.2.0: AIFEATURES=0 on the msiexec command line writes the machine policy that forces AI features off for every
+         user (HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement, AiFeatures = 0). Pass it on every install and
+         upgrade, or set the value by Group Policy instead (the Store MSIX can't write it: use GPO or a script). -->
+    <Property Id="AIFEATURES" Secure="yes" />
+    <!-- Uninstall: what else to remove (off by default; data is kept unless ticked). Each is also a silent switch:
+         msiexec /x <msi or product code> /qn REMOVE_DATA=1 REMOVE_CACHE=1 REMOVE_LIBRARY=1 REMOVE_SETTINGS=1 REMOVE_ALLUSERS=1,
+         or REMOVE_EVERYTHING=1 for all of them (0.3.0 §11, Services\Uninstall.cs, docs/guide/10-admin.md). -->
+    <Property Id="REMOVE_DATA" Secure="yes" />
+    <Property Id="REMOVE_CACHE" Secure="yes" />
+    <Property Id="REMOVE_LIBRARY" Secure="yes" />
+    <Property Id="REMOVE_SETTINGS" Secure="yes" />
+    <Property Id="REMOVE_ALLUSERS" Secure="yes" />
+    <Property Id="REMOVE_EVERYTHING" Secure="yes" />
+    <!-- Finish page: start the app -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch ServerManagement" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+
+    <Feature Id="Main" Title="ServerManagement" Level="1">
+      <Files Directory="INSTALLFOLDER" Include="$(var.PublishDir)\**" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="MaintenanceShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+      <ComponentRef Id="AiFeaturesPolicy" />
+    </Feature>
+
+    <Component Id="AiFeaturesPolicy" Guid="9e12cc02-b901-405c-8340-63c12b642313" Directory="INSTALLFOLDER" Condition="AIFEATURES=&quot;0&quot;">
+      <RegistryValue Root="HKLM" Key="SOFTWARE\Policies\DarkCipher Systems\ServerManagement" Name="AiFeatures" Type="integer" Value="0" KeyPath="yes" />
+    </Component>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="DcxMenuFolder" Name="DarkCipher Systems">
+        <Component Id="StartMenuShortcut" Guid="ea431d39-3d99-42c9-a6da-514552bced16">
+          <Shortcut Id="AppShortcut" Name="ServerManagement"
+                    Description="One encrypted workstation for your servers, network, hypervisors and clouds - by DarkCipher Systems"
+                    Target="[INSTALLFOLDER]DcxServerManager.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon">
+            <!-- Matches App.AppUserModelId so the taskbar groups the window with this shortcut -->
+            <ShortcutProperty Key="System.AppUserModel.ID" Value="darkcipher0x.DarkCipherServerManagement" />
+          </Shortcut>
+          <RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" />
+          <RegistryValue Root="HKLM" Key="Software\DarkCipher Systems\ServerManagement\Install" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+        </Component>
+        <!-- Opens this installer in maintenance mode: Repair, or Remove with the choice of deleting the encrypted data -->
+        <Component Id="MaintenanceShortcut" Guid="b15c54ee-b612-48fa-9ab5-9a4772407389">
+          <Shortcut Id="RepairShortcut" Name="ServerManagement - Repair or uninstall"
+                    Description="Repair ServerManagement, or uninstall it and choose whether to delete your data"
+                    Target="[System64Folder]msiexec.exe" Arguments="/i [ProductCode]" Icon="AppIcon" />
+          <RegistryValue Root="HKLM" Key="Software\DarkCipher Systems\ServerManagement\Install" Name="MaintenanceShortcut" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="16f380be-232c-4d57-9fd2-e480603f9ff7" Condition="INSTALLDESKTOPSHORTCUT=&quot;1&quot;">
+        <Shortcut Id="DesktopAppShortcut" Name="ServerManagement"
+                  Target="[INSTALLFOLDER]DcxServerManager.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon">
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="darkcipher0x.DarkCipherServerManagement" />
+        </Shortcut>
+        <RegistryValue Root="HKLM" Key="Software\DarkCipher Systems\ServerManagement\Install" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- ===== Custom actions ===== -->
+    <!-- Optional prerequisites via winget (run as the user; skipped if already present). -->
+    <CustomAction Id="InstallWebView2" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="yes" Return="ignore"
+                  ExeCommand="&quot;[System64Folder]cmd.exe&quot; /c winget install --id Microsoft.EdgeWebView2Runtime -e --silent --accept-source-agreements --accept-package-agreements" />
+    <CustomAction Id="InstallOllama" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="yes" Return="ignore"
+                  ExeCommand="&quot;[System64Folder]cmd.exe&quot; /c where ollama &gt;nul 2&gt;nul || winget install --id Ollama.Ollama -e --silent --accept-source-agreements --accept-package-agreements" />
+    <!-- 0.5.1 #13. winget: register App Installer for this user when Windows has it but it isn't registered yet (a new
+         account); nothing is downloaded by the MSI itself. -->
+    <CustomAction Id="InstallWinget" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="yes" Return="ignore"
+                  ExeCommand="&quot;[System64Folder]cmd.exe&quot; /c where winget &gt;nul 2&gt;nul || &quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -Command &quot;Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe&quot;" />
+    <CustomAction Id="InstallFoundry" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="yes" Return="ignore"
+                  ExeCommand="&quot;[System64Folder]cmd.exe&quot; /c where foundry &gt;nul 2&gt;nul || winget install --id Microsoft.FoundryLocal -e --silent --accept-source-agreements --accept-package-agreements" />
+    <!-- Uninstall (0.3.0 §11): runs on every full uninstall (never an upgrade), before the program files go.
+         1. As the user: their store / cache / shared-library membership as ticked, their Windows Hello key with the store,
+            and always the app's temp files. -->
+    <CustomAction Id="CleanupUserData" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="yes" Return="ignore"
+                  ExeCommand="&quot;[INSTALLFOLDER]DcxServerManager.exe&quot; --cleanup data=[REMOVE_DATA] cache=[REMOVE_CACHE] library=[REMOVE_LIBRARY] everything=[REMOVE_EVERYTHING]" />
+    <!--    2. As SYSTEM: the app's HKLM key always; with REMOVE_SETTINGS the admin-protected records and the policy values
+            (computer and signed-in users); with REMOVE_ALLUSERS the ticked data of every Windows user on this PC. -->
+    <CustomAction Id="CleanupMachine" Directory="INSTALLFOLDER" Execute="deferred" Impersonate="no" Return="ignore"
+                  ExeCommand="&quot;[INSTALLFOLDER]DcxServerManager.exe&quot; --cleanup-machine data=[REMOVE_DATA] cache=[REMOVE_CACHE] library=[REMOVE_LIBRARY] settings=[REMOVE_SETTINGS] allusers=[REMOVE_ALLUSERS] everything=[REMOVE_EVERYTHING]" />
+    <!-- Finish page: launch the app as the installing user -->
+    <CustomAction Id="LaunchApp" Directory="INSTALLFOLDER" Impersonate="yes" Return="asyncNoWait"
+                  ExeCommand="&quot;[INSTALLFOLDER]DcxServerManager.exe&quot;" />
+
+    <InstallExecuteSequence>
+      <Custom Action="CleanupUserData" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="CleanupMachine" After="CleanupUserData" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+      <Custom Action="InstallWinget" After="InstallFiles" Condition="INSTALLWINGET=&quot;1&quot; AND NOT REMOVE" />
+      <Custom Action="InstallWebView2" After="InstallWinget" Condition="INSTALLWEBVIEW2=&quot;1&quot; AND NOT REMOVE" />
+      <Custom Action="InstallFoundry" After="InstallWebView2" Condition="INSTALLFOUNDRY=&quot;1&quot; AND NOT REMOVE AND NOT Installed" />
+      <Custom Action="InstallOllama" After="InstallFoundry" Condition="INSTALLOLLAMA=&quot;1&quot; AND NOT REMOVE" />
+    </InstallExecuteSequence>
+
+    <!-- ===== Installer UI: Welcome > Licence > Folder > Options > Install; maintenance: Repair / Remove (+ data) ===== -->
+    <UI Id="DcxSmUI">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Segoe UI" Size="9" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Segoe UI" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Segoe UI" Size="9" Bold="yes" />
+      <TextStyle Id="Dcx_Warn" FaceName="Segoe UI" Size="8" Red="168" Green="64" Blue="0" />
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+      <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+      <DialogRef Id="BrowseDlg" />
+      <DialogRef Id="DiskCostDlg" />
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+
+      <Dialog Id="DcxOptionsDlg" Width="370" Height="270" Title="!(loc.InstallDirDlg_Title)">
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)" />
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Options" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="300" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="Shortcuts and optional components." />
+        <Control Id="Upgrading" Type="Text" X="20" Y="50" Width="330" Height="12" NoPrefix="yes" Hidden="yes" ShowCondition="WIX_UPGRADE_DETECTED"
+                 Text="Upgrading from an earlier version: your hosts, keys and settings are kept." />
+        <Control Id="DesktopBox" Type="CheckBox" X="20" Y="62" Width="330" Height="12" Property="INSTALLDESKTOPSHORTCUT" CheckBoxValue="1"
+                 Text="Create a desktop shortcut" />
+        <Control Id="WebView2Box" Type="CheckBox" X="20" Y="77" Width="330" Height="12" Property="INSTALLWEBVIEW2" CheckBoxValue="1"
+                 Text="Microsoft Edge WebView2 Runtime (required; ticked only when it is missing)" />
+        <Control Id="WingetBox" Type="CheckBox" X="20" Y="92" Width="330" Height="12" Property="INSTALLWINGET" CheckBoxValue="1"
+                 Text="winget (App Installer) set up for you (recommended: installs the items below)" />
+        <Control Id="NmapNote" Type="Text" X="33" Y="107" Width="320" Height="12" NoPrefix="yes"
+                 Text="Nmap: tick it in the Setup program, or install it from nmap.org (it can't install silently)." />
+        <Control Id="FoundryBox" Type="CheckBox" X="20" Y="122" Width="330" Height="12" Property="INSTALLFOUNDRY" CheckBoxValue="1"
+                 Text="Microsoft Foundry Local (recommended: the default on-device AI engine)" />
+        <Control Id="OllamaBox" Type="CheckBox" X="20" Y="137" Width="330" Height="12" Property="INSTALLOLLAMA" CheckBoxValue="1"
+                 Text="Ollama (optional: a GPU AI engine; skip it if Ollama runs on another machine)" />
+        <Control Id="WingetNote" Type="Text" X="33" Y="151" Width="320" Height="20" NoPrefix="yes"
+                 Text="Each ticked item installs with winget and accepts its source and package agreements; already-installed ones are skipped." />
+        <Control Id="DataNote" Type="Text" X="20" Y="176" Width="330" Height="52" NoPrefix="yes"
+                 Text="Your hosts, passwords, SSH keys, API keys and settings are stored per user in %APPDATA%\DarkCipher Systems\ServerManagement, encrypted with AES-256-GCM. The key is protected by your Windows account; you can add a master password in Settings." />
+      </Dialog>
+
+      <Dialog Id="DcxRemoveDataDlg" Width="370" Height="270" Title="!(loc.MaintenanceTypeDlg_Title)">
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.WixUINext)" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="!(loc.WixUIBack)" />
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="!(loc.MaintenanceTypeDlgBannerBitmap)" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="250" Height="15" Transparent="yes" NoPrefix="yes" Text="{\WixUI_Font_Title}Remove your data too?" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="300" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="The program is removed. Tick anything you also want deleted for your account." />
+        <Control Id="DataBox" Type="CheckBox" X="20" Y="50" Width="330" Height="12" Property="REMOVE_DATA" CheckBoxValue="1"
+                 Text="Encrypted store: hosts, credentials, SSH keys, API keys, settings, audit log, Windows Hello key" />
+        <Control Id="DataWarn" Type="Text" X="33" Y="63" Width="320" Height="20" NoPrefix="yes"
+                 Text="{\Dcx_Warn}Permanently deletes every saved password and private key. Make an encrypted backup first if you have no other copy." />
+        <Control Id="LibraryBox" Type="CheckBox" X="20" Y="86" Width="330" Height="12" Property="REMOVE_LIBRARY" CheckBoxValue="1"
+                 Text="Shared library membership: local copies and member keys (the team's share is never touched)" />
+        <Control Id="CacheBox" Type="CheckBox" X="20" Y="102" Width="330" Height="12" Property="REMOVE_CACHE" CheckBoxValue="1"
+                 Text="Cache and logs: browser profile (portal sign-ins), terminal files, error logs" />
+        <Control Id="SettingsBox" Type="CheckBox" X="20" Y="118" Width="330" Height="12" Property="REMOVE_SETTINGS" CheckBoxValue="1"
+                 Text="Settings enforced on this PC: admin-protected settings and policy values (all users)" />
+        <Control Id="AllUsersBox" Type="CheckBox" X="20" Y="134" Width="330" Height="12" Property="REMOVE_ALLUSERS" CheckBoxValue="1"
+                 Text="Do the ticked removals for every Windows user on this PC, not just me" />
+        <Control Id="Note" Type="Text" X="20" Y="154" Width="330" Height="74" NoPrefix="yes"
+                 Text="Nothing of yours is deleted unless ticked; the app's own temp files and registry keys always go. Never touched: your servers and cloud accounts, %USERPROFILE%\.ssh, backups and keys you saved elsewhere, a shared library's share. Domain Group Policy comes back from the domain. Ollama and the WebView2 Runtime are separate programs (Windows Settings > Apps)." />
+      </Dialog>
+
+      <Publish Dialog="BrowseDlg" Control="OK" Event="DoAction" Value="WixUIValidatePath_$(sys.BUILDARCHSHORT)" Order="3" Condition="NOT WIXUI_DONTVALIDATEPATH" />
+      <Publish Dialog="BrowseDlg" Control="OK" Event="SpawnDialog" Value="InvalidDirDlg" Order="4" Condition="NOT WIXUI_DONTVALIDATEPATH AND WIXUI_INSTALLDIR_VALID&lt;&gt;&quot;1&quot;" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApp" Order="998"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg" Condition="NOT Installed" />
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Condition="Installed AND PATCH" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Print" Event="DoAction" Value="WixUIPrintEula_$(sys.BUILDARCHSHORT)" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Condition="LicenseAccepted = &quot;1&quot;" />
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg" />
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="SetTargetPath" Value="[WIXUI_INSTALLDIR]" Order="1" />
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="DoAction" Value="WixUIValidatePath_$(sys.BUILDARCHSHORT)" Order="2" Condition="NOT WIXUI_DONTVALIDATEPATH" />
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="SpawnDialog" Value="InvalidDirDlg" Order="3" Condition="NOT WIXUI_DONTVALIDATEPATH AND WIXUI_INSTALLDIR_VALID&lt;&gt;&quot;1&quot;" />
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="DcxOptionsDlg" Order="4" Condition="WIXUI_DONTVALIDATEPATH OR WIXUI_INSTALLDIR_VALID=&quot;1&quot;" />
+      <Publish Dialog="InstallDirDlg" Control="ChangeFolder" Property="_BrowseProperty" Value="[WIXUI_INSTALLDIR]" Order="1" />
+      <Publish Dialog="InstallDirDlg" Control="ChangeFolder" Event="SpawnDialog" Value="BrowseDlg" Order="2" />
+
+      <Publish Dialog="DcxOptionsDlg" Control="Back" Event="NewDialog" Value="InstallDirDlg" />
+      <Publish Dialog="DcxOptionsDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" />
+
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="DcxOptionsDlg" Order="1" Condition="NOT Installed" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="2" Condition="Installed AND NOT PATCH AND WixUI_InstallMode&lt;&gt;&quot;Remove&quot;" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="DcxRemoveDataDlg" Order="2" Condition="Installed AND WixUI_InstallMode=&quot;Remove&quot;" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2" Condition="Installed AND PATCH" />
+
+      <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="DcxRemoveDataDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg" />
+      <Publish Dialog="DcxRemoveDataDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" />
+      <Publish Dialog="DcxRemoveDataDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" />
+    </UI>
+    <UIRef Id="WixUI_Common" />
+    <WixVariable Id="WixUILicenseRtf" Value="installer\License.rtf" />
+  </Package>
+</Wix>

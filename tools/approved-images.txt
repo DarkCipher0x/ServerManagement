@@ -1,0 +1,6 @@
+# Images allowed into the public source (ServerManagement-public on GitHub): SHA-256, the path, and what it shows.
+# Rule (2026-10-17 privacy incident): every image is looked at by eye before it ships. Text scans can't see pixels.
+# Add a line only after viewing the image; tools\publish-public.ps1 refuses any image not listed here.
+0e7eba430d492ce4424eea4f1e8fe1301c77972749789051def9a23e3a0df6a5  src/DcxManager/Assets/logo.png  (viewed 2026-10-21: teal server-rack app logo)
+ce0f19395e01b5d8b327f16f1fa4ed9893d647e28af3087a7cd19ce0825d954e  src/DcxManager/Assets/app.ico  (viewed 2026-10-21: teal server-rack app logo)
+1fa2f681952e27d48c7b9300cd973fbd7e91a4e7566d87b7a421a40ca0a58d92  samples/addons/sample-theme/logo.png  (viewed 2026-10-21: blue OCEAN sample logo)

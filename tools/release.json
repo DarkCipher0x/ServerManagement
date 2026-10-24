@@ -1,0 +1,29 @@
+{
+  "_comment": "Release pipeline settings for ServerManagement (docs/RELEASE-PIPELINE.md). The kill switch is not here: DCX_PUBLISH_OFF=1 or the file %USERPROFILE%\\.darkcipher\\publish-off stops every public step.",
+  "app": "ServerManagement",
+  "publicRepo": "https://github.com/DarkCipher0x/ServerManagement.git",
+  "publicApi": "https://api.github.com/repos/DarkCipher0x/ServerManagement",
+  "publicBranch": "main",
+  "publicClone": "..\\ServerManagement-public",
+  "author": "DarkCipher0x <DarkCipher0x@users.noreply.github.com>",
+  "publishing": { "enabled": true, "reason": "on again (DarkCipher0x, 2026-10-21: publish to GitHub, keep the repository private for now); never change its visibility" },
+  "releaseAssets": [
+    "DarkCipherServerManagement-{ver}-Setup.exe",
+    "DarkCipherServerManagement-{ver}-x64.msi",
+    "DarkCipherServerManagement-{ver}-x64-portable.zip",
+    "DarkCipherServerManagement-{ver}-source.zip",
+    "DarkCipherServerManagement-{ver}-sbom.cdx.json",
+    "DarkCipherServerManagement-{ver}-policy-templates.zip",
+    "DarkCipherServerManagement-{ver}-Guide.pdf",
+    "DarkCipherServerManagement-{ver}-User-Guide.pdf",
+    "DarkCipherServerManagement-{ver}-Developer-Guide.pdf",
+    "DarkCipherServerManagement-{ver}-Business-Guide.pdf",
+    "DarkCipherServerManagement-{ver}-Security-Report.pdf",
+    "DarkCipherServerManagement-{ver}-Project-Structure.pdf",
+    "update.json",
+    "update.json.sig",
+    "update.json.pq.sig"
+  ],
+  "website": { "enabled": false, "reason": "ServerManagement is 'coming soon' on darkciphersystems.com until DarkCipher0x launches it (2026-10-21)" },
+  "discord": { "enabled": false, "reason": "off until ServerManagement launches (DarkCipher0x, 2026-10-21)" }
+}

@@ -1,0 +1,28 @@
+<Project>
+  <!-- Build hygiene for every project in this repository (s40, 0.1.18). -->
+  <PropertyGroup>
+    <!-- Supply chain: every restore writes/checks packages.lock.json (exact versions + content hashes, transitive too).
+         build.ps1 sets DCX_LOCKED_RESTORE=1, so a release build fails if a package or hash differs from the lock file.
+         After changing a PackageReference on purpose: run "dotnet restore" with force-evaluate, review and keep the new lock file. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(DCX_LOCKED_RESTORE)' == '1'">true</RestoreLockedMode>
+
+    <!-- Known-vulnerable packages: audit direct AND transitive packages; high (NU1903) and critical (NU1904) advisories
+         stop the build, moderate/low ones are reported as warnings. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1903;NU1904</WarningsAsErrors>
+
+    <!-- Security analyzers (0.2.0 audit): the recommended security rule set, and every code-analysis warning is a build
+         error. The taint-tracking rules (AnalysisModeSecurity=All) are left off: they pushed the compiler server past
+         10 GB for 20+ minutes on this project. A justified exception is a #pragma with its reason next to the line. -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisModeSecurity>Recommended</AnalysisModeSecurity>
+    <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
+
+    <!-- Reproducible output: same source, same binary (no machine paths, timestamps or build-machine state). -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(DCX_LOCKED_RESTORE)' == '1'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+</Project>

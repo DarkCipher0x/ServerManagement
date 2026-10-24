@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ServerManagement's extra packages in the setup's chain (after the MSI), for options the MSI can't install itself.
+     Each matches a setup-app.json option with "package": the setup app sets Pkg_<Id>_Found before detection and
+     Pkg_<Id>_Run ("1" only when the switch is on, it isn't installed, and setup has its window: never in /quiet). -->
+<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- 0.6.1 (DarkCipher0x: "it doesnt seem like the installer is getting nmap installed"). Nmap's free installer and the Npcap
+       it carries can't install silently (only the paid OEM editions can), and winget's Insecure.Nmap is 7.80 from 2019,
+       so the Setup program downloads the current release straight from nmap.org, checks it against the SHA-512 Nmap
+       publishes (https://nmap.org/dist/sigs/nmap-7.992-setup.exe.digest.txt) and opens its own wizard, elevated by the
+       setup's one administrator approval. Not vital: a cancelled or offline Nmap never rolls back ServerManagement.
+       Permanent: uninstalling ServerManagement leaves Nmap alone. To move to a newer Nmap, update Name, DownloadUrl,
+       Size and Hash together from that digest file. -->
+  <ExePackage Id="Nmap" DisplayName="Nmap" Description="Nmap network scanner (nmap.org)" PerMachine="yes" Permanent="yes" Vital="no"
+              DetectCondition="Pkg_Nmap_Found = &quot;1&quot;" InstallCondition="Pkg_Nmap_Run = &quot;1&quot;" Cache="remove">
+    <ExePackagePayload Name="nmap-7.992-setup.exe" DownloadUrl="https://nmap.org/dist/nmap-7.992-setup.exe" Size="37852184"
+                       Hash="808703E13F9C54F15052D2A45F802A9B8B9644D301081AC3E6E2B6E13B06ED3B8A45D4264081A9557E3F9C85694ED9C50C7BEF1C720815166F4FD380B9971D05"
+                       ProductName="Nmap" Description="Nmap Setup" />
+  </ExePackage>
+</Include>

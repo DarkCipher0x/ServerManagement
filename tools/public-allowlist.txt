@@ -1,0 +1,96 @@
+# What may go into the public source (the -public mirror and every source zip). Release pipeline, 0.5.3+.
+#
+# One glob per line, relative to the repository root, with / separators: * is any name part, ** any folders.
+# A line starting with ! is PRIVATE: matching files are never published, whatever else matches.
+# Every file git tracks (or would track) must match an allowed line or a private line. A file that matches neither
+# fails the build: decide which it is, then add a line here. Nothing is published by default.
+
+# --- repository root ---
+.config/dotnet-tools.json
+.github/*.md
+.github/ISSUE_TEMPLATE/*.md
+.github/ISSUE_TEMPLATE/*.yml
+.gitignore
+DarkCipher.ServerManagement.sln
+Directory.Build.props
+LICENSE
+README.md
+THIRD-PARTY-NOTICES.md
+build.ps1
+
+# --- documentation (the maintainers' working notes are PRIVATE since 0.6.9, the public beta: see the end) ---
+docs/*.md
+docs/baseline/*.md
+docs/baseline/*.txt
+docs/guide/*.md
+docs/guide/*.txt
+docs/guide/guide.html
+docs/release-notes/*.md
+
+# --- installer ---
+installer/*.wxs
+installer/License.rtf
+installer/setup-app.json
+installer/setup-app.wxi
+installer/setup-app.properties.wxi
+installer/setup-app.packages.wxi
+installer/Setup/*.cs
+installer/Setup/*.xaml
+installer/Setup/*.wxs
+installer/Setup/*.csproj
+installer/Setup/README.md
+installer/Setup/packages.lock.json
+installer/msix/AppxManifest.xml
+installer/msix/STORE-SUBMISSION.md
+installer/msix/store-identity.json
+
+# --- add-on samples and SDK (the two DcxBridge.dll builds are checked for local paths before release) ---
+samples/addons/pack.ps1
+samples/addons/*/*.ps1
+samples/addons/*/*.json
+samples/addons/*/*.cs
+samples/addons/*/*.png
+samples/addons/*/DcxBridge.dll
+
+# --- application source ---
+src/README.md
+src/*/README.md
+src/*/*.csproj
+src/*/packages.lock.json
+src/**/*.cs
+src/**/*.xaml
+src/Dcx.Core/Assets/help/help.md
+src/DcxManager/Assets/app.ico
+src/DcxManager/Assets/logo.png
+src/DcxManager/Assets/web/*.js
+src/DcxManager/Assets/web/*.css
+src/DcxManager/Assets/web/*.html
+src/DcxManager/Assets/web/xterm-LICENSE.txt
+
+# --- build and release tools ---
+tools/*.ps1
+tools/budgets.json
+tools/release.json
+tools/approved-images.txt
+tools/public-allowlist.txt
+tools/secret-patterns.txt
+tools/analyzers/*.txt
+tools/guide/*.cs
+tools/guide/*.csproj
+tools/guide/packages.lock.json
+tools/msix/*.csproj
+tools/msix/packages.lock.json
+
+# --- PRIVATE: never published ---
+!docs/history/**
+!docs/RESUME-*.md
+!docs/PLAN-*.md
+!docs/OUTSTANDING.md
+!docs/STEAM-DISTRIBUTION.md
+!tools/privacy-terms*
+!**/*.local.txt
+!**/*_wpftmp.csproj
+!.claude/**
+!.selftest*/**
+!dist/**
+!publish/**

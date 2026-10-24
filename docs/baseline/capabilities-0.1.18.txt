@@ -1,0 +1,48 @@
+# App capabilities as listed by app.capabilities in 0.1.18 / 0.1.19 (44 names; the self-test counts "44 in all").
+# Phase 2 of docs/history/PLAN-0.2.0.md: every name here must still be listed by Core.Capabilities (add-on compatibility fixture).
+# Operator built-ins (Ai/Assistant.cs)
+list_hosts
+host_overview
+read_logs
+list_services
+service_action
+run_command
+vultr_list_instances
+vultr_instance_action
+vultr_get
+cloud_list_instances
+cloud_instance_action
+list_files
+read_file
+transfer_files
+make_directory
+rename_path
+delete_path
+# Registry tools (Ai/AiTools.cs)
+current_context
+infra_list_providers
+infra_inventory
+infra_action
+cloud_list
+list_terminal_sessions
+terminal_run
+terminal_read_screen
+terminal_send_keys
+terminal_interrupt
+terminal_switch_target
+terminal_open_session
+search_notes
+read_note
+list_incidents
+read_incident
+read_pdf
+create_note
+infra_actions
+cloud_action
+append_to_note
+create_incident
+add_to_incident
+transfer_status
+portal_list
+portal_open
+library_list

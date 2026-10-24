@@ -1,0 +1,41 @@
+# The Business / Administrator Guide PDF (tools\make-guide.ps1 -Spec docs\guide\guide-business.txt -Suffix Business-Guide):
+# everything an organisation must control and know — identity (Active Directory / LDAPS / Entra), Group Policy, syslog and
+# log sinks (SIEM), team features, branding, data locations, uninstall.
+TITLE Business and administrator guide
+SUBTITLE Deploying and controlling it in an organisation — version {VERSION}
+COVERS Deployment · Active Directory, LDAPS and Microsoft Entra ID · Group Policy (ADMX) · admin protection · syslog, log sinks and SIEM · observability · team features · branding by policy · data, encryption and backups · network control · uninstall and offboarding · the policy reference · the security model
+PART Part 1 — For the organisation
+DOC docs/guide/40-business.md
+PART Part 2 — Administration
+DOC docs/guide/10-admin.md
+PART Part 3 — Group Policy reference
+DOC docs/POLICIES.md title="Group Policy reference"
+PART Part 4 — Security
+DOC docs/SECURITY.md
+PART Part 5 — Known limitations and hand tests
+DOC docs/guide/30-limitations.md
+PART Appendix
+DOC docs/release-notes/0.6.12.md
+DOC docs/release-notes/0.6.11.md
+DOC docs/release-notes/0.6.10.md
+DOC docs/release-notes/0.6.9.md
+DOC docs/release-notes/0.6.8.md
+DOC docs/release-notes/0.6.7.md
+DOC docs/release-notes/0.6.6.md
+DOC docs/release-notes/0.6.5.md
+DOC docs/release-notes/0.6.4.md
+DOC docs/release-notes/0.6.3.md
+DOC docs/release-notes/0.6.2.md
+DOC docs/release-notes/0.6.1.md
+DOC docs/release-notes/0.6.0.md
+DOC docs/release-notes/0.5.9.md
+DOC docs/release-notes/0.5.8.md
+DOC docs/release-notes/0.5.7.md
+DOC docs/release-notes/0.5.5.md
+DOC docs/release-notes/0.5.4.md
+DOC docs/release-notes/0.5.3.md
+DOC docs/release-notes/0.5.2.md
+DOC docs/release-notes/0.5.1.md
+DOC docs/release-notes/0.5.0.md
+DOC docs/release-notes/0.4.0.md
+DOC THIRD-PARTY-NOTICES.md

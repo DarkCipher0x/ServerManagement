@@ -1,0 +1,12 @@
+# The Project Structure PDF (tools\make-guide.ps1 -Spec docs\guide\guide-project.txt -Suffix Project-Structure): the tree of
+# the project, how it is built out, and the generated folder table (tools\write-tree.ps1).
+TITLE Project structure
+SUBTITLE The tree of the project and how it is built out — version {VERSION}
+COVERS The solution and its projects · folder by folder · how a feature flows through the layers · the build pipeline · the self-test · the release bundle · the generated tree table
+PART Part 1 — The project
+DOC docs/PROJECT-TREE.md
+PART Part 2 — The tree, folder by folder (generated)
+DOC docs/PROJECT-TREE.generated.md
+PART Part 3 — Reference
+DOC docs/guide/20-developer.md
+DOC docs/BUILD.md title="Building and releasing"

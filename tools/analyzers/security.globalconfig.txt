@@ -1,0 +1,62 @@
+is_global = true
+# Security analyzers as build errors for every project (s40, ADR-037). A deliberate exception is suppressed at the line
+# with [SuppressMessage(..., Justification = "…")] — never here.
+
+# SQL from strings (the taint-flow CA3001–CA3012 rules are left off: over 20 minutes per build on 55k lines)
+dotnet_diagnostic.CA2100.severity = error
+
+# XML / XXE
+dotnet_diagnostic.CA3061.severity = error
+dotnet_diagnostic.CA3075.severity = error
+dotnet_diagnostic.CA3076.severity = error
+dotnet_diagnostic.CA3077.severity = error
+
+# Insecure deserialization
+dotnet_diagnostic.CA2300.severity = error
+dotnet_diagnostic.CA2301.severity = error
+dotnet_diagnostic.CA2302.severity = error
+dotnet_diagnostic.CA2305.severity = error
+dotnet_diagnostic.CA2310.severity = error
+dotnet_diagnostic.CA2311.severity = error
+dotnet_diagnostic.CA2312.severity = error
+dotnet_diagnostic.CA2315.severity = error
+dotnet_diagnostic.CA2321.severity = error
+dotnet_diagnostic.CA2322.severity = error
+dotnet_diagnostic.CA2326.severity = error
+dotnet_diagnostic.CA2327.severity = error
+dotnet_diagnostic.CA2328.severity = error
+dotnet_diagnostic.CA2329.severity = error
+dotnet_diagnostic.CA2330.severity = error
+dotnet_diagnostic.CA5360.severity = error
+dotnet_diagnostic.CA5362.severity = error
+
+# Cryptography
+dotnet_diagnostic.CA5350.severity = error   # weak algorithms (3DES, SHA-1, RIPEMD160)
+dotnet_diagnostic.CA5351.severity = error   # broken algorithms (MD5, DES, RC2)
+dotnet_diagnostic.CA5358.severity = error   # unsafe cipher modes (ECB…)
+dotnet_diagnostic.CA5373.severity = error   # obsolete key derivation
+dotnet_diagnostic.CA5379.severity = error   # weak PBKDF2 hash
+dotnet_diagnostic.CA5384.severity = error   # DSA
+dotnet_diagnostic.CA5385.severity = error   # RSA key < 2048 bits
+dotnet_diagnostic.CA5387.severity = error   # weak PBKDF2 iteration count
+dotnet_diagnostic.CA5388.severity = error
+dotnet_diagnostic.CA5390.severity = error   # hard-coded encryption key
+dotnet_diagnostic.CA5394.severity = error   # insecure randomness
+dotnet_diagnostic.CA5401.severity = error   # CreateEncryptor with a non-default IV
+dotnet_diagnostic.CA5402.severity = error
+dotnet_diagnostic.CA5403.severity = error   # hard-coded certificate
+
+# TLS and certificates
+dotnet_diagnostic.CA5359.severity = error   # certificate validation disabled
+dotnet_diagnostic.CA5361.severity = error   # strong crypto disabled
+dotnet_diagnostic.CA5364.severity = error   # deprecated TLS protocols
+dotnet_diagnostic.CA5386.severity = error   # hard-coded SecurityProtocolType
+dotnet_diagnostic.CA5397.severity = error   # deprecated SslProtocols
+dotnet_diagnostic.CA5398.severity = error   # hard-coded SslProtocols
+dotnet_diagnostic.CA5399.severity = error   # HttpClient without revocation check
+dotnet_diagnostic.CA5400.severity = error
+
+# Unsafe code / interop
+dotnet_diagnostic.CA2153.severity = error   # catching corrupted-state exceptions
+dotnet_diagnostic.CA5392.severity = error   # DllImport without DefaultDllImportSearchPaths
+dotnet_diagnostic.CA5393.severity = error   # unsafe DllImportSearchPath

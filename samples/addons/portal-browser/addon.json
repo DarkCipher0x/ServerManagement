@@ -1,0 +1,9 @@
+{
+  "api": 2,
+  "id": "com.darkcipher.portal-browser",
+  "name": "Portal browser",
+  "version": "1.0.1",
+  "publisher": "DarkCipher Systems",
+  "description": "Opens router, NAS, Proxmox/Unraid and provider web UIs in tabs inside the app: one browser profile per environment, self-signed certificates pinned after you compare them, downloads that ask first, pop-ups as tabs, and no saved site passwords (sign-in from the vault on request). The browser is part of the app; this package contains no program.",
+  "browser": "browser.json"
+}

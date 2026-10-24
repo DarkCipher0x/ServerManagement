@@ -1,0 +1,95 @@
+<Window x:Class="DcxManager.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DcxManager"
+        Title="Server Management by DarkCipher Systems" Height="900" Width="1440" MinHeight="640" MinWidth="1040"
+        WindowStartupLocation="CenterScreen" Icon="Assets/app.ico" FontFamily="Segoe UI" FontSize="{DynamicResource FsBase}"
+        Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}" SourceInitialized="OnSourceInitialized" Closing="OnClosing" PreviewKeyDown="OnPreviewKey">
+    <!-- Keyboard shortcuts are handled in MainWindow.HandleShortcut so they never steal keys from a terminal -->
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static local:Commands.CloseTab}" Executed="OnCloseTab"/>
+    </Window.CommandBindings>
+    <DockPanel x:Name="Root">
+        <!-- Header -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource HeaderBg}" Padding="14,8" BorderBrush="{DynamicResource Accent}" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <ComboBox DockPanel.Dock="Right" x:Name="ThemeBox" Width="110" Margin="8,0,0,0" VerticalAlignment="Center" SelectionChanged="OnThemeChanged" ToolTip="Colour theme">
+                    <ComboBoxItem Content="◐  System" Tag="System"/>
+                    <ComboBoxItem Content="☾  Dark" Tag="Dark"/>
+                    <ComboBoxItem Content="☀  Light" Tag="Light"/>
+                </ComboBox>
+                <!-- Quick connect: one-off SSH or Remote Desktop session without saving a host -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="QUICK CONNECT" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,6,0" ToolTip="A one-off session without saving a host (Ctrl+K)"/>
+                    <Border x:Name="QuickBox" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="2" Background="{DynamicResource Input}" Width="380" VerticalAlignment="Center">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Left" x:Name="QuickMode" Content="ssh ▾" MinWidth="0" Padding="8,0,6,0" Margin="0" BorderThickness="0,0,1,0" Background="Transparent"
+                                    FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsMeta}" Foreground="{DynamicResource Accent}" Click="OnQuickMode" ToolTip="Protocol: SSH, Files (SFTP), Remote Desktop, Telnet, serial, local shell, web UI or your own SSH client"/>
+                            <Button DockPanel.Dock="Right" Content="⋯" MinWidth="0" Width="28" Margin="0" Padding="0" BorderThickness="0" Background="Transparent" Click="OnQuickConnectAdvanced" ToolTip="More options: auth method, key, jump host, port, Remote Desktop settings"/>
+                            <Button DockPanel.Dock="Right" x:Name="QuickHistory" Content="▾" MinWidth="0" Width="26" Margin="0" Padding="0" BorderThickness="1,0,0,0" Background="Transparent" Click="OnQuickHistory" ToolTip="Pinned, recent and saved hosts (↓ in the box)"/>
+                            <Grid>
+                                <TextBlock x:Name="QuickHint" Text="user@host or a saved host" Foreground="{DynamicResource Muted}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsMeta}" VerticalAlignment="Center" Margin="4,0,0,0" IsHitTestVisible="False"/>
+                                <TextBox x:Name="QuickConnect" BorderThickness="0" Background="Transparent" Padding="2,5" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsMeta}"
+                                         PreviewKeyDown="OnQuickConnectKey" TextChanged="OnQuickText" ToolTip="Quick connect: pick a protocol, type a target (or ↓ for pinned / recent / saved hosts), Enter (Ctrl+K)"/>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+                    <Button x:Name="QuickGo" Content="Connect" Style="{StaticResource PrimaryButton}" Margin="6,0,0,0" Padding="10,3" VerticalAlignment="Center" Click="OnQuickGo" ToolTip="Connect to what is typed, with the chosen protocol (Enter)"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Logo, name and tagline: a theme add-on may replace them (ADR-030, MainWindow.ApplyBranding) -->
+                    <Border x:Name="LogoPlate" Margin="0,0,12,0" VerticalAlignment="Center" CornerRadius="20">
+                        <Image x:Name="HeaderLogo" Source="Assets/logo.png" Width="36" Height="36" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="HeaderTitle" Text="ServerManagement" Foreground="{DynamicResource HeaderFg}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsH1}" FontWeight="Bold"/>
+                            <TextBlock x:Name="VersionText" Foreground="{DynamicResource Muted}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsCaption}" Margin="10,0,0,2" VerticalAlignment="Bottom"/>
+                        </StackPanel>
+                        <TextBlock x:Name="HeaderTagline" Visibility="Collapsed" Foreground="{DynamicResource Brand}" FontSize="{DynamicResource FsSmall}" Margin="0,1,0,0"/>
+                        <StackPanel x:Name="HeaderPrompt" Orientation="Horizontal" Margin="0,1,0,0">
+                            <TextBlock Text="darkcipher0x@servers:~$" Foreground="{DynamicResource Brand}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsSmall}"/>
+                            <!-- The blinking cursor: started in code, and steady when animation is reduced (Settings → Appearance). -->
+                            <Border x:Name="PromptCursor" Width="7" Height="13" Margin="5,0,0,0" Background="{DynamicResource Brand}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,3">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" x:Name="OfflineBadge" Visibility="Collapsed" Margin="0,0,10,0" Padding="8,0" Background="{DynamicResource Good}" Foreground="{DynamicResource Bg}" BorderThickness="0" FontSize="{DynamicResource FsCaption}" FontWeight="SemiBold" ToolTip="Offline mode is on: only this PC, your private network and approved destinations can be reached. Click for Settings → Offline mode."/>
+                <Button DockPanel.Dock="Right" x:Name="BroadcastBadge" Visibility="Collapsed" Margin="0,0,10,0" Padding="8,0" Background="{DynamicResource Bad}" Foreground="White" BorderThickness="0" FontSize="{DynamicResource FsCaption}" FontWeight="SemiBold" ToolTip="Something in this app is being broadcast (OBS). Click to stop every broadcast."/>
+                <TextBlock DockPanel.Dock="Right" x:Name="LockText" Foreground="{DynamicResource Muted}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsCaption}"/>
+                <TextBlock x:Name="StatusText" Foreground="{DynamicResource Muted}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsCaption}" Text="ready"/>
+            </DockPanel>
+        </Border>
+
+        <Grid x:Name="Body">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SideCol" Width="214" MinWidth="0" MaxWidth="480"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition x:Name="DockCol" Width="0"/>
+            </Grid.ColumnDefinitions>
+            <!-- Sidebar (drag the edge to resize, Ctrl+B to hide) -->
+            <Border x:Name="Sidebar" Grid.Column="0" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="Nav" Margin="0,0,0,12"/>
+                </ScrollViewer>
+            </Border>
+            <GridSplitter x:Name="SideSplitter" Grid.Column="1" Width="4" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                          Background="Transparent" ToolTip="Drag to resize the sidebar · double-click or Ctrl+B to hide/show" DragCompleted="OnSideResized" MouseDoubleClick="OnSideToggle"/>
+            <!-- Documents: split / tiled panes (Views/PaneHost.cs). (0.5.8–0.6.1 had a host pane beside them; 0.6.2 moved
+                 pin / auto-collapse into the Hosts page's own folder pane, DarkCipher0x: "INSIDE the tab/window of hosts".) -->
+            <Border x:Name="DocArea" Grid.Column="2"/>
+            <!-- Right dock region: filled by a module (0.2.0 phase 3) — the AI Engineer sidebar (Views/AiDock.cs, Ctrl+Shift+A): docked / collapsed / hidden / detached -->
+            <GridSplitter x:Name="DockSplitter" Grid.Column="3" Width="4" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                          Background="Transparent" ToolTip="Drag to resize the sidebar · double-click to collapse it" Visibility="Collapsed"/>
+            <Border x:Name="DockHost" Grid.Column="4" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0" Visibility="Collapsed"/>
+        </Grid>
+    </DockPanel>
+</Window>

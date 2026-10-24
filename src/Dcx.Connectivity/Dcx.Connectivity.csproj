@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Connectivity (0.2.0 phase 6b, docs/PLAN-0.2.0.md): SSH (connector, pool, jump hosts, tunnels, keys, LAN scan),
+       the session transports behind terminal tabs (SSH shell, ConPTY local shells, serial, Telnet) and their profiles and
+       logs, remote file systems and the transfer queue, server reports, and the terminal bridge with its command risk
+       rules (tabs reached through ITerminal). Depends on Dcx.Core only; no WPF. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DcxManager</RootNamespace>
+    <AssemblyName>Dcx.Connectivity</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The projects above (and the self-test inside the app) use its internal members, as they did in one project -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+    <InternalsVisibleTo Include="Dcx.Ai" />
+    <InternalsVisibleTo Include="Dcx.Browser" />
+    <InternalsVisibleTo Include="Dcx.Library" />
+    <InternalsVisibleTo Include="Dcx.Addons" />
+    <InternalsVisibleTo Include="Dcx.Infra" />
+    <InternalsVisibleTo Include="Dcx.Cloud" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.13" />
+    <PackageReference Include="System.Management" Version="10.0.13" />
+  </ItemGroup>
+
+</Project>

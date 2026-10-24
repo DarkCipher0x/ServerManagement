@@ -1,0 +1,209 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="xterm.css">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  #term { position: absolute; inset: 4px 2px 2px 6px; }
+  .xterm-viewport::-webkit-scrollbar { width: 10px; }
+  .xterm-viewport::-webkit-scrollbar-thumb { border-radius: 2px; border: 2px solid transparent; background-clip: content-box; }
+</style>
+<script src="xterm.js"></script>
+<script src="addon-fit.js"></script>
+</head>
+<body>
+<div id="term"></div>
+<script>
+  // Bridge between xterm.js and the WPF host (TerminalView): keystrokes and size go out, SSH output comes in.
+  const q = new URLSearchParams(location.search);
+  const c = k => '#' + (q.get(k) || '000000');
+  document.body.style.background = c('bg');
+  const style = document.createElement('style');
+  style.textContent = `.xterm-viewport::-webkit-scrollbar-thumb { background-color: ${c('thumb')}; }`;
+  document.head.appendChild(style);
+
+  const term = new Terminal({
+    fontFamily: q.get('font') ? "'" + q.get('font').replace(/'/g, '') + "', 'Cascadia Mono', Consolas, monospace" : "'Cascadia Mono', 'Cascadia Code', Consolas, monospace",
+    fontSize: Number(q.get('size') || 14),
+    scrollback: Number(q.get('scrollback') || 10000),
+    cursorBlink: true,
+    cursorStyle: 'block',
+    allowProposedApi: true,
+    rightClickSelectsWord: false,
+    // OSC 8 hyperlinks from the server: never opened by the page; the host shows the URL and asks (TerminalView.OpenLink).
+    linkHandler: { activate: (e, uri) => send({ t: 'link', d: uri }), allowNonHttpProtocols: false },
+    theme: {
+      background: c('bg'), foreground: c('fg'), cursor: c('accent'), cursorAccent: c('bg'),
+      selectionBackground: c('sel'),
+      black: '#0b1314', red: '#ff5f6d', green: '#36d27a', yellow: '#e8c547', blue: '#4aa8ff', magenta: '#c678dd', cyan: c('accent'), white: '#d2f2ef',
+      brightBlack: '#5a8986', brightRed: '#ff8a94', brightGreen: '#6ff0a4', brightYellow: '#ffe07a', brightBlue: '#7cc2ff', brightMagenta: '#dda0f0', brightCyan: '#7ff0ea', brightWhite: '#ffffff'
+    }
+  });
+  const baseTheme = Object.assign({}, term.options.theme);
+  function applyAppTheme(m) {
+    document.body.style.background = '#' + m.bg;
+    term.options.theme = Object.assign({}, baseTheme, {
+      background: '#' + m.bg, foreground: '#' + m.fg, cursor: '#' + m.accent, cursorAccent: '#' + m.bg, selectionBackground: '#' + m.sel, cyan: '#' + m.accent });
+  }
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.open(document.getElementById('term'));
+
+  const send = m => window.chrome.webview.postMessage(m);
+  let last = '';
+  function resize() {
+    try { fit.fit(); } catch (e) { }
+    const s = term.cols + 'x' + term.rows;
+    if (s !== last) { last = s; send({ t: 'resize', cols: term.cols, rows: term.rows }); }
+  }
+  new ResizeObserver(resize).observe(document.getElementById('term'));
+
+  term.onData(d => send({ t: 'in', d }));
+  term.onBinary(d => send({ t: 'in', d }));
+  term.onSelectionChange(() => send({ t: 'sel', d: term.getSelection() }));
+  // Native pastes (Ctrl+V, Shift+Insert, middle-click, context paste) never reach the shell directly: the host
+  // inspects them first (multi-line / hidden control characters / risky commands) and sends back what to paste.
+  document.getElementById('term').addEventListener('paste', e => { e.preventDefault(); e.stopImmediatePropagation(); send({ t: 'paste' }); }, true);
+  // Drag-and-drop of text would also bypass the check: block it.
+  document.addEventListener('drop', e => e.preventDefault(), true);
+  document.addEventListener('dragover', e => e.preventDefault(), true);
+
+  // Terminal profile (ADR-019): colour scheme, cursor, scrollback, Backspace = ^H, key mappings. Sent by the host.
+  let appTheme = null, fixedScheme = false, bsCtrlH = false, keyMap = {};
+  const named = { Enter: 'Enter', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Space: 'Space', Insert: 'Insert', Delete: 'Delete',
+                  Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right' };
+  // Same format as TerminalProfiles.NormalizeKeys: Ctrl+Alt+Shift+Key.
+  function chord(e) {
+    let k = e.code;
+    if (/^Key[A-Z]$/.test(k)) k = k.slice(3);
+    else if (/^Digit\d$/.test(k)) k = k.slice(5);
+    else if (/^F\d{1,2}$/.test(k)) { }
+    else if (named[k]) k = named[k];
+    else return null;
+    return (e.ctrlKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + k;
+  }
+
+  // Ctrl+Shift+C copies, Ctrl+Shift+V pastes (the host owns the clipboard). Plain Ctrl+C stays an interrupt.
+  term.attachCustomKeyEventHandler(e => {
+    if (e.type !== 'keydown') return true;
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') { send({ t: 'copy', d: term.getSelection() }); return false; }
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyV') { send({ t: 'paste' }); return false; }
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { send({ t: 'findbar' }); return false; }
+    const c = chord(e);
+    if (c && keyMap[c] !== undefined) { send({ t: 'in', d: keyMap[c] }); e.preventDefault(); return false; }
+    if (bsCtrlH && c === 'Backspace') { send({ t: 'in', d: '\x08' }); e.preventDefault(); return false; }
+    return true;
+  });
+
+  // Scrollback search over logical lines (wrapped rows joined), newest match first. Bounded: 10,000 matches.
+  let found = [], fi = -1, findKey = '';
+  function search(m) {
+    const b = term.buffer.active, cols = term.cols;
+    const key = [m.q, m.cs, m.re, b.length, b.baseY, cols].join('\u0001');
+    let err = null;
+    if (key !== findKey) {
+      findKey = key; found = []; fi = -1;
+      if (m.q) {
+        let rx;
+        try { rx = m.re ? new RegExp(m.q, m.cs ? 'g' : 'gi') : new RegExp(m.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), m.cs ? 'g' : 'gi'); }
+        catch (x) { err = String(x.message || x); }
+        if (rx) {
+          let y = 0;
+          while (y < b.length && found.length < 10000) {
+            const start = y; let text = '';
+            do { const l = b.getLine(y); text += l ? l.translateToString(false) : ''; y++; } while (y < b.length && b.getLine(y) && b.getLine(y).isWrapped);
+            text = text.replace(/\s+$/, '');
+            rx.lastIndex = 0; let r;
+            while ((r = rx.exec(text)) && found.length < 10000) {
+              if (r[0].length === 0) { rx.lastIndex++; continue; }
+              found.push({ y: start + Math.floor(r.index / cols), x: r.index % cols, len: r[0].length });
+            }
+          }
+        }
+      }
+      fi = -2;   // a new search lands on the newest match, whichever direction
+    }
+    if (found.length) {
+      fi = fi === -2 ? found.length - 1 : m.dir === 'next' ? (fi + 1) % found.length : (fi - 1 + found.length) % found.length;
+      const f = found[fi];
+      term.select(f.x, f.y, f.len);
+      term.scrollToLine(Math.max(0, f.y - Math.floor(term.rows / 2)));
+    } else term.clearSelection();
+    send({ t: 'found', id: m.id, i: found.length ? fi + 1 : 0, n: found.length, err });
+  }
+  // Right-click is handled by the host through WebView2's ContextMenuRequested (it only fires when the page does NOT
+  // cancel the event), so nothing here — the host decides between the session menu and PuTTY-style copy/paste.
+
+  window.chrome.webview.addEventListener('message', e => {
+    const m = e.data;
+    if (m.t === 'out') term.write(m.d);
+    else if (m.t === 'focus') term.focus();
+    else if (m.t === 'clear') term.clear();
+    else if (m.t === 'font') {
+      if (m.size) term.options.fontSize = m.size;
+      if (m.family !== undefined) term.options.fontFamily = m.family ? "'" + String(m.family).replace(/'/g, '') + "', 'Cascadia Mono', Consolas, monospace" : "'Cascadia Mono', 'Cascadia Code', Consolas, monospace";
+      resize();
+    }
+    else if (m.t === 'pastetext') term.paste(m.d);
+    else if (m.t === 'selectall') term.selectAll();
+    else if (m.t === 'clearsel') term.clearSelection();
+    else if (m.t === 'reset') term.reset();
+    else if (m.t === 'top') term.scrollToTop();
+    else if (m.t === 'bottom') term.scrollToBottom();
+    else if (m.t === 'buffer') {
+      // Whole scrollback as text (for copy / save / digest).
+      const b = term.buffer.active, lines = [];
+      for (let i = 0; i < b.length; i++) { const l = b.getLine(i); if (l) lines.push(l.translateToString(true)); }
+      send({ t: 'buffer', d: lines.join('\n').replace(/\n+$/, ''), purpose: m.purpose });
+    }
+    else if (m.t === 'screen') {
+      // The rows currently on screen (what the user sees) as text, plus the cursor row — for a broadcast (ADR-011).
+      // write('', cb) runs after everything already queued has been parsed, so the snapshot includes it.
+      term.write('', () => {
+        const b = term.buffer.active, lines = [];
+        for (let i = 0; i < term.rows; i++) { const l = b.getLine(b.viewportY + i); lines.push(l ? l.translateToString(true) : ''); }
+        send({ t: 'screen', id: m.id, lines, cursor: b.baseY + b.cursorY - b.viewportY });
+      });
+    }
+    else if (m.t === 'theme') {
+      appTheme = m;
+      style.textContent = `.xterm-viewport::-webkit-scrollbar-thumb { background-color: #${m.thumb}; }`;
+      if (!fixedScheme) applyAppTheme(m);   // a profile's colour scheme doesn't follow the app theme
+    }
+    else if (m.t === 'profile') {
+      fixedScheme = !!m.scheme;
+      if (m.scheme) {
+        const a = m.scheme.ansi, n = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
+        const th = { background: m.scheme.bg, foreground: m.scheme.fg, cursor: m.scheme.cursor, cursorAccent: m.scheme.bg, selectionBackground: m.scheme.sel };
+        n.forEach((k, i) => { th[k] = a[i]; th['bright' + k[0].toUpperCase() + k.slice(1)] = a[i + 8]; });
+        term.options.theme = th;
+        document.body.style.background = m.scheme.bg;
+      } else {
+        term.options.theme = Object.assign({}, baseTheme);
+        document.body.style.background = baseTheme.background;
+        if (appTheme) applyAppTheme(appTheme);
+      }
+      term.options.cursorStyle = m.cursorStyle || 'block';
+      term.options.cursorBlink = !!m.blink;
+      if (m.scrollback) term.options.scrollback = m.scrollback;
+      bsCtrlH = !!m.bs;
+      keyMap = {}; (m.keys || []).forEach(k => keyMap[k.k] = k.d);
+    }
+    else if (m.t === 'find') search(m);
+    else if (m.t === 'probe') {
+      const o = term.options;
+      send({ t: 'probe', id: m.id, cursorStyle: o.cursorStyle, blink: o.cursorBlink, scrollback: o.scrollback, bg: o.theme.background, red: o.theme.red, keys: Object.keys(keyMap), bs: bsCtrlH, sel: term.getSelection() });
+    }
+    else if (m.t === 'key') {
+      // Self-test: a synthetic key press through the same handler a real one takes.
+      const ta = document.querySelector('.xterm-helper-textarea');
+      ta.dispatchEvent(new KeyboardEvent('keydown', { code: m.code, key: m.key, ctrlKey: !!m.ctrl, altKey: !!m.alt, shiftKey: !!m.shift, bubbles: true, cancelable: true }));
+    }
+  });
+
+  send({ t: 'ready' });
+  setTimeout(() => { resize(); term.focus(); }, 30);
+</script>
+</body>
+</html>

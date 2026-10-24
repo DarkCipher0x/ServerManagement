@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Infra (0.2.0 phase 6d, docs/PLAN-0.2.0.md): the infrastructure engines — Docker (SSH or local pipe), Proxmox,
+       Unraid, VMware vCenter and Hyper-V (WinRM / CIM): inventory, capabilities discovered from the target, and actions
+       with verified results; TLS pinning; the status the dashboard reads. Depends on Dcx.Core and Dcx.Connectivity; no WPF
+       (the Infrastructure screen is in the app). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DcxManager</RootNamespace>
+    <AssemblyName>Dcx.Infra</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+    <ProjectReference Include="..\Dcx.Connectivity\Dcx.Connectivity.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The projects above (and the self-test inside the app) use its internal members, as they did in one project -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+    <InternalsVisibleTo Include="Dcx.Ai" />
+    <InternalsVisibleTo Include="Dcx.Browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="10.0.13" />
+  </ItemGroup>
+
+</Project>

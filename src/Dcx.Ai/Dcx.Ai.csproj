@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Ai (0.2.0 phase 6f, docs/PLAN-0.2.0.md): everything AI, as one module — the engines (Ollama, Foundry Local,
+       OpenAI-compatible, Claude), the agent loop, the operator's chat side, the AI Engineer and its sidebar, the AI
+       operator screen, report analysis, help answers, vision, the send preview, the resource guard, the AI's Settings
+       cards, and AiModule, which contributes all of it through the module contracts (Dcx.Ui). Referenced only by the
+       app's composition root (and its self-test): with AI features off the module isn't registered and this assembly is
+       never loaded. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DcxManager</RootNamespace>
+    <AssemblyName>Dcx.Ai</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+    <ProjectReference Include="..\Dcx.Connectivity\Dcx.Connectivity.csproj" />
+    <ProjectReference Include="..\Dcx.Ui\Dcx.Ui.csproj" />
+    <ProjectReference Include="..\Dcx.Infra\Dcx.Infra.csproj" />
+    <ProjectReference Include="..\Dcx.Cloud\Dcx.Cloud.csproj" />
+    <ProjectReference Include="..\Dcx.Addons\Dcx.Addons.csproj" />
+    <ProjectReference Include="..\Dcx.Library\Dcx.Library.csproj" />
+    <ProjectReference Include="..\Dcx.Browser\Dcx.Browser.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The app (its composition root and self-test) uses its internal members, as it did in one project -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="System.Management" Version="10.0.13" />
+  </ItemGroup>
+
+</Project>

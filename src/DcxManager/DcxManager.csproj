@@ -1,0 +1,97 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <!-- Only for the embedded Remote Desktop ActiveX (AxHost in a WindowsFormsHost, ADR-013) -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+
+    <AssemblyName>DcxServerManager</AssemblyName>
+    <RootNamespace>DcxManager</RootNamespace>
+    <Product>DarkCipher ServerManagement</Product>
+    <!-- AssemblyTitle is the exe's FileDescription: what Task Manager, the taskbar and the file's properties show (0.6.9, DarkCipher0x). -->
+    <AssemblyTitle>Server Management by DarkCipher Systems</AssemblyTitle>
+    <Description>Server Management by DarkCipher Systems: one encrypted workstation for your servers, network, hypervisors and clouds.</Description>
+    <Authors>darkcipher0x</Authors>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <!-- Bump this one line for every build (0.1.1, 0.1.2, …); build.ps1 refuses a version whose MSI already exists. -->
+    <!-- Version: numeric (assembly, Windows Installer, update checks); it must keep increasing.
+         ReleaseLabel: what the release is called (file names, dist folder, shown in the app), e.g. 0.2.0-preview.1 while
+         the numeric version is 0.1.21 (a preview has to sort below the final 0.2.0, which upgrades it). Empty = Version. -->
+    <Version>0.6.22</Version>
+    <ReleaseLabel></ReleaseLabel>
+    <AssemblyVersion>$(Version).0</AssemblyVersion>
+    <FileVersion>$(Version).0</FileVersion>
+    <InformationalVersion Condition="'$(ReleaseLabel)' != ''">$(ReleaseLabel)</InformationalVersion>
+    <InformationalVersion Condition="'$(ReleaseLabel)' == ''">$(Version)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+
+    <!-- Publish: one self-contained folder; no .NET install needed on the target PC -->
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\logo.png" />
+    <None Remove="Assets\web\**" />
+    <!-- Terminal page (xterm.js) ships inside the exe and is unpacked to the local cache on first run -->
+    <EmbeddedResource Include="Assets\web\**" LogicalName="web/%(Filename)%(Extension)" />
+    <!-- The built-in help articles ship with the help search in Dcx.Core (src\Dcx.Core\Assets\help) since 0.2.0 phase 6a -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 0.2.0 phase 6: the projects below the app (docs/PLAN-0.2.0.md §2) -->
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+    <ProjectReference Include="..\Dcx.Connectivity\Dcx.Connectivity.csproj" />
+    <ProjectReference Include="..\Dcx.Ui\Dcx.Ui.csproj" />
+    <ProjectReference Include="..\Dcx.Infra\Dcx.Infra.csproj" />
+    <ProjectReference Include="..\Dcx.Cloud\Dcx.Cloud.csproj" />
+    <ProjectReference Include="..\Dcx.Addons\Dcx.Addons.csproj" />
+    <ProjectReference Include="..\Dcx.Library\Dcx.Library.csproj" />
+    <ProjectReference Include="..\Dcx.Browser\Dcx.Browser.csproj" />
+    <ProjectReference Include="..\Dcx.Notify\Dcx.Notify.csproj" />
+    <!-- The AI module: only App.LoadAiModule() and the self-test name it; with AI off the assembly is never loaded -->
+    <ProjectReference Include="..\Dcx.Ai\Dcx.Ai.csproj" />
+    <!-- Add-on SDK (ADR-035): the encrypted bridge for PowerShell add-ons, used by the self-test and offered on the Add-ons screen -->
+    <EmbeddedResource Include="..\..\samples\addons\sdk\DcxBridge.dll" LogicalName="sdk/DcxBridge.dll" />
+    <EmbeddedResource Include="..\..\samples\addons\sdk\DcxAddon.ps1" LogicalName="sdk/DcxAddon.ps1" />
+    <EmbeddedResource Include="..\..\samples\addons\sdk\DcxBridge.cs" LogicalName="sdk/DcxBridge.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WPF is the UI: never pull WinForms types in implicitly (Button, Application, … would clash) -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.13" />
+    <PackageReference Include="System.Management" Version="10.0.13" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+  </ItemGroup>
+
+  <Target Name="TrimPublishDocs" AfterTargets="Publish">
+    <Delete Files="$(PublishDir)Microsoft.Web.WebView2.Core.xml;$(PublishDir)Microsoft.Web.WebView2.WinForms.xml;$(PublishDir)Microsoft.Web.WebView2.Wpf.xml" />
+  </Target>
+
+</Project>
+

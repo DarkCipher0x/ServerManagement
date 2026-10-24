@@ -1,0 +1,11 @@
+# The Security Report PDF (tools\make-guide.ps1 -Spec docs\guide\guide-security-report.txt -Suffix Security-Report):
+# the security model, the penetration tests that were run against this version and their results.
+TITLE Security report
+SUBTITLE Security model, penetration tests and results — version {VERSION}
+COVERS Scope and method · the attack surface · the penetration-test suite and every probe's result · findings and fixes · the security model control by control · known gaps
+PART Part 1 — Security report
+DOC docs/SECURITY-REPORT.md
+PART Part 2 — The security model
+DOC docs/SECURITY.md
+PART Appendix
+DOC docs/release-notes/0.6.12.md take="## Security" top=1 title="Security changes in {VERSION}"

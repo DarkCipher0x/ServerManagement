@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Ui (0.2.0 phase 6c, docs/PLAN-0.2.0.md): the WPF kit every screen project uses — dialogs and the error box,
+       right-click menus, hint text, network and environment labels, the theme engine (palette, theme add-on packs,
+       typography, density), the UI error guard and Windows Share. Depends on Dcx.Core only; it knows no screen: what it
+       needs from the app (the error box's extra action, a tab's environment, the theme add-on in use) is registered by the
+       app at start-up. The theme's XAML (Themes/Controls.xaml) stays in the app, which merges it. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DcxManager</RootNamespace>
+    <AssemblyName>Dcx.Ui</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The projects above (and the self-test inside the app) use its internal members, as they did in one project -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+    <InternalsVisibleTo Include="Dcx.Ai" />
+    <InternalsVisibleTo Include="Dcx.Browser" />
+    <InternalsVisibleTo Include="Dcx.Library" />
+    <InternalsVisibleTo Include="Dcx.Addons" />
+    <InternalsVisibleTo Include="Dcx.Cloud" />
+  </ItemGroup>
+
+</Project>

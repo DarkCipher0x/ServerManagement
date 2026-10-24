@@ -1,0 +1,16 @@
+{
+  "api": 2,
+  "id": "com.darkcipher.sample.hello-hosts",
+  "name": "Hello hosts (sample)",
+  "version": "1.2.0",
+  "publisher": "DarkCipher Systems (sample)",
+  "description": "Counts your saved hosts by folder and, if an incident is active, adds the summary to its timeline; lists everything an add-on can call through the full-control API. A starting point for your own add-ons.",
+  "entry": "run.ps1",
+  "timeoutSeconds": 30,
+  "permissions": ["hosts.read", "incidents.read", "incidents.write"],
+  "commands": [
+    { "id": "summary", "title": "Host summary", "context": "global" },
+    { "id": "note-host", "title": "Add host to active incident", "context": "host" },
+    { "id": "capabilities", "title": "What can add-ons call?", "context": "global" }
+  ]
+}

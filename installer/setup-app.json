@@ -1,0 +1,36 @@
+{
+  "brand": "DARKCIPHER SYSTEMS",
+  "title": "ServerManagement",
+  "tagline": "One encrypted workstation for your servers, network, hypervisors and clouds.",
+  "website": "https://darkciphersystems.com",
+  "dataNote": "Your hosts, passwords, keys and settings stay on this PC, encrypted with AES-256-GCM.",
+  "titleAccent": "Management",
+  "prompt": "darkcipher0x@servers:~$",
+  "intro": "This sets up ServerManagement on this PC: SSH, Remote Desktop and VNC sessions, files, hypervisors, five clouds, Microsoft 365 and Bitwarden in one encrypted workstation. Built by an IT engineer, for engineers. Free and open source.",
+  "highlights": [
+    { "title": "Post-quantum by design", "detail": "ML-KEM and ML-DSA hybrids for SSH, team libraries and updates; everything saved is AES-256-GCM." },
+    { "title": "Everything in one place", "detail": "Terminals, Remote Desktop, files, Docker, Proxmox, Hyper-V, vCenter and the clouds, side by side." },
+    { "title": "Your secrets stay yours", "detail": "Encrypted on this PC with Windows Hello; Bitwarden and Password Safe sign-ins are read into memory, never saved." },
+    { "title": "Built for organisations", "detail": "Group Policy for every setting, admin-approved security switches and a full audit log." }
+  ],
+  "badge": "Post-quantum protected",
+  "builtBy": "Built by DarkCipher0x at DarkCipher Systems",
+  "diskMb": 450,
+  "minBuild": 17763,
+  "doneNote": "Your first start walks you through setting it up. Help, guides and the bug and feature request forms are at darkciphersystems.com.",
+  "options": [
+    { "property": "INSTALLDESKTOPSHORTCUT", "title": "Desktop shortcut", "detail": "An icon on your desktop.", "default": true },
+    { "property": "INSTALLWEBVIEW2", "title": "Microsoft Edge WebView2 Runtime", "detail": "Required for terminals and the portal browser.", "default": true,
+      "detect": [ { "kind": "hklm64", "key": "SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", "value": "pv" },
+                  { "kind": "hkcu", "key": "Software\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}", "value": "pv" } ] },
+    { "property": "INSTALLWINGET", "title": "winget (App Installer)", "detail": "Installs the items below.", "default": true,
+      "detect": [ { "kind": "appPath", "key": "winget.exe" } ] },
+    { "property": "INSTALLNMAP", "title": "Nmap", "detail": "Network discovery and port checks. Downloaded from nmap.org and checked; opens its own setup (with Npcap) to finish.", "default": true, "package": "Nmap",
+      "detect": [ { "kind": "uninstall32", "key": "Nmap" }, { "kind": "file", "key": "%ProgramFiles(x86)%\\Nmap\\nmap.exe" } ] },
+    { "property": "INSTALLFOUNDRY", "title": "Microsoft Foundry Local", "detail": "The default on-device AI engine.", "default": true,
+      "detect": [ { "kind": "appPath", "key": "foundry.exe" } ] },
+    { "property": "INSTALLOLLAMA", "title": "Ollama", "detail": "Optional GPU AI engine. Skip it if Ollama runs on another machine.", "default": false,
+      "detect": [ { "kind": "file", "key": "%LOCALAPPDATA%\\Programs\\Ollama\\ollama.exe" } ] }
+  ],
+  "removeData": { "title": "Also remove my data and settings", "detail": "Hosts, credentials, notes and settings for this Windows user. Leave off to keep them for a reinstall.", "properties": [ "REMOVE_DATA", "REMOVE_CACHE", "REMOVE_SETTINGS" ] }
+}

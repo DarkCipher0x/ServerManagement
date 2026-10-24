@@ -1,0 +1,29 @@
+{
+  "name": "Ocean",
+  "notes": "A sample theme add-on that shows everything a theme can set: every colour key for dark and light, a product name, an empty tagline (hides the prompt line), a PNG logo on a white plate, and a UI font that is used only when it is installed. Light mode: white header and pages, grey panels, blue accents. Dark mode: deep navy with the logo on a white pill. Environment label colours are not themable (ADR-030). Copy this folder, change the values, pack it with samples/addons/pack.ps1.",
+  "productName": "Ocean ServerManagement",
+  "tagline": "",
+  "logo": "logo.png",
+  "logoBackground": "#FFFFFF",
+  "uiFont": "Roboto",
+  "colors": {
+    "Bg":          { "dark": "#071733", "light": "#FFFFFF" },
+    "Surface":     { "dark": "#0C2147", "light": "#F3F3F3" },
+    "Input":       { "dark": "#04102A", "light": "#FFFFFF" },
+    "Fg":          { "dark": "#EAF1FB", "light": "#1A1A1A" },
+    "Muted":       { "dark": "#9DB3D6", "light": "#5C6370" },
+    "Line":        { "dark": "#1D3A6E", "light": "#CFCFCF" },
+    "Hover":       { "dark": "#12305F", "light": "#E4EEFA" },
+    "Track":       { "dark": "#12305F", "light": "#E9E9E9" },
+    "ScrollThumb": { "dark": "#2E5390", "light": "#B4C6E4" },
+    "HeaderBg":    { "dark": "#0B3D91", "light": "#FFFFFF" },
+    "HeaderFg":    { "dark": "#FFFFFF", "light": "#0B3D91" },
+    "Good":        { "dark": "#4CC23A", "light": "#1C8900" },
+    "Warn":        { "dark": "#FFC107", "light": "#8A6A00" },
+    "Bad":         { "dark": "#FF6B6B", "light": "#C42929" },
+    "Accent":      { "dark": "#6FA8FF", "light": "#1F6FEB" },
+    "AccentHover": { "dark": "#8DBBFF", "light": "#174FAF" },
+    "OnAccent":    { "dark": "#071733", "light": "#FFFFFF" },
+    "Brand":       { "dark": "#8DBBFF", "light": "#6FA8FF" }
+  }
+}

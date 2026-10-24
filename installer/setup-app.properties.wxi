@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The MSI properties ServerManagement's setup passes through: each is a bundle variable the setup app sets from its
+     switches (setup-app.json "property"). Empty means "let the MSI decide", exactly as when the MSI runs on its own. -->
+<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <MsiProperty Name="INSTALLDESKTOPSHORTCUT" Value="[INSTALLDESKTOPSHORTCUT]" />
+  <MsiProperty Name="INSTALLWEBVIEW2" Value="[INSTALLWEBVIEW2]" />
+  <MsiProperty Name="INSTALLWINGET" Value="[INSTALLWINGET]" />
+  <MsiProperty Name="INSTALLNMAP" Value="[INSTALLNMAP]" />
+  <MsiProperty Name="INSTALLFOUNDRY" Value="[INSTALLFOUNDRY]" />
+  <MsiProperty Name="INSTALLOLLAMA" Value="[INSTALLOLLAMA]" />
+  <MsiProperty Name="REMOVE_DATA" Value="[REMOVE_DATA]" />
+  <MsiProperty Name="REMOVE_CACHE" Value="[REMOVE_CACHE]" />
+  <MsiProperty Name="REMOVE_SETTINGS" Value="[REMOVE_SETTINGS]" />
+</Include>

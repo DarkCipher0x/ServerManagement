@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>ServerManagement {VERSION} – {TITLE} – DarkCipher Systems</title>
+<style>
+  :root { --ink: #111827; --muted: #4b5563; --teal: #0f766e; --teal-2: #14b8a6; --rule: #d1d5db; --code: #f3f4f6; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm;
+    @bottom-left { content: "ServerManagement {VERSION} – DarkCipher Systems"; font: 8pt "Segoe UI", sans-serif; color: #6b7280; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt "Segoe UI", sans-serif; color: #6b7280; } }
+  @page cover { margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
+  html { font: 10pt/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); }
+  body { margin: 0; }
+  .cover { page: cover; height: 297mm; background: #05080a; color: #e5f6f4; display: flex; flex-direction: column;
+    justify-content: center; padding: 0 22mm; box-sizing: border-box; break-after: page; }
+  .cover img { width: 34mm; height: 34mm; margin-bottom: 10mm; }
+  /* Cover naming rule (DarkCipher0x, 2026-10-21): the small teal spaced capitals "DARKCIPHER SYSTEMS" line stays as it is (the
+     company); the big white title is the application name only, "ServerManagement". */
+  .cover .brand { color: var(--teal-2); letter-spacing: .18em; font-size: 10pt; text-transform: uppercase; }
+  .cover h1 { font-size: 30pt; line-height: 1.15; margin: 4mm 0 2mm; color: #fff; border: 0; }
+  .cover .sub { font-size: 15pt; color: #99f6e4; margin-bottom: 14mm; }
+  .cover table { border-collapse: collapse; font-size: 10pt; color: #cbd5e1; }
+  .cover td { padding: 1.2mm 8mm 1.2mm 0; border: 0; background: none; }
+  .cover td:first-child { color: #5eead4; }
+  .cover .note { margin-top: 16mm; font-size: 9pt; color: #94a3b8; max-width: 150mm; }
+  .toc { break-after: page; }
+  .toc-title { font-size: 20pt; color: var(--teal); border-bottom: 2px solid var(--teal); padding-bottom: 2mm; }
+  .toc a { color: var(--ink); text-decoration: none; }
+  .toc .t1 { font-weight: 700; font-size: 11pt; margin-top: 4mm; color: var(--teal); }
+  .toc .t1 a { color: var(--teal); }
+  .toc .t2 { margin-left: 5mm; font-weight: 600; margin-top: 1mm; }
+  .toc .t3 { margin-left: 10mm; font-size: 8.5pt; color: var(--muted); columns: 1; }
+  h1.part { break-before: page; font-size: 24pt; color: #fff; background: var(--teal); padding: 8mm 6mm; margin: 0 0 6mm; }
+  h2 { font-size: 17pt; color: var(--teal); border-bottom: 1.5px solid var(--teal-2); padding-bottom: 1.5mm; margin: 9mm 0 3mm; break-after: avoid; }
+  section.doc > h2:first-child { margin-top: 2mm; }
+  h3 { font-size: 12.5pt; margin: 6mm 0 2mm; color: #0b3b38; break-after: avoid; }
+  h4 { font-size: 11pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  h5, h6 { font-size: 10pt; margin: 3mm 0 1mm; break-after: avoid; }
+  p { margin: 1.5mm 0 2mm; }
+  ul, ol { margin: 1mm 0 2mm; padding-left: 6mm; }
+  li { margin: .6mm 0; }
+  code { font: 8.6pt Consolas, "Cascadia Mono", monospace; background: var(--code); padding: 0 1mm; border-radius: 2px; }
+  pre { background: #0b1215; color: #d1fae5; padding: 3mm 4mm; border-radius: 3px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  pre code { background: none; color: inherit; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 3mm; font-size: 8.8pt; }
+  th { background: #ccfbf1; color: #0b3b38; text-align: left; }
+  th, td { border: 1px solid var(--rule); padding: 1.2mm 2mm; vertical-align: top; }
+  tr { break-inside: avoid; }
+  blockquote { border-left: 3px solid var(--teal-2); margin: 2mm 0; padding: 1mm 4mm; color: var(--muted); background: #f0fdfa; }
+  a { color: var(--teal); }
+  strong { color: #000; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <img src="{LOGO}" alt="">
+  <div class="brand">DarkCipher Systems</div>
+  <h1>ServerManagement</h1>
+  <div class="sub">{SUBTITLE}</div>
+  <table>
+    <tr><td>Version</td><td>{VERSION} (x64, Windows 10 1809+ / Windows 11)</td></tr>
+    <tr><td>Generated</td><td>{DATE}</td></tr>
+    <tr><td>Covers</td><td>{COVERS}</td></tr>
+    <tr><td>Build status</td><td>Released only after the full self-test passes with 0 failures · not code-signed</td></tr>
+  </table>
+  <div class="note">Generated from the project's own documentation for this version. Example addresses use the documentation ranges (192.0.2.x, 198.51.100.x, 203.0.113.x). Licence: MIT.</div>
+</div>
+{TOC}
+{BODY}
+</body>
+</html>

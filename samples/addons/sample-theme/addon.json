@@ -1,0 +1,9 @@
+{
+  "api": 2,
+  "id": "com.darkcipher.theme.sample",
+  "name": "Ocean sample theme",
+  "version": "2.0.0",
+  "publisher": "DarkCipher Systems",
+  "description": "A sample theme add-on: rebrands the app as Ocean ServerManagement with a blue palette (white header and pages in light mode, deep navy in dark mode), a sample logo on a white plate and Roboto when it is installed. Overrides the app's light and dark themes while enabled. Copy and change it to make your organisation's theme (Settings → Appearance → Branding & colours can also export one).",
+  "theme": "theme.json"
+}

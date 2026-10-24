@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+publish/
+.vs/
+*.user
+TestResults/
+
+# Releases are kept on disk (dist\<ver>\, dist\addons\), never in the repository (70 MB each)
+dist/
+
+# Self-test scratch folders and reports
+.selftest/
+.selftest-*/
+selftest.txt
+*.selftest.txt
+
+# Local signing material (the MSIX -TestSign certificate and test packages are for this PC only)
+*.pfx
+*.cer
+*-test.msix
+*.wixpdb
+
+# Tool caches
+tools/guide/bin/
+tools/guide/obj/
+tools/msix/bin/
+tools/msix/obj/
+
+# WPF's temporary project files (left behind when a build is stopped)
+*_wpftmp.csproj
+
+# The privacy scan's local term list (tools\write-public-source.ps1): names that must never be published stay on this PC
+tools/privacy-terms.local.txt
+*.local.txt
