@@ -6,7 +6,7 @@
   "publicBranch": "main",
   "publicClone": "..\\ServerManagement-public",
   "author": "DarkCipher0x <DarkCipher0x@users.noreply.github.com>",
-  "publishing": { "enabled": true, "reason": "on again (DarkCipher0x, 2026-10-21: publish to GitHub, keep the repository private for now); never change its visibility" },
+  "publishing": { "enabled": true, "reason": "public beta launch (DarkCipher0x, 2026-10-24: publish to GitHub, the website and Discord). The repository is public; the private source is DarkCipher0x/ServerManagement-private" },
   "releaseAssets": [
     "DarkCipherServerManagement-{ver}-Setup.exe",
     "DarkCipherServerManagement-{ver}-x64.msi",
@@ -24,6 +24,6 @@
     "update.json.sig",
     "update.json.pq.sig"
   ],
-  "website": { "enabled": false, "reason": "ServerManagement is 'coming soon' on darkciphersystems.com until DarkCipher0x launches it (2026-10-21)" },
-  "discord": { "enabled": false, "reason": "off until ServerManagement launches (DarkCipher0x, 2026-10-21)" }
+  "website": { "enabled": true, "reason": "launched (DarkCipher0x, 2026-10-24)" },
+  "discord": { "enabled": true, "reason": "launched (DarkCipher0x, 2026-10-24)" }
 }

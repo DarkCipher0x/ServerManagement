@@ -89,8 +89,8 @@ This is the source tree the $Version release was built from, as published: every
 working notes. Build it with .\build.ps1 (docs\BUILD.md). Licence: MIT (LICENSE). Third-party components: THIRD-PARTY-NOTICES.md.
 Scanned before publication for local paths, private addresses and keys (tools\write-public-source.ps1).
 "@, (New-Object Text.UTF8Encoding $false))
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-[IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
+. (Join-Path $PSScriptRoot 'zip-tools.ps1')
+New-ReleaseZip -Source $stage -Zip $zip   # forward-slash entry names (0.6.23)
 Remove-Item $stage -Recurse -Force
 Write-Host ("Source: {0} ({1} files, {2:N1} MB), privacy scan clean ({3} rule(s), {4} private term(s))" -f $zip, $files.Count, ((Get-Item $zip).Length / 1MB), $rules.Count, $terms.Count)
 if (-not $NoChecksums) { & (Join-Path $PSScriptRoot 'write-checksums.ps1') -Version $Version }

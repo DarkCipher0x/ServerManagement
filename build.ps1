@@ -178,7 +178,8 @@ if (Test-Path $notesFile) { Copy-Item $notesFile "$out\DarkCipherServerManagemen
 
 $zip = "$out\DarkCipherServerManagement-$version-x64-portable.zip"
 if (Test-Path $zip) { Remove-Item $zip }
-Compress-Archive -Path publish\* -DestinationPath $zip
+. "$PSScriptRoot\tools\zip-tools.ps1"   # 0.6.23: forward-slash entry names (Compress-Archive writes backslashes)
+New-ReleaseZip -Source publish -Zip $zip
 
 # 4a. 0.3.0 §10: the Group Policy templates (ADMX + en-US ADML) and the policy reference, from the published exe's catalog;
 #     also zipped so the checksums cover them. docs\POLICIES.md is kept equal to it (the self-test checks).
@@ -188,7 +189,7 @@ $pp = Start-Process -FilePath "publish\DcxServerManager.exe" -ArgumentList '--ex
 if ($pp.ExitCode -ne 0 -or -not (Test-Path "$pol\DarkCipherServerManagement.admx")) { throw 'policy templates were not written' }
 $polZip = "$out\DarkCipherServerManagement-$version-policy-templates.zip"
 if (Test-Path $polZip) { Remove-Item $polZip }
-Compress-Archive -Path "$pol\*" -DestinationPath $polZip
+New-ReleaseZip -Source $pol -Zip $polZip
 
 # 4b. 0.2.0 phase 7: a CycloneDX SBOM of everything the release bundles (from the locked package versions).
 & "$PSScriptRoot\tools\write-sbom.ps1" -Version $version -Numeric $numeric

@@ -118,6 +118,13 @@ $termsFile = Join-Path $PSScriptRoot 'privacy-terms.local.txt'
 if (Test-Path $termsFile) { $terms = [IO.File]::ReadAllLines($termsFile) | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 -and -not $_.StartsWith('#') } }
 function Test-PrivateName([string]$name) { foreach ($t in $terms) { if ($name.IndexOf($t, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true } }; return $false }
 foreach ($n in @($cfg.releaseAssets)) { Need ($n -notmatch '(?i)addon' -and -not (Test-PrivateName $n)) "release asset '$n' looks like an add-on or a private name: add-ons are never published" }
+# 0.6.23: every release zip names its entries with forward slashes (the ZIP specification; the 0.6.22 zips had
+# backslashes, which Linux and macOS tools mangle, and which the dist/ rule below couldn't see).
+. (Join-Path $PSScriptRoot 'zip-tools.ps1')
+foreach ($zn in "DarkCipherServerManagement-$Version-source.zip", "DarkCipherServerManagement-$Version-x64-portable.zip", "DarkCipherServerManagement-$Version-policy-templates.zip") {
+    $zp = Join-Path $out $zn
+    if (Test-Path $zp) { $bs = @(Get-BackslashEntries $zp); Need ($bs.Count -eq 0) "$zn names $($bs.Count) entr(ies) with backslashes (e.g. '$($bs | Select-Object -First 1)'): write it with tools\zip-tools.ps1" }
+}
 $srcZip = Join-Path $out "DarkCipherServerManagement-$Version-source.zip"
 if (Test-Path $srcZip) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
