@@ -169,11 +169,44 @@ public sealed class CloudResourceView : UserControl, ICloudView, IDisposable
             }
             else _rows = (await v.ListAsync(ListPath, _def.Key, _life.Token)).Select(e => new JRow(e)).ToList();
             Apply();
-            _status.Text = $"{v.AccountName} · {DateTime.Now:HH:mm:ss}";
+            _status.Text = $"{v.AccountName} · {DateTime.Now:HH:mm:ss}" + FollowHosts(v);
             if (_def.Single && _rows.Count == 1) _list.SelectedIndex = 0;
         }
         catch (OperationCanceledException) when (_disposed) { }
         catch (Exception ex) { _status.Text = "✕ " + ex.Message.Split('\n')[0]; _detail.Text = Explain(ex); }
+    }
+
+    /// <summary>Hosts reported as gone this session (asked about once; the next start asks again).</summary>
+    private static readonly HashSet<string> GoneAsked = new();
+
+    /// <summary>Saved hosts follow the account's server list (0.6.24): a new IPv4 is copied to the linked host, a host whose
+    /// server was destroyed and rebuilt under the same name is relinked, and hosts whose server is gone are offered for
+    /// removal (never removed without asking). Only the provider's own instance list counts: it is complete, child lists
+    /// and other resource types are not. Group Policy: CloudSyncHosts. Returns a note for the status line.</summary>
+    private string FollowHosts(ICloudApi v)
+    {
+        if (_def != _provider.InstanceDef || _parent != null || !AppSettings.Current.CloudSyncHosts) return "";
+        var r = HostsView.FollowCloud(_provider, v.AccountId, _rows.Select(x => _provider.Normalize(x.Raw, v.AccountId)).OfType<CloudInstance>().ToList());
+        var fresh = r.Gone.Where(h => !r.Locked.Contains(h) && GoneAsked.Add(h.Id)).ToList();
+        if (fresh.Count > 0) Dispatcher.BeginInvoke(() => OfferRemoveGone(fresh, v.AccountName));
+        var notes = new List<string>();
+        if (r.Moved.Count > 0) notes.Add(r.Moved.Count == 1 ? $"host {r.Moved[0].Host.Display} now {r.Moved[0].Host.Address}" : $"{r.Moved.Count} hosts' addresses updated");
+        if (r.Relinked.Count > 0 && r.Relinked.Count != r.Moved.Count) notes.Add($"{r.Relinked.Count} host(s) relinked");
+        if (r.Gone.Count > 0) notes.Add($"⚠ {r.Gone.Count} saved host(s) without a server");
+        if (r.Locked.Count > 0) notes.Add($"🔒 {r.Locked.Count} locked host(s) not updated");
+        return notes.Count == 0 ? "" : " · " + string.Join(" · ", notes);
+    }
+
+    private void OfferRemoveGone(List<HostEntry> gone, string account)
+    {
+        if (_disposed) return;
+        var names = string.Join("\n", gone.Take(15).Select(h => $"  {h.Display}  ({h.Address})")) + (gone.Count > 15 ? $"\n  … and {gone.Count - 15} more" : "");
+        if (!Dialogs.Confirm("Saved hosts", $"{gone.Count} saved host(s) point at {_provider.Title} servers that no longer exist on {account}:\n\n{names}\n\n" +
+                "Remove them from your saved hosts? Credentials in the vault are kept. Cancel keeps them (you're asked again next time the app starts).", "Remove hosts", danger: true)) return;
+        if (!Restrictions.Check("host.delete")) return;
+        var open = gone.Where(h => AppData.Current.Hosts.Contains(h) && Locks.IsOpen("host:" + h.Id)).ToList();
+        HostsView.RemoveHosts(open, $"deleted host (its {_provider.Title} server no longer exists)");
+        if (open.Count < gone.Count) Dialogs.Info("Saved hosts", $"{gone.Count - open.Count} padlocked host(s) were kept. Open their padlock and delete them on the Hosts page.");
     }
 
     /// <summary>The error with what to do about it (the provider's request id helps its support).</summary>

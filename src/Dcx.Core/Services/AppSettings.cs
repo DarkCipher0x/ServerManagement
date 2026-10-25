@@ -204,6 +204,9 @@ public sealed class AppSettings
     /// <summary>Screens pinned to the top of the Cloud providers tree (nav keys; pruned to existing screens, at most 20).
     /// Replaced 0.1.x's automatic "recent" list, which older settings files still carry and is ignored.</summary>
     public List<string> CloudPinned { get; set; } = new();
+    /// <summary>Saved hosts linked to a cloud server follow it when its list loads (0.6.24): a new IPv4 is copied, a rebuilt
+    /// server of the same name is relinked, and hosts whose server is gone are offered for removal.</summary>
+    public bool CloudSyncHosts { get; set; } = true;
     /// <summary>Sidebar section order (header names); empty = default. Sections missing here keep their default place.</summary>
     public List<string> NavSectionOrder { get; set; } = new();
     /// <summary>0.6.2 (DarkCipher0x: "the items on the left main sidebar, should be rearrangable and pinable"): the order of the

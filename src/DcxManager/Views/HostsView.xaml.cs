@@ -701,12 +701,18 @@ public partial class HostsView : UserControl, IDisposable
         if (!Restrictions.Check("host.delete")) return;
         if (!hosts.All(h => Locks.IsOpen("host:" + h.Id))) { AfterUnlock(hosts, "delete", () => OnDelete(sender, e)); return; }
         if (!Dialogs.Confirm("Delete hosts", $"Remove {string.Join(", ", hosts.Select(h => h.Display))} from your saved hosts?\n\nCredentials in the vault are kept.", "Delete", danger: true)) return;
-        foreach (var h in hosts)
+        RemoveHosts(hosts, "deleted host");
+    }
+
+    /// <summary>Removes saved hosts (already confirmed): their locks and pooled connections go, jump-host links are cleared.</summary>
+    public static void RemoveHosts(IEnumerable<HostEntry> hosts, string audit)
+    {
+        foreach (var h in hosts.ToList())
         {
             AppData.Current.Hosts.Remove(h); Locks.Forget("host:" + h.Id);
             SshPool.Drop(h.Id);
             foreach (var other in AppData.Current.Hosts.Where(o => o.JumpHostId == h.Id)) other.JumpHostId = null;
-            AuditLog.Write("you", h.Display, "deleted host");
+            AuditLog.Write("you", h.Display, audit);
         }
         AppData.Save();
     }
@@ -837,21 +843,79 @@ public partial class HostsView : UserControl, IDisposable
     /// address, and hosts linked to an instance of this account that no longer exists are reported (never deleted).</summary>
     public static ReconcileResult Reconcile(CloudProvider p, string accountId, IReadOnlyList<CloudInstance> list, Credential? key)
     {
-        int added = 0, updated = 0;
+        var sync = SyncLinked(p, accountId, list);
+        int added = 0, updated = sync.Followed + sync.Relinked.Count;
         var hosts = AppData.Current.Hosts;
         foreach (var i in list)
         {
-            if (i.Ipv4.Length == 0) continue;
-            var existing = hosts.FirstOrDefault(h => CloudProviders.ForHost(h) is { } l && l.Provider == p && l.InstanceId == i.Id)
-                           ?? hosts.FirstOrDefault(h => CloudProviders.ForHost(h) == null && h.Address == i.Ipv4);
-            if (existing != null) { existing.Address = i.Ipv4; Link(existing, i); updated++; continue; }
+            if (!HasAddress(i) || hosts.Any(h => CloudProviders.ForHost(h) is { } l && l.Provider == p && l.InstanceId == i.Id)) continue;
+            var existing = hosts.FirstOrDefault(h => CloudProviders.ForHost(h) == null && h.Address == i.Ipv4);
+            if (existing != null) { Link(existing, i); updated++; continue; }
             hosts.Add(FromCloud(i, key));
             added++;
         }
-        var ids = list.Select(i => i.Id).ToHashSet();
-        var gone = hosts.Where(h => CloudProviders.ForHost(h) is { } l && l.Provider == p && (l.AccountId == null || l.AccountId == accountId) && !ids.Contains(l.InstanceId)).ToList();
-        return new ReconcileResult(added, updated, gone);
+        return new ReconcileResult(added, updated, sync.Gone);
     }
+
+    /// <summary>What <see cref="SyncLinked"/> changed: hosts that followed a new address (with the old one), hosts relinked
+    /// to a replacement server of the same name, hosts whose server is gone, and hosts left alone because they are locked.</summary>
+    public sealed record CloudSyncResult(int Followed, List<(HostEntry Host, string Old)> Moved, List<HostEntry> Relinked, List<HostEntry> Gone, List<HostEntry> Locked)
+    {
+        public bool Changed => Moved.Count > 0 || Relinked.Count > 0;
+    }
+
+    /// <summary>Linked hosts follow their cloud servers (0.6.24): a changed public IPv4 is copied to the host, and a host whose
+    /// server was destroyed is relinked to the one new, unlinked server of the same name (a rebuilt server). Hosts whose server
+    /// is gone stay saved and are reported. <paramref name="list"/> must be the account's complete instance list. Shared
+    /// library hosts, padlocked hosts and a policy that forbids host edits are never changed.</summary>
+    public static CloudSyncResult SyncLinked(CloudProvider p, string accountId, IReadOnlyList<CloudInstance> list)
+    {
+        var hosts = AppData.Current.Hosts;
+        var byId = list.GroupBy(i => i.Id).ToDictionary(g => g.Key, g => g.First());
+        var linked = hosts.Select(CloudProviders.ForHost).Where(l => l is { } x && x.Provider == p).Select(l => l!.Value.InstanceId).ToHashSet();
+        var mine = hosts.Where(h => !h.IsShared && CloudProviders.ForHost(h) is { } l && l.Provider == p && (l.AccountId == null || l.AccountId == accountId)).ToList();
+        var r = new CloudSyncResult(0, new(), new(), new(), new());
+        var canEdit = Restrictions.Allowed("host.edit");
+        int followed = 0;
+        foreach (var h in mine)
+        {
+            var id = CloudProviders.ForHost(h)!.Value.InstanceId;
+            if (byId.TryGetValue(id, out var i))
+            {
+                followed++;
+                if (!HasAddress(i) || h.Address == i.Ipv4) continue;
+                if (!canEdit || !Locks.IsOpen("host:" + h.Id)) { r.Locked.Add(h); continue; }
+                r.Moved.Add((h, h.Address)); h.Address = i.Ipv4; SshPool.Drop(h.Id);
+                continue;
+            }
+            var twins = list.Where(x => !linked.Contains(x.Id) && x.Name.Length > 0 && string.Equals(x.Name, h.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (twins.Count != 1) { r.Gone.Add(h); continue; }
+            if (!canEdit || !Locks.IsOpen("host:" + h.Id)) { r.Locked.Add(h); r.Gone.Add(h); continue; }
+            var twin = twins[0];
+            var old = h.Address;
+            Link(h, twin); linked.Add(twin.Id);
+            if (HasAddress(twin) && h.Address != twin.Ipv4) { h.Address = twin.Ipv4; SshPool.Drop(h.Id); }
+            r.Relinked.Add(h);
+            if (h.Address != old) r.Moved.Add((h, old));
+        }
+        return r with { Followed = followed };
+    }
+
+    /// <summary><see cref="SyncLinked"/>, saved and written to the audit log (the cloud screens and the dashboard's cloud card
+    /// call it whenever they load an account's complete instance list).</summary>
+    public static CloudSyncResult FollowCloud(CloudProvider p, string accountId, IReadOnlyList<CloudInstance> list)
+    {
+        if (Profiles.ReadOnly) return new CloudSyncResult(0, new(), new(), new(), new());   // a viewer can't save hosts
+        var r = SyncLinked(p, accountId, list);
+        if (!r.Changed) return r;
+        AppData.Save();
+        foreach (var (h, old) in r.Moved) AuditLog.Write("app", h.Display, $"host address followed {p.Title}", $"{old} → {h.Address}");
+        foreach (var h in r.Relinked) AuditLog.Write("app", h.Display, $"host relinked to a rebuilt {p.Title} server of the same name", h.Address);
+        return r;
+    }
+
+    /// <summary>A usable public IPv4 (Vultr shows 0.0.0.0 while a server is still being built).</summary>
+    private static bool HasAddress(CloudInstance i) => i.Ipv4.Length > 0 && i.Ipv4 != "0.0.0.0";
 
     private static void Link(HostEntry h, CloudInstance i)
     {

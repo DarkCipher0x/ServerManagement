@@ -293,6 +293,23 @@ public static class ContaboTests
                 var r2 = HostsView.Reconcile(p, a.Id, await p.ListInstancesAsync(api), null);
                 if (r2.Added != 0 || r2.Updated != 2 || r2.Gone.Count != 1 || !addedHosts.Any(h => h.Address == "203.0.113.99")) throw new Exception($"reconcile: +{r2.Added} ~{r2.Updated} gone {r2.Gone.Count}");
 
+                // 0.6.24: a server destroyed and rebuilt under the same name (new id, new IP) moves its saved host over instead
+                // of leaving it on the old address; two candidates of that name are ambiguous, so the host stays reported.
+                var rebuilt = r2.Gone[0];
+                var twin = FakeContabo.InstanceJson(900, rebuilt.Name, "running", "203.0.113.150");
+                fake.Instances(FakeContabo.ClientA).Add(twin);
+                var s1 = HostsView.SyncLinked(p, a.Id, await p.ListInstancesAsync(api));
+                if (s1.Relinked.SingleOrDefault() != rebuilt || rebuilt.Address != "203.0.113.150" || rebuilt.CloudInstanceId != "900" || s1.Gone.Count != 0 || s1.Moved.Count != 1)
+                    throw new Exception($"rebuilt server: relinked {s1.Relinked.Count}, {rebuilt.Address}, id {rebuilt.CloudInstanceId}, gone {s1.Gone.Count}");
+                var r3 = HostsView.Reconcile(p, a.Id, await p.ListInstancesAsync(api), null);
+                if (r3.Added != 0 || AppData.Current.Hosts.Count(h => h.Name == rebuilt.Name) != 1) throw new Exception("rebuilt server imported twice");
+                fake.Instances(FakeContabo.ClientA).Remove(twin);
+                fake.Instances(FakeContabo.ClientA).Add(FakeContabo.InstanceJson(901, rebuilt.Name, "running", "203.0.113.151"));
+                fake.Instances(FakeContabo.ClientA).Add(FakeContabo.InstanceJson(902, rebuilt.Name, "running", "203.0.113.152"));
+                var s2 = HostsView.SyncLinked(p, a.Id, await p.ListInstancesAsync(api));
+                if (s2.Relinked.Count != 0 || s2.Gone.SingleOrDefault() != rebuilt || rebuilt.Address != "203.0.113.150") throw new Exception("two servers of the same name: relinked anyway");
+                fake.Instances(FakeContabo.ClientA).RemoveAll(i => (long)i["instanceId"]! >= 901);
+
                 var linked = addedHosts.First(h => h.Address == "203.0.113.99");
                 var sv = new ServerView(linked);
                 var labels = Menus.Descendants<Button>(sv).Select(x => x.Content as string ?? "").ToList();
@@ -324,7 +341,7 @@ public static class ContaboTests
                 fake.ClearScripts();
                 await Settle(400);
                 if (dv.CloudCounts["contabo"] != -1 || !dv.BodyText("cloud").Contains("Contabo's API had a problem") || !dv.BodyText("sessions").Any()) throw new Exception("failing provider: " + dv.BodyText("cloud"));
-                ok("Contabo hosts / dashboard / AI: import adds linked hosts (Contabo's default user), reconciliation follows a changed IP and reports a removed instance (kept, not deleted), server view offers the Contabo power cycle and no console, AI cloud tools list and reboot only after approval (declined = nothing sent, unknown provider refused), dashboard counts Contabo servers and a failing Contabo API shows only in its own card");
+                ok("Contabo hosts / dashboard / AI: import adds linked hosts (Contabo's default user), reconciliation follows a changed IP and reports a removed instance (kept, not deleted), a server rebuilt under the same name takes its host over (not when the name is ambiguous), server view offers the Contabo power cycle and no console, AI cloud tools list and reboot only after approval (declined = nothing sent, unknown provider refused), dashboard counts Contabo servers and a failing Contabo API shows only in its own card");
             }
             catch (Exception ex) { fail("Contabo hosts / dashboard / AI", ex); }
             finally { s.DashboardAutoSources = was.Sources; s.DashboardChecks = was.Checks; }

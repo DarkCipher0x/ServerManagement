@@ -58,6 +58,7 @@ public sealed partial class SettingsView
             Check("Confirm multi-line and risky pastes (shows the lines first; hidden control characters are always removed)", _s.TerminalConfirmPaste, v => _s.TerminalConfirmPaste = v),
             Check("Reconnect terminals automatically after an unexpected drop", _s.TerminalAutoReconnect, v => _s.TerminalAutoReconnect = v),
             Check("Switch to an open tab of the same host instead of opening another (Shift-click, or right-click → New connection, still opens another)", _s.ReuseOpenTabs, v => _s.ReuseOpenTabs = v),
+            Check("Keep hosts in step with their cloud servers: a changed IP address, or a server rebuilt under the same name, updates the saved host; removed servers are offered for removal", _s.CloudSyncHosts, v => _s.CloudSyncHosts = v),
             TelnetCheck(),
             Check(Rdp.RdpAxHost.AvailableClsid() != null
                     ? "Open Remote Desktop inside the app (tabs, pop-out, full screen) — off: Windows' Remote Desktop Connection window"

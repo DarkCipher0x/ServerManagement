@@ -2665,3 +2665,21 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
   the big style's padding cut it off, DarkCipher0x's screenshot); below 760 px the sign-in buttons show their icons only and
   below 600 px the profile pill hides, so they stay beside the address. The self-test measures every toolbar button at four
   widths (`BrowserView.ClippedToolbarForTest`).
+
+### ADR-101 Saved hosts follow their cloud servers (2026-10-25, 0.6.24)
+- **Context:** DarkCipher0x destroyed a Vultr server and built a new one of the same name; the Vultr screen showed the new
+  IP but the saved host kept the old one. Linked hosts (ADR-020) were only reconciled by the manual Hosts → Import from …,
+  and a rebuilt server has a new instance id, so nothing ever matched it to the old host.
+- **Decision:** `HostsView.SyncLinked(provider, account, list)` takes an account's complete instance list: a linked host
+  whose instance is present follows a changed public IPv4 (0.0.0.0 while building is ignored); a linked host whose instance
+  is gone is relinked to the one unlinked instance of the same name (case-insensitive; zero or several = reported as gone,
+  never guessed). Shared-library hosts, padlocked hosts and a `host.edit` restriction leave the host unchanged (reported
+  as locked). `HostsView.FollowCloud` saves and audits ("app" actor, old → new address) and does nothing for a viewer
+  profile. It runs when the provider's own Instances screen loads (`CloudResourceView.FollowHosts`: only the provider's
+  `InstanceDef` without a parent, since only that list is complete) and when the dashboard's cloud card loads; `Reconcile`
+  (Import) runs it first, so a rebuilt server is not added as a second host. Hosts whose server is gone are offered for
+  removal once per session from the Instances screen (`host.delete` restriction and padlocks respected; Cancel keeps them).
+  Setting / Group Policy `CloudSyncHosts` (default on, not a protected setting: the address comes from the signed-in
+  provider API, and SSH's host-key check still asks on the new server's first connection).
+- **Tests:** SelfTestContabo §6 against FakeContabo: a rebuilt server of the same name takes the host over (new id, new
+  address, one Moved), Import afterwards adds nothing; two servers of that name leave the host reported as gone.

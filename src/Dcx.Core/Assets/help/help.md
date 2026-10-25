@@ -674,6 +674,7 @@ Cloud providers → Vultr covers instances, bare metal, DNS, firewalls, networks
 New in 0.1.14: IPv6 reverse DNS (set, list, delete), reset an IPv4 reverse DNS to the default, remove an extra IPv4 and ISO status on instances; IPv6, upgrades and VPC attach / detach on bare metal; Block snapshots; File System (VFS) with attachments; Sub-accounts.
 Hosts linked to a Vultr instance get "🖥 Vultr console" (out-of-band web console) and "⚡ Vultr power cycle" in Manage. "{ } API explorer" calls any endpoint; "⧉ Vultr portal" opens my.vultr.com in an app window.
 Accounts can be disabled (kept, but never used) with Disable / enable in Settings → Vultr accounts.
+**Hosts follow their servers (0.6.24, every cloud provider).** Whenever a provider's instance list loads (its Instances screen, or the dashboard's Cloud servers card), saved hosts linked to its servers are brought up to date: a changed public IPv4 is copied to the host, and if you destroyed a server and built a new one **with the same name**, the host moves to the new server and its new address (only when exactly one new, unlinked server has that name). Hosts whose server no longer exists are listed, and you're asked once whether to remove them (credentials in the vault are kept; Cancel keeps them). Padlocked and shared-library hosts are never changed. Each change is in the audit log. Turn it off in Settings → Terminal ("Keep hosts in step with their cloud servers") or by Group Policy (CloudSyncHosts). The new server has a new host key, so the first connection asks you to trust it.
 
 ## Contabo cloud
 keywords: contabo, vps, vds, cloud, client id, client secret, api user, api password, instances, rescue, reinstall, snapshot, rollback, cancel, secrets, private network, firewall, dns, images
@@ -707,7 +708,7 @@ Test checks the sign-in and reports how many instances the account has. The valu
 - **No web console:** use SSH, or the rescue system.
 - **Ordering is billed:** ＋ Create is a paid order for the chosen period (1, 12 or 24 months). The app asks first, and an order is never re-sent automatically. If the answer is slow, you're told to refresh before trying again. Product ids such as V153 come from Contabo's product list, because the API has no catalogue.
 **Hosts and safeguards:**
-- Hosts → right-click → ⇩ Import from Contabo adds servers as hosts (user: the server's default user), updates the address of hosts already linked, and lists linked hosts whose server no longer exists (you can remove the link; hosts are never deleted).
+- Hosts → right-click → ⇩ Import from Contabo adds servers as hosts (user: the server's default user), updates the address of hosts already linked (and moves a host to a server rebuilt under the same name), and lists linked hosts whose server no longer exists (you can remove the link; hosts are never deleted without asking).
 - Manage on a linked host offers "⚡ Contabo power cycle".
 - Actions on a server whose host is PRODUCTION ask you to type its name.
 **Offline mode** blocks api.contabo.com and auth.contabo.com, and the Privacy view lists both.

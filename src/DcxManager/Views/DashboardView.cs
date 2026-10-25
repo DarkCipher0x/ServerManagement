@@ -504,6 +504,7 @@ public sealed partial class DashboardView : UserControl, ICloudView, IActivatabl
         try
         {
             var list = await p.ListInstancesAsync(api);
+            if (AppSettings.Current.CloudSyncHosts) HostsView.FollowCloud(p, api.AccountId, list);   // 0.6.24: hosts follow their servers
             string? summary = null;
             try { summary = await p.AccountSummaryAsync(api); } catch (Exception ex) { App.Log($"{p.Title} account summary", ex); }
             _cloud[p.Id] = new CloudResult(DateTime.Now, by, list, summary, null);
