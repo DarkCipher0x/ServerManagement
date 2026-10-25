@@ -2683,3 +2683,37 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
   provider API, and SSH's host-key check still asks on the new server's first connection).
 - **Tests:** SelfTestContabo §6 against FakeContabo: a rebuilt server of the same name takes the host over (new id, new
   address, one Moved), Import afterwards adds nothing; two servers of that name leave the host reported as gone.
+
+### ADR-102 FreeFileSync-style folder sync: jobs, Two-way memory, versions, schedules (2026-10-25, 0.6.26)
+- **Context:** DarkCipher0x asked for FreeFileSync's capabilities in File Commander, "fully flexible" with every option
+  switchable. The 0.3.0 compare/sync window had three modes, newer-wins Two-way (a deletion came back as a copy), no
+  filter, permanent deletes on servers and nothing saved or scheduled.
+- **Decision:** the engine stays in Dcx.Connectivity/Files, one small file per concern:
+  `SyncFilter` (include/exclude lines with * ? anchored / and folder / patterns, size and age limits; the versions
+  folder and `.dcxpart` are always excluded), `SyncJob` (`SyncOptions`: compare by time+size with tolerance and hour
+  shifts / content / size; variants Two-way, Mirror, Update, Custom per `DiffState`; conflict policy; deletion
+  Recycle Bin / Versioning / Permanent; version naming; guard — `SyncPairDef` with optional own options, `SyncJobDef`
+  with the schedule), `SyncDatabase` (Two-way's last-synced state per pair, `syncdb-<hash>.dcx`, encrypted; only pairs
+  that ran update it, untouched entries are kept), `SyncVersioning` (moves into the versions folder by naming style,
+  prunes by age and count; a server has no Recycle Bin, so it falls back to versions; Permanent on a server only with the
+  protected setting `files.syncPermanentDelete`, UAC), `SyncJobStore` (`syncjobs.dcx`, encrypted), `SyncRunner` (compare,
+  plan and execute through the existing `TransferQueue`, which retires an overwritten or deleted target via
+  `TransferJob.Retire`), `SyncScheduler` (interval / daily / weekly timer and real-time FileSystemWatcher with a debounce
+  and quiet periods so its own writes don't retrigger; server sides are polled). `FolderSync.Plan` folds a one-sided
+  folder into one step only when every file in it is covered and goes the same way; a folder with filtered-out content
+  (`Partial`) is never deleted whole. Unattended runs (schedule, real-time, Run now) leave conflicts alone, refuse viewer
+  profiles, stop a pair on a missing folder and when deletions exceed `MaxDeletePercent` of a side (more than 10).
+  `TransferQueue.Jobs` is now changed through `Ui.Thread` because the scheduler queues from a pool thread.
+  UI: `SyncWindow` (pairs, "Settings for" job/pair, `SyncOptionsEditor` tabs, preview with per-row actions, kind toggles,
+  exclude), `SyncJobsWindow`, Settings → Folder sync card; AppSettings `FileSync*` are Group Policies.
+  Easy first, flexible second (DarkCipher0x: "easy to use and intuitive… easy to do regular quick scp functions"): File
+  Commander's F-key bar has "⇄ Sync ▾" (`CommanderView.QuickSync`) — Update / Mirror either way or Two-way of the two
+  panes in one step with one confirmation (`SyncWindow.ConfirmRun`, shared with the window: totals, where deleted files
+  go, typed deletion count, PRODUCTION banner), plus the window and saved jobs. The window compares as soon as it opens,
+  has one-click "what to do" buttons with a one-line summary (a click re-compares), and keeps the rest under a collapsed
+  "More options".
+- **Tests:** SelfTestFolderSync on scratch folders: filter patterns and partial folders, the compare variants and Custom,
+  Two-way over three runs (deletions both ways, changed-on-one-side, a deleted folder as one step, conflict skipped then
+  right-wins, deleted+changed kept), versions per file / per run / replace and pruning, Mirror and Update, the deletion
+  guard and a missing folder, jobs and the database encrypted at rest, schedule maths, Run now through the scheduler, and
+  both windows built without being shown.

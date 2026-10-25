@@ -103,6 +103,8 @@ public static class ProtectedSettings
         Bool("signin.helloConfirm", nameof(AppSettings.HelloConfirm), "Confirm sensitive actions with Windows Hello", "Sign-in and lock", s => s.HelloConfirm, (s, v) => s.HelloConfirm = v, safeValue: true),
         // 0.3.0 §22: team features built in; switching them off is the stricter choice.
         Bool("team.features", nameof(AppSettings.TeamFeatures), "Team features (shared libraries)", "Sign-in and lock", s => s.TeamFeatures, (s, v) => s.TeamFeatures = v, safeValue: false),
+        // 0.6.26 (ADR-102): folder sync deletes into the Recycle Bin or a versions folder; really deleting needs an admin.
+        Bool("files.syncPermanentDelete", nameof(AppSettings.FileSyncAllowPermanentDelete), "Folder sync may delete permanently on servers", "Files", s => s.FileSyncAllowPermanentDelete, (s, v) => s.FileSyncAllowPermanentDelete = v, safeValue: false),
         // 0.3.0 §3: where the audit trail goes. Turning it on, or sending more, only ever adds a copy: "tighter".
         Bool("syslog.enabled", nameof(AppSettings.SyslogEnabled), "Send logs to a syslog server (TLS)", "Syslog", s => s.SyslogEnabled, (s, v) => s.SyslogEnabled = v, safeValue: true),
         Text("syslog.host", nameof(AppSettings.SyslogHost), "Syslog server", "Syslog", s => s.SyslogHost, (s, v) => s.SyslogHost = v.Trim(), HostCheck),

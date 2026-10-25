@@ -105,6 +105,8 @@ public sealed partial class CommanderView
         Menus.Item("Directory history…", _active.HistoryMenu, "Alt+H"),
         Menus.Sep(),
         Menus.Item("Compare / sync folders…", CompareFolders, "Ctrl+X D"),
+        Menus.Sub("Sync the panes", SyncMenu().ToArray()),
+        Menus.Item("Sync jobs…", OpenSyncJobs),
         Menus.Item("Swap panes", Swap, "Ctrl+U"),
         Menus.Item("Same folder in the other pane", () => _ = Other(_active).OpenAsync(_active.Ref, _active.Path), "Alt+I"),
         Menus.Item("Terminal here", TerminalHere, "Ctrl+O"),

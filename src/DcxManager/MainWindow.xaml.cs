@@ -92,8 +92,19 @@ public partial class MainWindow : Window
                 _ = AutoUpdateCheckAsync();
                 _ = BitwardenSessions.AutoUnlockAsync("the app started");   // 0.6.20: with a remembered master password only
                 StartSnapshotTimer();
+                StartSyncScheduler();
             }
         };
+    }
+
+    /// <summary>Scheduled and real-time folder sync jobs (0.6.26, ADR-102): while the store is open (the lock screen doesn't
+    /// stop them, as it doesn't stop scheduled backups: an idle auto-lock would otherwise stop every overnight job), never in
+    /// the self-test.</summary>
+    private void StartSyncScheduler()
+    {
+        Files.SyncScheduler.RunFinished += (job, r) => Dispatcher.BeginInvoke(() =>
+            Status($"{(r.Ok ? "✓" : "⚠")} Sync job “{job.Name}”: {r.Text.Split('\n')[0]}{(r.Ok ? "" : " (File Commander → Sync jobs)")}"));
+        Files.SyncScheduler.Start(() => !TestMode.Running);
     }
 
     /// <summary>The red BROADCASTING badge and the per-terminal strips follow the active broadcasts.</summary>

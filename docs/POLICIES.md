@@ -4,7 +4,7 @@ Generated from the app's policy catalog (`PolicySettings.Catalog`, ADR-040) by e
 
 Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer, wins) and `HKCU\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (user). Templates: `policy\DarkCipherServerManagement.admx` and `policy\en-US\DarkCipherServerManagement.adml` in each release folder. A managed setting can't be changed in the app; an invalid value is ignored and listed in Settings → Security & privacy → Managed by your organisation.
 
-246 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, LastUpdateCheck, ObserveSecrets, OllamaTunnelHostId, OpenAiKey, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
+251 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, LastUpdateCheck, ObserveSecrets, OllamaTunnelHostId, OpenAiKey, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
 
 ## Security and sign-in
 
@@ -169,6 +169,11 @@ Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer
 | `BackupScheduledSecrets` | Scheduled backups include credentials and keys | REG_DWORD | 1 = on, 0 = off | on |
 | `CommanderRestoreLast` | File commander reconnects to its last places when it opens | REG_DWORD | 1 = on, 0 = off | off |
 | `CommanderShowHidden` | Commander show hidden | REG_DWORD | 1 = on, 0 = off | off |
+| `FileSyncAllowPermanentDelete` | Folder sync may delete permanently on servers | REG_DWORD | 1 = on, 0 = off | off |
+| `FileSyncDeletion` | Where new folder sync jobs send deleted and overwritten files: RecycleBin (versions on a server), Versioning or Permanent | REG_SZ | `RecycleBin` / `Versioning` / `Permanent` | `RecycleBin` |
+| `FileSyncMaxDeletePercent` | New folder sync jobs: a run without a preview stops when it would delete more than this percentage of a side's files | REG_DWORD | 1–100 | 50 |
+| `FileSyncScheduled` | Folder sync jobs may run on their schedule or in real time while the app is open (off: only when someone runs them) | REG_DWORD | 1 = on, 0 = off | on |
+| `FileSyncVersionsKeepDays` | New folder sync jobs keep versions this many days (0 = forever) | REG_DWORD | 0–3650 | 30 |
 | `ScreenshotDefault` | Screenshot default | REG_SZ | `save` / `clipboard` / `both` | `both` |
 | `ScreenshotDir` | Screenshot dir | REG_SZ | a folder path (REG_EXPAND_SZ allowed) | empty |
 | `SnapshotDir` | Snapshot dir | REG_SZ | a folder path (REG_EXPAND_SZ allowed) | empty |

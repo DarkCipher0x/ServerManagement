@@ -85,7 +85,7 @@ public static class PolicySettings
         ("Terminals and connections", new[] { nameof(AppSettings.Scrollback), nameof(AppSettings.DefaultUsername), nameof(AppSettings.ConnectTimeoutSeconds), nameof(AppSettings.AutoReconnectMaxSeconds), nameof(AppSettings.RestoreWorkspace), nameof(AppSettings.RdpEmbedded), nameof(AppSettings.ReuseOpenTabs), nameof(AppSettings.CloudSyncHosts), nameof(AppSettings.EditorVimMode), nameof(AppSettings.EditorVimProfile), nameof(AppSettings.EditorLineNumbers), nameof(AppSettings.EditorSyntaxColours), nameof(AppSettings.SessionLogs) }, new[] { "Terminal", "Tmux" }),
         ("Appearance", new[] { nameof(AppSettings.Theme), nameof(AppSettings.AccentColor), nameof(AppSettings.ThemePreset), nameof(AppSettings.StatusIntensity), nameof(AppSettings.FollowWindowsHighContrast), nameof(AppSettings.Corners), nameof(AppSettings.Motion), nameof(AppSettings.Density), nameof(AppSettings.MonoAccents), nameof(AppSettings.ThemeAddon) }, new[] { "Ui", "MonoFont", "EditorFont", "Branding" }),
         ("Navigation and dashboard", new[] { nameof(AppSettings.LandingPage), nameof(AppSettings.PinnedNavItems), nameof(AppSettings.HiddenNavItems), nameof(AppSettings.NavSectionOrder), nameof(AppSettings.NavItemOrder), nameof(AppSettings.HiddenNavSections), nameof(AppSettings.RememberNavExpansion), nameof(AppSettings.CloudPinned), nameof(AppSettings.HostsView), nameof(AppSettings.HostsHiddenColumns), nameof(AppSettings.HostsDock), nameof(AppSettings.HostsOpenIn), nameof(AppSettings.WindowHostPane), nameof(AppSettings.RestoreWorkspaceWindows) }, new[] { "Sidebar", "Dashboard" }),
-        ("Data, backups and files", new[] { nameof(AppSettings.ScreenshotDir), nameof(AppSettings.ScreenshotDefault), nameof(AppSettings.CommanderShowHidden), nameof(AppSettings.CommanderRestoreLast) }, new[] { "Snapshot", "AutoSnapshots", "Transfer", "Backup" }),
+        ("Data, backups and files", new[] { nameof(AppSettings.ScreenshotDir), nameof(AppSettings.ScreenshotDefault), nameof(AppSettings.CommanderShowHidden), nameof(AppSettings.CommanderRestoreLast) }, new[] { "Snapshot", "AutoSnapshots", "Transfer", "Backup", "FileSync" }),
         ("Syslog, log sinks and notifications", Array.Empty<string>(), new[] { "Syslog", "Smtp", "Notify", "Observe", "Grafana" }),
         ("Updates", new[] { nameof(AppSettings.UpdateSource), nameof(AppSettings.UpdateEndpoint), nameof(AppSettings.AutoCheckUpdates), nameof(AppSettings.UpdateCheckInterval), nameof(AppSettings.AutoDownloadUpdates) }, Array.Empty<string>()),
         ("Identity and single sign-on", Array.Empty<string>(), new[] { "Sso" }),
@@ -123,6 +123,7 @@ public static class PolicySettings
         [nameof(AppSettings.BeyondTrustJumpClient)] = new[] { "console", "web" },
         [nameof(AppSettings.SessionLogs)] = new[] { "profile", "on", "off" },
         [nameof(AppSettings.LockPolicyMode)] = new[] { "uac", "signin" },
+        [nameof(AppSettings.FileSyncDeletion)] = new[] { "RecycleBin", "Versioning", "Permanent" },
     };
 
     /// <summary>Ranges of numeric settings (anything else: 0 or more).</summary>
@@ -133,6 +134,7 @@ public static class PolicySettings
         [nameof(AppSettings.AiCommandTimeoutMinutes)] = (1, 120), [nameof(AppSettings.AiContext)] = (512, 1_048_576),
         [nameof(AppSettings.AiCpuThreads)] = (0, 256), [nameof(AppSettings.AiMaxSteps)] = (1, 100), [nameof(AppSettings.AiKeepWarmMinutes)] = (0, 1440),
         [nameof(AppSettings.Corners)] = (0, 8), [nameof(AppSettings.SnapshotKeep)] = (1, 1000), [nameof(AppSettings.SnapshotIntervalHours)] = (1, 720),
+        [nameof(AppSettings.FileSyncVersionsKeepDays)] = (0, 3650), [nameof(AppSettings.FileSyncMaxDeletePercent)] = (1, 100),
         [nameof(AppSettings.SyslogPort)] = (1, 65535), [nameof(AppSettings.SmtpPort)] = (1, 65535), [nameof(AppSettings.NotifyMaxPerHour)] = (1, 100),
         [nameof(AppSettings.LocalApiPort)] = (1024, 65535), [nameof(AppSettings.TransferRetries)] = (0, 20), [nameof(AppSettings.DashboardCheckMinutes)] = (1, 1440),
         [nameof(AppSettings.AutoLockMinutes)] = (0, 480), [nameof(AppSettings.UiScale)] = (0.5, 3), [nameof(AppSettings.UiTextSize)] = (0.5, 3),
@@ -330,6 +332,11 @@ public static class PolicySettings
         [nameof(AppSettings.NavItemOrder)] = "The order of the pages inside each sidebar section (page keys; empty = the default order)",
         [nameof(AppSettings.ReuseOpenTabs)] = "Switch to an already-open tab of the same host instead of opening another",
         [nameof(AppSettings.CloudSyncHosts)] = "Saved hosts follow their cloud servers (new IP address, rebuilt server of the same name; removed servers are offered for removal)",
+        [nameof(AppSettings.FileSyncScheduled)] = "Folder sync jobs may run on their schedule or in real time while the app is open (off: only when someone runs them)",
+        [nameof(AppSettings.FileSyncDeletion)] = "Where new folder sync jobs send deleted and overwritten files: RecycleBin (versions on a server), Versioning or Permanent",
+        [nameof(AppSettings.FileSyncVersionsKeepDays)] = "New folder sync jobs keep versions this many days (0 = forever)",
+        [nameof(AppSettings.FileSyncMaxDeletePercent)] = "New folder sync jobs: a run without a preview stops when it would delete more than this percentage of a side's files",
+        [nameof(AppSettings.FileSyncAllowPermanentDelete)] = "Folder sync may delete permanently on servers (admin-protected; otherwise deleted files are kept as versions)",
         [nameof(AppSettings.UpdateSource)] = "Where updates come from (github = the GitHub releases, url = the update address)",
         [nameof(AppSettings.UpdateCheckInterval)] = "How often the automatic update check runs (weekly or daily)",
         [nameof(AppSettings.AutoDownloadUpdates)] = "Download and verify a new version in the background (installing always asks)",

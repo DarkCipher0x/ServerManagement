@@ -244,6 +244,10 @@ public static partial class SelfTest
         try { await VncTests.RunAsync(Ok, Fail); }
         catch (Exception ex) { Fail("VNC tests", ex); }
 
+        // 0.6.26 (ADR-102): FreeFileSync-style folder sync (scratch folders on this PC).
+        try { await FolderSyncTests.RunAsync(Path.GetDirectoryName(reportPath)!, Ok, Fail); }
+        catch (Exception ex) { Fail("folder sync tests", ex); }
+
         // 0.3.0: Synology DSM provider (fake DSM Web API).
         try { await SynologyTests.RunAsync(Ok, Fail); }
         catch (Exception ex) { Fail("Synology tests", ex); }

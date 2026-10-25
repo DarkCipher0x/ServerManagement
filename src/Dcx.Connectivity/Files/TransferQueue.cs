@@ -28,6 +28,10 @@ public sealed class TransferJob : INotifyPropertyChanged
     public IReadOnlyList<(FsItem Item, string Target)>? Plan { get; init; }
     /// <summary>Deleted on the TARGET after every copy succeeded (sync "mirror", opt-in and previewed).</summary>
     public IReadOnlyList<FsItem>? DeleteOnTarget { get; init; }
+    /// <summary>Folder sync (0.6.26, ADR-102): where overwritten and deleted target files go (Recycle Bin, versions folder,
+    /// or permanent when allowed). Null = overwrite in place and delete as <see cref="IFileSystem.DeleteAsync"/> does.</summary>
+    public SyncRetire? Retire { get; init; }
+    public int Versioned { get; set; }
     public bool Verify { get; init; } = AppSettings.Current.TransferVerify;
     public bool KeepTimes { get; init; } = AppSettings.Current.TransferKeepTimes;
     public string? Label { get; init; }
@@ -67,7 +71,7 @@ public sealed class TransferJob : INotifyPropertyChanged
     private void Raise(string p) => Ui.Thread.Post(() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p)));
 
     public string Summary => Error != null ? $"✕ {Title}: {Error}" :
-        $"✓ {Title}: {Files} file(s), {Fmt.Bytes(Bytes)}{(Skipped > 0 ? $", {Skipped} skipped" : "")}{(Verified > 0 ? $", {Verified} verified (SHA-256)" : "")}{(Resumed > 0 ? $", {Resumed} resumed" : "")}{(Retries > 0 ? $", {Retries} retr{(Retries == 1 ? "y" : "ies")}" : "")}{(Deleted > 0 ? $", {Deleted} deleted on the target" : "")} → {To.Title}:{DestDir}";
+        $"✓ {Title}: {Files} file(s), {Fmt.Bytes(Bytes)}{(Skipped > 0 ? $", {Skipped} skipped" : "")}{(Verified > 0 ? $", {Verified} verified (SHA-256)" : "")}{(Resumed > 0 ? $", {Resumed} resumed" : "")}{(Retries > 0 ? $", {Retries} retr{(Retries == 1 ? "y" : "ies")}" : "")}{(Deleted > 0 ? $", {Deleted} deleted on the target" : "")}{(Versioned > 0 ? $", {Versioned} kept as versions" : "")} → {To.Title}:{DestDir}";
 }
 
 /// <summary>
@@ -92,8 +96,12 @@ public static class TransferQueue
 
     public static TransferJob Enqueue(TransferJob job)
     {
-        Jobs.Insert(0, job);
-        while (Jobs.Count > 200 && Jobs.LastOrDefault(j => j.Finished) is { } old) Jobs.Remove(old);   // bounded list
+        // The list is bound to the Transfers view: changed on the UI thread, also when a scheduled sync queues (ADR-102).
+        Ui.Thread.Invoke(() =>
+        {
+            Jobs.Insert(0, job);
+            while (Jobs.Count > 200 && Jobs.LastOrDefault(j => j.Finished) is { } old) Jobs.Remove(old);   // bounded list
+        });
         _ = Task.Run(() => RunAsync(job));
         RaiseJobsChanged();   // unfinished jobs are journaled for crash recovery (ADR-022)
         return job;
@@ -104,11 +112,11 @@ public static class TransferQueue
     public static TransferJob Retry(TransferJob old) => Enqueue(new TransferJob
     {
         From = old.From, To = old.To, Items = old.Items, DestDir = old.DestDir, Move = old.Move, OnConflict = old.OnConflict,
-        Actor = old.Actor, Plan = old.Plan, DeleteOnTarget = old.DeleteOnTarget, Verify = old.Verify, KeepTimes = old.KeepTimes,
+        Actor = old.Actor, Plan = old.Plan, DeleteOnTarget = old.DeleteOnTarget, Retire = old.Retire, Verify = old.Verify, KeepTimes = old.KeepTimes,
         Label = old.Label, RetryOf = old,
     });
 
-    public static void ClearFinished() { foreach (var j in Jobs.Where(j => j.Finished).ToList()) Jobs.Remove(j); }
+    public static void ClearFinished() => Ui.Thread.Invoke(() => { foreach (var j in Jobs.Where(j => j.Finished).ToList()) Jobs.Remove(j); });
 
     /// <summary>Both ends of a running job; reopened after a connection failure.</summary>
     private sealed class Ends : IDisposable
@@ -174,8 +182,15 @@ public static class TransferQueue
                     if (job.DeleteOnTarget is { Count: > 0 } del)
                     {
                         job.Status = "deleting extras";
-                        foreach (var d in del) { ct.ThrowIfCancellationRequested(); await ends.Dst.DeleteAsync(d.FullPath, d.IsDir, ct); job.Deleted++; }
-                        AuditLog.Write(job.Actor, job.To.Title, "sync deleted extra items on the target", $"{del.Count}: {string.Join(", ", del.Take(10).Select(d => d.FullPath))}");
+                        string where = "";
+                        foreach (var d in del)
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            if (job.Retire is { } r) where = await SyncVersioning.RetireAsync(ends.Dst, r, d.FullPath, d.IsDir, ct);
+                            else await ends.Dst.DeleteAsync(d.FullPath, d.IsDir, ct);
+                            job.Deleted++;
+                        }
+                        AuditLog.Write(job.Actor, job.To.Title, "sync deleted extra items on the target" + (where.Length > 0 ? $" ({where})" : ""), $"{del.Count}: {string.Join(", ", del.Take(10).Select(d => d.FullPath))}");
                     }
                     // A move deletes the source only after EVERY file arrived.
                     if (job.Move)
@@ -301,6 +316,11 @@ public static class TransferQueue
                 throw new IOException($"{item.Name}: SHA-256 differs after copying (source changed during the copy?) — the copy was discarded");
             }
             job.Verified++;
+        }
+        // Folder sync: the file being overwritten goes to the Recycle Bin / versions first (only once the new copy is complete).
+        if (job.Retire is { } retire && await dst.StatAsync(target, ct) is { IsDir: false })
+        {
+            if (await SyncVersioning.RetireAsync(dst, retire, target, false, ct) == "versions") job.Versioned++;
         }
         await dst.ReplaceAsync(part, target, ct);
         if (job.KeepTimes && item.Modified != default)

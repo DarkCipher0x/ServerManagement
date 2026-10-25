@@ -437,6 +437,18 @@ public sealed class AppSettings
     /// <summary>Attempts after the first for a failing file (0–3), with back-off and fresh connections.</summary>
     public int TransferRetries { get; set; } = 3;
 
+    // Folder sync (0.6.26, ADR-102; File Commander → Sync)
+    /// <summary>Sync jobs may run on their schedule or in real time while the app is open (off = only by hand).</summary>
+    public bool FileSyncScheduled { get; set; } = true;
+    /// <summary>Where new jobs send deleted and overwritten files: RecycleBin (this PC; versions on a server), Versioning or Permanent.</summary>
+    public string FileSyncDeletion { get; set; } = "RecycleBin";
+    /// <summary>New jobs keep versions this many days (0 = forever).</summary>
+    public int FileSyncVersionsKeepDays { get; set; } = 30;
+    /// <summary>New jobs: a run without a preview stops when it would delete more than this share of a side's files.</summary>
+    public int FileSyncMaxDeletePercent { get; set; } = 50;
+    /// <summary>Admin-protected: sync may delete permanently on servers (otherwise "Permanent" keeps versions).</summary>
+    public bool FileSyncAllowPermanentDelete { get; set; }
+
     // Offline / air-gapped mode (Services/OfflineMode.cs, ADR-016)
     /// <summary>Block every destination outside this PC and your private network, except the approved ones.</summary>
     public bool OfflineMode { get; set; }

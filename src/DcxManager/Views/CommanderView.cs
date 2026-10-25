@@ -77,6 +77,9 @@ public sealed partial class CommanderView : UserControl, IDisposable
         K("F7", "New folder", () => _active.MkdirAsync(), "Create a folder");
         K("F8", "Delete", () => _active.DeleteAsync(), "Delete (local: Recycle Bin; remote: permanent, asks first)", "SmallButton");
         K("F9", "Menu", () => { OpenMenuBar(); return Task.CompletedTask; }, "The menu bar: Left, File, Command, Options, Right (Midnight Commander style)");
+        var sync = Menus.MoreButton(SyncMenu, "⇄ Sync ▾", "SmallButton");
+        sync.ToolTip = "Sync the two panes' folders: Update, Mirror or Two-way in one step, the compare window, saved jobs";
+        keys.Children.Add(sync);
         keys.Children.Add(Menus.MoreButton(() => new object?[]
         {
             Menus.Item("↺ Reconnect the last places", ReconnectLast, enabled: AppSettings.Current.CommanderLeft.Length + AppSettings.Current.CommanderRight.Length > 0,
@@ -87,7 +90,8 @@ public sealed partial class CommanderView : UserControl, IDisposable
             Menus.Sep(),
             Menus.Item(AppSettings.Current.CommanderShowHidden ? "Hide hidden files" : "Show hidden files", ToggleHidden, "Ctrl+H"),
             Menus.Sep(),
-            Menus.Item("⇄ Compare / sync folders…", CompareFolders, tip: "Compare the two panes' folders and copy (or mirror) the differences after a preview"),
+            Menus.Item("⇄ Compare / sync folders…", CompareFolders, tip: "Compare the two panes' folders (FreeFileSync-style: Two-way, Mirror, Update or Custom, filters, versioning) and sync after a preview"),
+            Menus.Item("⇄ Sync jobs…", OpenSyncJobs, tip: "Saved sync jobs: run now, schedules and real-time sync"),
             Menus.Item("Transfer history…", () => Dialogs.ShowText("Transfer history (last 300)", TransferHistory.Text())),
             Menus.Sub("Transfer options",
                 Menus.Item((AppSettings.Current.TransferVerify ? "✓ " : "   ") + "Verify every file with SHA-256", () => { AppSettings.Current.TransferVerify = !AppSettings.Current.TransferVerify; SaveSettings(); }),
@@ -195,8 +199,11 @@ public sealed partial class CommanderView : UserControl, IDisposable
     {
         if (_left.Path.Length == 0 || _right.Path.Length == 0) { Dialogs.Info("Compare", "Open a folder in both panes first."); return; }
         if (_left.Ref.Equals(_right.Ref) && SamePath(_left.Path, _right.Path)) { Dialogs.Info("Compare", "Both panes show the same folder."); return; }
-        new SyncWindow(_left.Ref, _left.Path, _right.Ref, _right.Path).Show();
+        SyncWindow.FromPanes(_left.Ref, _left.Path, _right.Ref, _right.Path).Show();
     }
+
+    /// <summary>The saved sync jobs (0.6.26), offering a new job for the two panes' folders.</summary>
+    private void OpenSyncJobs() => SyncJobsWindow.Show(((_left.Ref, _left.Path), (_right.Ref, _right.Path)));
 
     private void ToggleHidden()
     {
