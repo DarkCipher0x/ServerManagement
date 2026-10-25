@@ -300,7 +300,23 @@ public sealed class PaneHost : Border
         p.SelectedItem = tab;
         ShowOwner(p);   // 0.6.7: a session inside the Hosts tab: that tab comes forward too
         SetActive(p);
-        if (Window.GetWindow(p) is FloatWindow fw) { if (fw.WindowState == WindowState.Minimized) fw.WindowState = WindowState.Normal; fw.Activate(); }
+        if (Window.GetWindow(p) is FloatWindow fw)
+        {
+            if (fw.WindowState == WindowState.Minimized) fw.WindowState = WindowState.Normal;
+            if (!fw.IsVisible && !TestMode.Running) fw.Show();
+            BringOnScreen(fw);
+            fw.Activate();
+        }
+    }
+
+    /// <summary>0.6.25: a pop-out window that ended up off every monitor comes back beside the main window.</summary>
+    private void BringOnScreen(FloatWindow fw)
+    {
+        if (TestMode.Running || fw.WindowState != WindowState.Normal) return;
+        var vs = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop, SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+        if (vs.IntersectsWith(new Rect(fw.Left, fw.Top, Math.Min(Math.Max(fw.ActualWidth, 200), 200), 60))) return;
+        var main = Window.GetWindow(this);
+        fw.Left = (main?.Left ?? vs.Left) + 60; fw.Top = (main?.Top ?? vs.Top) + 60;
     }
 
     /// <summary>Removes a tab (the caller disposes its content). Empty panes collapse; empty pop-out windows close.</summary>
@@ -711,7 +727,9 @@ public sealed class PaneHost : Border
         tab.PreviewMouseDown += (_, e) =>
         {
             if (e.ChangedButton == MouseButton.Middle && (tab.Tag as string) != "fixed") { e.Handled = true; CloseRequested?.Invoke(tab); }
-            else if (e.ChangedButton == MouseButton.Left) down = e.GetPosition(null);
+            // 0.6.25: only the header starts a drag. A press inside the tab's page (a window dragged in a VNC or RDP
+            // session, a terminal selection) tunnels through the TabItem too, and used to tear the whole tab out.
+            else if (e.ChangedButton == MouseButton.Left) down = InPage(tab, e.OriginalSource) ? null : e.GetPosition(null);
         };
         tab.PreviewMouseUp += (_, _) => down = null;
         tab.PreviewMouseMove += (_, e) =>
@@ -731,6 +749,15 @@ public sealed class PaneHost : Border
             }
             catch (Exception ex) { App.Log("Tab drag", ex); }
         };
+    }
+
+    /// <summary>True when <paramref name="source"/> sits inside the tab's content rather than its header.</summary>
+    internal static bool InPage(TabItem tab, object? source)
+    {
+        if (tab.Content is not DependencyObject page) return false;
+        for (var d = source as DependencyObject; d != null && d != tab; d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+            if (d == page) return true;
+        return false;
     }
 
     /// <summary>The mouse position (screen DIPs of the main window) when it is outside every window of the app; else null.</summary>

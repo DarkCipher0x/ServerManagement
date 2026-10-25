@@ -41,6 +41,7 @@ public sealed class VncView : UserControl, IHostView, IDisposable
     public bool IsConnected => _session != null && !_disposed;
     internal VncSession? SessionForTest => _session;
     internal string StatusText => _status.Text;
+    internal FrameworkElement ImageForTest => _image;
     /// <summary>Self-test: the drawn pixel (0x00RRGGBB), or null before the first frame.</summary>
     internal uint? PixelForTest(int x, int y)
     {
@@ -111,8 +112,11 @@ public sealed class VncView : UserControl, IHostView, IDisposable
         _surface.PreviewTextInput += OnText;
         _surface.LostKeyboardFocus += (_, _) => ReleaseKeys();
         _image.MouseMove += (_, e) => SendPointer(e);
-        _image.MouseDown += (_, e) => { _surface.Focus(); _buttons |= Bit(e.ChangedButton); SendPointer(e); e.Handled = true; };
-        _image.MouseUp += (_, e) => { _buttons &= ~Bit(e.ChangedButton); SendPointer(e); e.Handled = true; };
+        // 0.6.25: the picture keeps the mouse while a button is down, so a window dragged past the edge of the view still
+        // follows and the release still reaches the server (no button left stuck down on the remote desktop).
+        _image.MouseDown += (_, e) => { _surface.Focus(); _buttons |= Bit(e.ChangedButton); _image.CaptureMouse(); SendPointer(e); e.Handled = true; };
+        _image.MouseUp += (_, e) => { _buttons &= ~Bit(e.ChangedButton); SendPointer(e); if (_buttons == 0) _image.ReleaseMouseCapture(); e.Handled = true; };
+        _image.LostMouseCapture += (_, e) => { if (_buttons != 0) { _buttons = 0; SendPointer(e); } };
         _image.MouseWheel += (_, e) =>
         {
             if (Input() is not { } c) return;
@@ -257,7 +261,8 @@ public sealed class VncView : UserControl, IHostView, IDisposable
     private (int X, int Y) ToFramebuffer(Point p)
     {
         if (_session?.Client is not { } c || _image.ActualWidth <= 0 || _image.ActualHeight <= 0) return (0, 0);
-        return ((int)(p.X * c.Width / _image.ActualWidth), (int)(p.Y * c.Height / _image.ActualHeight));
+        // Clamped: with the mouse captured the pointer can be outside the picture.
+        return (Math.Clamp((int)(p.X * c.Width / _image.ActualWidth), 0, Math.Max(0, c.Width - 1)), Math.Clamp((int)(p.Y * c.Height / _image.ActualHeight), 0, Math.Max(0, c.Height - 1)));
     }
 
     private void SendPointer(MouseEventArgs e)

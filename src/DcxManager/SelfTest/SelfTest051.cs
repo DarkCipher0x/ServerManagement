@@ -977,6 +977,9 @@ public static class Release051Tests
                 if (!view.IsConnected) throw new Exception("not connected: " + view.StatusText);
                 if (view.PixelForTest(1, 1) is not 0x0000FF) throw new Exception($"pixel {view.PixelForTest(1, 1):X6} · {view.StatusText}");
                 if (!view.StatusText.Contains("RFB 3.8") || !view.StatusText.Contains("NOT encrypted")) throw new Exception("status: " + view.StatusText);
+                // 0.6.25: dragging inside the remote desktop must never tear the tab out; only the header drags it.
+                if (!PaneHost.InPage(tab, view.ImageForTest)) throw new Exception("a press on the VNC picture would start a tab drag");
+                if (PaneHost.InPage(tab, tab)) throw new Exception("the tab header no longer drags");
             }
             finally { main.CloseTab(tab); await Settle(200); }
             if (view.IsConnected) throw new Exception("still connected after the tab closed");
