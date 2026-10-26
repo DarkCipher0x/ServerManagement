@@ -238,7 +238,7 @@ public sealed partial class TerminalView
         _reconnectCts?.Cancel();     // a manual connect cancels any pending auto-reconnect
         Teardown();
         bool remote = _target.Host != null;
-        WriteLocal($"\x1b[36m⟫ {(remote ? "connecting to" : "starting")} {_target.Endpoint}…\x1b[0m\r\n");
+        WriteLocal(ResetInputModes + $"\x1b[36m⟫ {(remote ? "connecting to" : "starting")} {_target.Endpoint}…\x1b[0m\r\n");
         SetStatus($"{_target.Endpoint} · {(remote ? "connecting" : "starting")}…");
         ITerminalTransport? transport = null;
         try

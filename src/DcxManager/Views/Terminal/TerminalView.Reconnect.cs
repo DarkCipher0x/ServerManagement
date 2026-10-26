@@ -18,12 +18,20 @@ public sealed partial class TerminalView
 {
     // ---- unexpected drop → auto-reconnect ------------------------------------------------------------------------
 
+    /// <summary>Input modes a dead session can leave on (tmux/htop/vim mouse tracking, focus events, app keys, alt screen):
+    /// left on, the next shell gets mouse clicks typed at its prompt as "0;137;11M…". Leaves the alt screen without
+    /// restoring the cursor (1047, not 1049), soft-resets, then turns off every mouse protocol/encoding, focus reports,
+    /// bracketed paste and app keypad. Output stays.</summary>
+    internal const string ResetInputModes =
+        "\x1b[?1047l\x1b[!p\x1b[?9;1000;1001;1002;1003;1004;1005;1006;1015;1016l\x1b[?2004l\x1b[?1l\x1b[?25h\x1b>";
+
     private void OnDrop(string reason)
     {
         if (_disposed) return;
         bool wasLive = _transport != null;
         Teardown();
         if (!wasLive) return;
+        WriteLocal(ResetInputModes);
         if (_target.Has(SessionCaps.AutoReconnect) && AppSettings.Current.TerminalAutoReconnect && !_userClosed)
         {
             WriteLocal($"\r\n\x1b[33m⟫ {reason}.\x1b[0m\r\n");
