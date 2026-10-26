@@ -43,7 +43,10 @@ public static partial class AiClient
                     break;
             }
         }
-        var body = new JsonObject { ["model"] = Model, ["max_tokens"] = 4096, ["messages"] = outMsgs, ["temperature"] = 0.2 };
+        var body = new JsonObject { ["model"] = Model, ["max_tokens"] = 4096, ["messages"] = outMsgs };
+        // 0.6.29: the Claude API refuses sampling settings on current models ("`temperature` is deprecated for this model"),
+        // so only a local Anthropic-compatible server (Ollama) still gets one; SendAsync drops it if that refuses it too.
+        if (IsLocal(url)) body["temperature"] = 0.2;
         if (system.Length > 0) body["system"] = system.ToString();
         var toolList = new JsonArray();
         if (tools != null)

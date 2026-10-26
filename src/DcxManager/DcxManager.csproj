@@ -25,7 +25,7 @@
     <!-- Version: numeric (assembly, Windows Installer, update checks); it must keep increasing.
          ReleaseLabel: what the release is called (file names, dist folder, shown in the app), e.g. 0.2.0-preview.1 while
          the numeric version is 0.1.21 (a preview has to sort below the final 0.2.0, which upgrades it). Empty = Version. -->
-    <Version>0.6.28</Version>
+    <Version>0.6.29</Version>
     <ReleaseLabel></ReleaseLabel>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
@@ -39,7 +39,10 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- 0.6.29 performance pass: the bundle is left uncompressed, so a start no longer decompresses 80 MB first.
+         Measured windowless start 452 → 288 ms; installed 81 → 195 MB, download (zipped) 75 → 78 MB. ReadyToRun was
+         measured too (242 ms) but grows the download to ~114 MB, so it stays off. -->
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
     <DebugType>none</DebugType>
     <!-- Keep local build paths (user name) out of compiled code -->
     <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>

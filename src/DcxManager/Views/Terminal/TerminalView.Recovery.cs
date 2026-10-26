@@ -154,11 +154,15 @@ public sealed partial class TerminalView
                 case "ready":
                     _pageReady = true;
                     Post(TerminalProfiles.PageMessage(_profile));
+                    SendHighlighting(force: true);   // 0.6.29 (ADR-104)
                     if (_replay) { ReplayHistory(); break; }
                     if (!_connectOnOpen && !_sized) SetStatus($"○ {_target.Endpoint} · press Enter to connect");
                     break;
                 case "findbar":
                     ShowFind(true);
+                    break;
+                case "palette":
+                    CommandPalette.Show(MainWindow.Instance);
                     break;
                 case "found":
                 {
@@ -195,6 +199,15 @@ public sealed partial class TerminalView
                     break;
                 case "link":
                     OpenLink(m.GetProperty("d").GetString());
+                    break;
+                case "bell":
+                    Alert("bell", $"Bell · {_target.Title}", $"{_target.Endpoint} rang the terminal bell.");
+                    break;
+                case "hlalert":
+                    OnHighlightAlert(m);
+                    break;
+                case "hlink":
+                    OnWordClicked(m.GetProperty("d").GetString());
                     break;
                 case "menu":
                 {
@@ -253,7 +266,7 @@ public sealed partial class TerminalView
             _transport = transport;
             Epoch++;
             _attempt = 0;
-            _flush.Start();
+            ArmFlush();   // whatever arrived during start-up; from here output arms the timer itself
             // A program that ended during start-up raised Closed before it was the current transport.
             if (!transport.IsOpen) { OnDrop("the session ended during start-up"); return; }
             SetStatus($"● {_target.Endpoint}" + (transport.Detail.Length > 0 ? " · " + transport.Detail : ""));
@@ -267,6 +280,8 @@ public sealed partial class TerminalView
                 await Task.Delay(400);
                 if (IsConnected) _transport?.Write(_initialCommand + "\r");
             }
+            MaybeAutoTmux();   // 0.6.29: always-on tmux
+            if (TmuxSession != null || _restoreCwd != null) _ = AfterConnectAsync();   // 0.6.29: saved sessions
         }
         catch (Exception ex)
         {

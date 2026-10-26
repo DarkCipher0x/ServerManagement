@@ -66,6 +66,21 @@ public sealed partial class SettingsView
                 _s.RdpEmbedded, v => _s.RdpEmbedded = v));
     }
 
+    /// <summary>Saved sessions (0.6.29): what exiting does with open sessions, and whether saved ones reconnect.</summary>
+    private Border SavedSessionsCard()
+    {
+        string[] modes = { "ask", "save", "never" };
+        var onExit = Bound(new ComboBox
+        {
+            Width = 330, SelectedIndex = Math.Max(0, Array.IndexOf(modes, _s.SessionsOnExit)),
+            ItemsSource = new[] { "Ask: Save and exit, or Exit without saving", "Always save them (no question)", "Never save them" },
+        }, nameof(AppSettings.SessionsOnExit));
+        onExit.SelectionChanged += (_, _) => { _s.SessionsOnExit = modes[Math.Max(0, onExit.SelectedIndex)]; Save(); };
+        return Card("Saved sessions", "Your open tabs can come back at the next start: terminals (in their folder, or re-attached to their tmux session), Files, File commander, Remote Desktop, VNC, Manage and portal tabs, in the same panes, windows and groups. Quick-connect sessions are kept with their settings, never a password. Named workspaces: ▦ Workspaces in the title bar. Everything is encrypted in the store.",
+            Labeled("WHEN YOU EXIT WITH TABS OPEN", onExit),
+            Check("Reconnect saved sessions as they reopen (PRODUCTION hosts always reopen disconnected; locked hosts never reopen by themselves)", _s.RestoreReconnect, v => _s.RestoreReconnect = v));
+    }
+
     /// <summary>Screenshots and crash recovery: where files land and what reopens after a crash (moved out of the terminal
     /// card in 0.1.11; they apply to RDP and every tab, not only terminals).</summary>
     private Border ScreenshotsCard()

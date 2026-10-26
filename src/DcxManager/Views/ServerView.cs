@@ -19,6 +19,7 @@ public sealed class ServerView : UserControl, IDisposable, IHostView
     private readonly WrapPanel _disks = new();
     private readonly TextBlock _status = new TextBlock() { VerticalAlignment = VerticalAlignment.Center }.Fs(FontStep.Small);
     private readonly DispatcherTimer _timer;
+    private bool _missedTick;
     private ServerFacts? _last;
     private bool _busy;
     private readonly ReportView _insights;
@@ -53,7 +54,18 @@ public sealed class ServerView : UserControl, IDisposable, IHostView
         Content = tabs;
         _tabs = tabs;
 
-        _timer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, async (_, _) => { Task t; using (ExternalCredentials.Background()) t = RefreshAsync(); await t; }, Dispatcher) { IsEnabled = false };
+        _timer = new DispatcherTimer(TimeSpan.FromSeconds(5), DispatcherPriority.Background, async (_, _) =>
+        {
+            // 0.6.29 performance pass: a server tab behind other tabs doesn't poll its host every 5 s; it refreshes on return.
+            if (!IsVisible && DcxManager.MainWindow.Instance is { IsVisible: true }) { _missedTick = true; return; }
+            Task t; using (ExternalCredentials.Background()) t = RefreshAsync(); await t;
+        }, Dispatcher) { IsEnabled = false };
+        IsVisibleChanged += async (_, _) =>
+        {
+            if (!IsVisible || !_missedTick || !_timer.IsEnabled) return;
+            _missedTick = false;
+            Task t; using (ExternalCredentials.Background()) t = RefreshAsync(); await t;
+        };
         Loaded += async (_, _) => { if (_last == null) await RefreshAsync(); };
     }
 

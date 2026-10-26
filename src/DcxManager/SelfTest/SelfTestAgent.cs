@@ -88,6 +88,34 @@ public static class AgentTests
             }
             catch (Exception ex) { fail("AI streaming on every engine", ex); }
 
+            // 1b. 0.6.29 (DarkCipher0x's screenshot: "Anthropic API: `temperature` is deprecated for this model"): a server
+            // that refuses a sampling setting is asked again without it, streamed and whole, on every engine.
+            try
+            {
+                var done = new List<string>();
+                fake.RefuseTemperature = true;
+                foreach (var e in new[] { "ollama-gpu", "openai", "anthropic", "npu" })
+                    foreach (var streamed in new[] { true, false })
+                    {
+                        Engine(e);
+                        s.AiStream = streamed;
+                        int before = fake.Chats.Count;
+                        var msg = await AiClient.ChatAsync(Q("temperature test"), null, null, CancellationToken.None, streamed ? _ => { } : null);
+                        var content = msg["content"]?.GetValue<string>() ?? "";
+                        if (content.Length == 0) throw new Exception($"{e} ({(streamed ? "streamed" : "whole")}): no answer");
+                        if (fake.LastChat?["temperature"] != null)   // Ollama's own API keeps it in "options", which Ollama accepts
+                            throw new Exception($"{e}: the answered request still had a temperature");
+                        done.Add($"{e}{(streamed ? "" : " whole")} {fake.Chats.Count - before} request(s)");
+                    }
+                if (AiClient.RefusedSampling("Anthropic API: `temperature` is deprecated for this model.", new JsonObject { ["temperature"] = 0.2, ["top_p"] = 1 }) is not ["temperature"])
+                    throw new Exception("RefusedSampling picked the wrong setting");
+                if (AiClient.RefusedSampling("Anthropic API: max_tokens too large", new JsonObject { ["temperature"] = 0.2 }).Length != 0)
+                    throw new Exception("RefusedSampling retried an unrelated error");
+                ok("AI sampling settings: a server refusing `temperature` (as the Claude API does for current models) is asked again without it, streamed and whole, on every engine; unrelated errors aren't retried — " + string.Join(", ", done));
+            }
+            catch (Exception ex) { fail("AI sampling settings refused", ex); }
+            finally { fake.RefuseTemperature = false; s.AiStream = true; }
+
             // 2. Before / after: whole answers vs streaming; connections reused.
             try
             {
@@ -695,6 +723,7 @@ internal sealed class FakeAi : IDisposable
     public string[] Capabilities = { "completion", "tools" };
     public Reply? Always;
     public (int Status, string Message)? NextError;
+    public bool RefuseTemperature;
     private int _connections, _generates;
     public int Connections => Volatile.Read(ref _connections);
     public int Generates => Volatile.Read(ref _generates);
@@ -807,6 +836,8 @@ internal sealed class FakeAi : IDisposable
         }
         lock (_chats) _chats.Add((JsonObject)body.DeepClone());
         if (NextError is { } err) { NextError = null; await Whole(s, err.Status, new JsonObject { ["error"] = new JsonObject { ["message"] = err.Message } }.ToJsonString()); return; }
+        // As the Claude API answers for current models (DarkCipher0x's screenshot, 2026-10-26).
+        if (RefuseTemperature && body.ContainsKey("temperature")) { await Whole(s, 400, new JsonObject { ["type"] = "error", ["error"] = new JsonObject { ["type"] = "invalid_request_error", ["message"] = "`temperature` is deprecated for this model." } }.ToJsonString()); return; }
         var r = Next();
         bool stream = body["stream"]?.GetValue<bool>() == true;
         await Task.Delay(PrefillMs);

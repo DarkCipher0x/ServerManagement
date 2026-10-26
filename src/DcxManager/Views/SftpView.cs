@@ -36,6 +36,8 @@ public sealed class SftpView : UserControl, IDisposable, IHostView
     public HostEntry Host => _host;
     private SshSession<SftpClient>? _sftp;
     public bool IsConnected => _sftp is { IsConnected: true };
+    /// <summary>The folder shown (saved sessions, 0.6.29).</summary>
+    public string CurrentPath => _cwd;
     private readonly TextBox _path = new() { Padding = new Thickness(6, 4, 6, 4) };
     private readonly ListView _list = new() { SelectionMode = SelectionMode.Extended, AllowDrop = true };
     private readonly TextBlock _status = new TextBlock() { VerticalAlignment = VerticalAlignment.Center }.Fs(FontStep.Small);

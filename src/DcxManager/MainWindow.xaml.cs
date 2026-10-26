@@ -217,6 +217,7 @@ public partial class MainWindow : Window
             case Key.Right when ctrlAlt: if (Panes.ActiveTab is { } r) Panes.Split(r, Orientation.Horizontal); break;
             case Key.Down when ctrlAlt: if (Panes.ActiveTab is { } dn) Panes.Split(dn, Orientation.Vertical); break;
             case Key.L when ctrlShift: LockNow(); break;
+            case Key.P when ctrlShift: CommandPalette.Show(this); break;   // 0.6.29: the command palette (ADR-104)
             case Key.S when ctrlShift: _ = ScreenshotActiveAsync(); break;
             case Key.T when ctrlAlt: Panes.Tile(); break;
             case Key.U when ctrlAlt: Panes.MergeAll(); break;
@@ -333,11 +334,9 @@ public partial class MainWindow : Window
     {
         var all = Panes.AllTabs.ToList();
         int sessions = all.Count(t => t.Content is TerminalView { IsConnected: true });
-        if (sessions > 0 && !ExitWithoutPrompt && !Dialogs.Confirm("Exit", $"{sessions} terminal session(s) are still connected. Close them and exit?", "Exit"))
-        {
-            e.Cancel = true;
-            return;
-        }
+        // 0.6.29: the open sessions can be saved and reopen at the next start (Settings → Terminal → Saved sessions).
+        var saveable = TestMode.Running ? new List<Workspace.Entry>() : WorkspaceEntries();
+        if (!ExitDecision(saveable, sessions)) { e.Cancel = true; return; }
         // 0.6.4: where the extra windows are, so they come back on their monitors next time.
         if (!TestMode.Running)
         {

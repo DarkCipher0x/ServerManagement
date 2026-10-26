@@ -160,7 +160,7 @@ public partial class MainWindow
     }
 
     /// <summary>Ctrl+Shift+S: the active tab, delivered as Settings → Terminal says (save, clipboard or both).</summary>
-    private Task ScreenshotActiveAsync() => Panes.ActiveTab is { } tab ? ScreenshotTabAsync(tab) : Task.CompletedTask;
+    internal Task ScreenshotActiveAsync() => Panes.ActiveTab is { } tab ? ScreenshotTabAsync(tab) : Task.CompletedTask;
 
     /// <summary>One tab, default delivery (used by the 📷 button in each pane's tab strip).</summary>
     public async Task ScreenshotTabAsync(TabItem tab)

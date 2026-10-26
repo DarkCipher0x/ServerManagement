@@ -20,6 +20,11 @@ public static class TabGroups
     public static void SetBrush(DependencyObject o, Brush? v) => o.SetValue(BrushProperty, v);
     public static bool GetShown(DependencyObject o) => (bool)o.GetValue(ShownProperty);
     public static void SetShown(DependencyObject o, bool v) => o.SetValue(ShownProperty, v);
+    /// <summary>0.6.29: the first tab of a run of the group's tabs in a strip; only it prints the name (the rest show the
+    /// colour line), so a group takes less room.</summary>
+    public static readonly DependencyProperty LeadProperty = DependencyProperty.RegisterAttached("Lead", typeof(bool), typeof(TabGroups), new PropertyMetadata(false));
+    public static bool GetLead(DependencyObject o) => (bool)o.GetValue(LeadProperty);
+    public static void SetLead(DependencyObject o, bool v) => o.SetValue(LeadProperty, v);
 
     /// <summary>Readable on dark and light backgrounds; a group keeps its colour while it exists.</summary>
     private static readonly string[] Palette = { "#2F81F7", "#A855F7", "#D97706", "#16A34A", "#DB2777", "#0891B2" };
@@ -57,5 +62,21 @@ public static class TabGroups
         Raise();
     }
 
-    private static void Raise() { try { Changed?.Invoke(); } catch (Exception ex) { Log.Write("tab groups changed", ex); } }
+    /// <summary>Marks the first tab of each run of one group's tabs in <paramref name="strip"/> (0.6.29).</summary>
+    public static void RefreshLeads(ItemsControl strip)
+    {
+        string prev = "";
+        foreach (var t in strip.Items.OfType<TabItem>())
+        {
+            var n = GetName(t);
+            SetLead(t, n.Length > 0 && !n.Equals(prev, StringComparison.OrdinalIgnoreCase));
+            prev = n;
+        }
+    }
+
+    private static void Raise()
+    {
+        foreach (var strip in AllTabs.Select(ItemsControl.ItemsControlFromItemContainer).OfType<ItemsControl>().Distinct().ToList()) RefreshLeads(strip);
+        try { Changed?.Invoke(); } catch (Exception ex) { Log.Write("tab groups changed", ex); }
+    }
 }

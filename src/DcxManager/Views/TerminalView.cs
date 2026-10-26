@@ -158,16 +158,36 @@ public sealed partial class TerminalView : UserControl, IDisposable, IActivatabl
         var root = new DockPanel();
         DockPanel.SetDock(bar, Dock.Top);
         root.Children.Add(bar);
+        DockPanel.SetDock(_snipBar, Dock.Top);   // 0.6.29: the snippet button bar (ADR-104)
+        root.Children.Add(_snipBar);
+        BuildButtonBar();
         BuildFindBar();
         DockPanel.SetDock(_findBar, Dock.Bottom);
         root.Children.Add(_findBar);
         root.Children.Add(border);
         Content = root;
 
-        _flush = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Background, (_, _) => Flush(), Dispatcher);
+        _flush = new DispatcherTimer(TimeSpan.FromMilliseconds(16), DispatcherPriority.Background, (_, _) => FlushTick(), Dispatcher) { IsEnabled = false };
         Loaded += OnLoaded;
+        IsVisibleChanged += (_, _) => SetMemoryTarget();
         ThemeManager.Changed += OnTheme;
+        AppSettings.Saved += OnTerminalSettings;
+        AppData.Changed += OnTerminalData;
     }
+
+    /// <summary>A terminal tab behind other tabs asks WebView2 to keep less memory (0.6.29 performance pass: twenty
+    /// hidden renderers each held their full caches); the screen and scrollback live in the page and stay as they are.</summary>
+    private void SetMemoryTarget()
+    {
+        try
+        {
+            if (!_disposed && _web.CoreWebView2 is { } core)
+                core.MemoryUsageTargetLevel = IsVisible ? CoreWebView2MemoryUsageTargetLevel.Normal : CoreWebView2MemoryUsageTargetLevel.Low;
+        }
+        catch { }   // an older runtime without it, or a control going away
+    }
+    /// <summary>Self-test: the memory target the page has now.</summary>
+    internal string MemoryTargetForTest => _web.CoreWebView2?.MemoryUsageTargetLevel.ToString() ?? "";
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -191,6 +211,7 @@ public sealed partial class TerminalView : UserControl, IDisposable, IActivatabl
             WebHost.MapTerminalHost(core);
             core.WebMessageReceived += OnMessage;
             core.ContextMenuRequested += OnContextMenu;
+            SetMemoryTarget();
             // Remote output is untrusted: the terminal page can never navigate away or open windows (OSC 8 links go
             // through OpenLink, which shows the full URL and asks first), and page script dialogs are suppressed.
             core.NewWindowRequested += (_, a) => a.Handled = true;

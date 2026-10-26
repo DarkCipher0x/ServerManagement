@@ -25,9 +25,27 @@ public static partial class AiClient
         return JsonNode.Parse(await resp.Content.ReadAsStringAsync(ct)) as JsonObject ?? new JsonObject();
     }
 
+    /// <summary>Sampling settings newer models refuse (DarkCipher0x's screenshot, 2026-10-26: "Anthropic API: `temperature` is
+    /// deprecated for this model"; OpenAI's reasoning models refuse it too).</summary>
+    private static readonly string[] SamplingKeys = { "temperature", "top_p", "top_k" };
+
     /// <summary>Sends and returns a successful response with its body unread (streaming reads it as it arrives);
-    /// errors are read and thrown as <see cref="AiHttpException"/> with the server's own message.</summary>
+    /// errors are read and thrown as <see cref="AiHttpException"/> with the server's own message. A 400 / 422 that names a
+    /// sampling setting the request carries is asked again once without it (0.6.29), whatever the engine or model.</summary>
     private static async Task<HttpResponseMessage> SendAsync(string url, JsonObject body, Dictionary<string, string>? headers, string who, CancellationToken ct)
+    {
+        try { return await SendOnceAsync(url, body, headers, who, ct).ConfigureAwait(false); }
+        catch (AiHttpException e) when (e.Status is 400 or 422 && RefusedSampling(e.Message, body) is { Length: > 0 } refused)
+        {
+            foreach (var k in refused) body.Remove(k);
+            return await SendOnceAsync(url, body, headers, who, ct).ConfigureAwait(false);
+        }
+    }
+
+    internal static string[] RefusedSampling(string error, JsonObject body) =>
+        SamplingKeys.Where(k => body.ContainsKey(k) && error.Contains(k, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+    private static async Task<HttpResponseMessage> SendOnceAsync(string url, JsonObject body, Dictionary<string, string>? headers, string who, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json") };
         if (headers != null) foreach (var (k, v) in headers) req.Headers.TryAddWithoutValidation(k, v);

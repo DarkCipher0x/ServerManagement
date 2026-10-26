@@ -31,6 +31,13 @@ public sealed class DocPane : TabControl
         };
     }
 
+    /// <summary>A tab added, removed or moved: the group names print once per run again (0.6.29).</summary>
+    protected override void OnItemsChanged(System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        base.OnItemsChanged(e);
+        TabGroups.RefreshLeads(this);
+    }
+
     /// <summary>Wires the tab-strip tools from the DocTabs template (they live in the template, so they're found here).</summary>
     public override void OnApplyTemplate()
     {

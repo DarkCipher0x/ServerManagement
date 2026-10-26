@@ -19,6 +19,8 @@ public sealed class AppData
     public List<string> PinnedQuick { get; set; } = new();
     /// <summary>Folder paths ("Production/EU/Web") — kept even when empty. A host's Group is its folder path.</summary>
     public List<string> Folders { get; set; } = new();
+    /// <summary>Folder defaults (0.6.29, ADR-105): user, credential, jump host, environment, profile, VPN, tmux per folder.</summary>
+    public List<FolderSettings> FolderDefaults { get; set; } = new();
     /// <summary>Portal bookmarks and host web UIs for the in-app browser (ADR-032).</summary>
     public List<Browser.PortalBookmark> Portals { get; set; } = new();
     /// <summary>Self-signed web certificates trusted per host:port in the in-app browser (TOFU, ADR-032).</summary>
@@ -47,13 +49,30 @@ public sealed class AppData
         get
         {
             var set = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var p in Folders.Concat(Hosts.Select(h => h.Group)))
+            // Many hosts share few folders: each distinct folder is split once (0.6.29 performance pass).
+            foreach (var p in Folders.Concat(Hosts.Select(h => h.Group)).Distinct(StringComparer.Ordinal))
             {
                 var parts = NormalizeFolder(p).Split('/', StringSplitOptions.RemoveEmptyEntries);
                 for (int i = 1; i <= parts.Length; i++) set.Add(string.Join("/", parts.Take(i)));
             }
             return set.ToList();
         }
+    }
+
+    /// <summary>How many of <paramref name="hosts"/> are in each folder, sub-folders included (key "" = all of them), in
+    /// one pass: each distinct group is normalised once and counted into every ancestor.</summary>
+    public static Dictionary<string, int> FolderCounts(IEnumerable<HostEntry> hosts)
+    {
+        var byGroup = new Dictionary<string, int>(StringComparer.Ordinal);
+        int all = 0;
+        foreach (var h in hosts) { byGroup[h.Group ?? ""] = byGroup.GetValueOrDefault(h.Group ?? "") + 1; all++; }
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) { [""] = all };
+        foreach (var (group, n) in byGroup)
+        {
+            for (var path = NormalizeFolder(group); path.Length > 0; path = path.LastIndexOf('/') is var s and >= 0 ? path[..s] : "")
+                counts[path] = counts.GetValueOrDefault(path) + n;
+        }
+        return counts;
     }
 
     /// <summary>Every credential folder (0.4.0), with the parents deeper paths imply, plus the host folders (one tree of
@@ -94,13 +113,29 @@ public sealed class AppData
     {
         // 0.3.0 §23: a viewer (read-only role from the directory sign-in) can look but never change what is stored.
         if (Profiles.ReadOnly) throw new InvalidOperationException("This profile is read-only (viewer role): nothing can be saved.");
-        lock (Current) SecureStore.Write(FileName, Current);
+        lock (Current) { Services.FolderDefaults.Apply(Current.Hosts); SecureStore.Write(FileName, Current); }   // 0.6.29: hosts that follow a folder pick up its defaults
         Changed?.Invoke();
     }
 
+    /// <summary>For small bookkeeping (a host's last-connected time): saved a moment later on the UI thread, a burst of them
+    /// as one save, instead of an encrypted write plus every open screen's reload inside the connect path (0.6.29
+    /// performance pass). Without the hook (tools, tests below the app) it saves at once.</summary>
+    public static void SaveSoon()
+    {
+        if (Profiles.ReadOnly) return;
+        if (SaveLater is { } later) later(() => { try { if (!Profiles.ReadOnly) Save(); } catch (Exception ex) { Log.Write("deferred store save", ex); } });
+        else Save();
+    }
+
+    /// <summary>Runs a deferred save on the UI thread after a short pause, coalesced (set by the app at start-up).</summary>
+    public static Action<Action>? SaveLater { get; set; }
+
     /// <summary>Local first; "lib_…" ids resolve to shared library items (ADR-033), which are never part of this file.</summary>
-    public HostEntry? FindHost(string? id) => id == null ? null : Hosts.FirstOrDefault(h => h.Id == id) ?? SharedHost?.Invoke(id);
-    public Credential? FindCredential(string? id) => id == null ? null : Credentials.FirstOrDefault(c => c.Id == id) ?? SharedCredential?.Invoke(id);
+    /// <remarks>0.6.29: by id index (<see cref="IdIndex{T}"/>), exact even when the lists change between saves.</remarks>
+    public HostEntry? FindHost(string? id) => id == null ? null : _hostIndex.Find(Hosts, id) ?? SharedHost?.Invoke(id);
+    public Credential? FindCredential(string? id) => id == null ? null : _credIndex.Find(Credentials, id) ?? SharedCredential?.Invoke(id);
+    private readonly IdIndex<HostEntry> _hostIndex = new(h => h.Id);
+    private readonly IdIndex<Credential> _credIndex = new(c => c.Id);
 
     /// <summary>How shared library ids resolve (ADR-033): set by the shared library at start-up (0.2.0 phase 6: the store
     /// below doesn't reference the library above it).</summary>

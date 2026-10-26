@@ -61,6 +61,89 @@
 
   term.onData(d => send({ t: 'in', d }));
   term.onBinary(d => send({ t: 'in', d }));
+  term.onBell(() => send({ t: 'bell' }));   // 0.6.29: an alert when the tab isn't being looked at
+
+  // Keyword highlighting (0.6.29, ADR-104): decorations over finished lines of the normal screen (full-screen programs
+  // are left alone); the output itself is never changed. Bounded: a few ms per batch, 2,000 characters and 30 marks a
+  // line, 4,000 marks in all (the oldest go first). The host checked every pattern for speed before sending it.
+  let hl = { on: false, links: false, rules: [] }, scanMark = null, scanTimer = 0;
+  const marks = [];
+  const MaxMarks = 4000, MaxLine = 2000, MaxPerLine = 30, Budget = 8;
+  function clearHl() {
+    while (marks.length) { try { marks.pop().dispose(); } catch (x) { } }
+    if (scanMark) { try { scanMark.dispose(); } catch (x) { } scanMark = null; }
+  }
+  function setHl(m) {
+    hl.on = !!m.on; hl.links = !!m.links;
+    hl.rules = (m.rules || []).map(r => { try { return { id: r.id, rx: new RegExp(r.p, r.cs ? 'g' : 'gi'), c: r.c, a: !!r.a }; } catch (x) { return null; } }).filter(Boolean);
+    clearHl();
+    scheduleScan();
+  }
+  function scheduleScan() { if (!hl.on || !hl.rules.length || scanTimer) return; scanTimer = setTimeout(scan, 40); }
+  function colour(key) { const t = term.options.theme || {}; return t[key] || baseTheme[key] || '#e8c547'; }
+  function mark(row, x, len, col, cursorAbs) {
+    const cols = term.cols;
+    while (len > 0) {
+      const r = row + Math.floor(x / cols), cx = x % cols, w = Math.min(len, cols - cx);
+      if (r > cursorAbs) return;
+      const marker = term.registerMarker(r - cursorAbs);
+      if (!marker) return;
+      if (!term.registerDecoration({ marker, x: cx, width: w, foregroundColor: col, layer: 'top' })) { marker.dispose(); return; }
+      marks.push(marker);
+      x += w; len -= w;
+    }
+    while (marks.length > MaxMarks) { try { marks.shift().dispose(); } catch (x) { } }
+  }
+  function scan() {
+    scanTimer = 0;
+    const b = term.buffer.active;
+    if (!hl.on || !hl.rules.length || b.type !== 'normal') return;
+    const cursorAbs = b.baseY + b.cursorY, t0 = performance.now(), alerts = [];
+    let y = scanMark && !scanMark.isDisposed && scanMark.line >= 0 ? scanMark.line : Math.max(0, cursorAbs - term.rows * 3);
+    while (y < cursorAbs) {
+      const start = y; let text = '';
+      do { const l = b.getLine(y); text += l ? l.translateToString(false) : ''; y++; } while (y < b.length && b.getLine(y) && b.getLine(y).isWrapped);
+      if (y > cursorAbs) { y = start; break; }   // the cursor's line isn't finished yet
+      text = text.replace(/\s+$/, '');
+      if (text.length > MaxLine) text = text.slice(0, MaxLine);
+      let n = 0;
+      for (const r of hl.rules) {
+        if (!text.length || n >= MaxPerLine) break;
+        r.rx.lastIndex = 0; let m;
+        while (n < MaxPerLine && (m = r.rx.exec(text))) {
+          if (!m[0].length) { r.rx.lastIndex++; continue; }
+          mark(start, m.index, m[0].length, colour(r.c), cursorAbs); n++;
+          if (r.a && alerts.length < 5) alerts.push({ id: r.id, d: text.slice(0, 200) });
+        }
+      }
+      if (performance.now() - t0 > Budget) break;
+    }
+    if (scanMark) { try { scanMark.dispose(); } catch (x) { } }
+    scanMark = term.registerMarker(y - cursorAbs) || null;
+    if (alerts.length) send({ t: 'hlalert', list: alerts });
+    if (y < cursorAbs) scheduleScan();
+  }
+  term.buffer.onBufferChange(() => scheduleScan());
+
+  // Ctrl+click an IP address, an absolute path or a web link (0.6.29): the host offers what can be done with it.
+  const linkRx = /https?:\/\/[^\s'"<>]+|\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?::\d{1,5})?\b|(?:^|(?<=[\s'"=(:]))\/(?:[\w.@%+~-]+\/)*[\w.@%+~-]+\/?/g;
+  term.registerLinkProvider({
+    provideLinks(y, cb) {
+      const l = hl.links ? term.buffer.active.getLine(y - 1) : null;
+      if (!l) { cb(undefined); return; }
+      const text = l.translateToString(true).slice(0, MaxLine), out = [];
+      linkRx.lastIndex = 0; let m;
+      while (out.length < 50 && (m = linkRx.exec(text))) {
+        if (!m[0].length) { linkRx.lastIndex++; continue; }
+        const word = m[0];
+        if (word.startsWith('/') && word.length < 4) continue;
+        out.push({ range: { start: { x: m.index + 1, y }, end: { x: m.index + word.length, y } }, text: word,
+          decorations: { pointerCursor: false, underline: true },
+          activate: (e, t) => { if (e.ctrlKey) send({ t: 'hlink', d: t }); } });
+      }
+      cb(out.length ? out : undefined);
+    }
+  });
   term.onSelectionChange(() => send({ t: 'sel', d: term.getSelection() }));
   // Native pastes (Ctrl+V, Shift+Insert, middle-click, context paste) never reach the shell directly: the host
   // inspects them first (multi-line / hidden control characters / risky commands) and sends back what to paste.
@@ -90,6 +173,7 @@
     if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') { send({ t: 'copy', d: term.getSelection() }); return false; }
     if (e.ctrlKey && e.shiftKey && e.code === 'KeyV') { send({ t: 'paste' }); return false; }
     if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { send({ t: 'findbar' }); return false; }
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyP') { send({ t: 'palette' }); return false; }   // 0.6.29: never ^P to the shell
     const c = chord(e);
     if (c && keyMap[c] !== undefined) { send({ t: 'in', d: keyMap[c] }); e.preventDefault(); return false; }
     if (bsCtrlH && c === 'Backspace') { send({ t: 'in', d: '\x08' }); e.preventDefault(); return false; }
@@ -137,9 +221,11 @@
 
   window.chrome.webview.addEventListener('message', e => {
     const m = e.data;
-    if (m.t === 'out') term.write(m.d);
+    if (m.t === 'out') term.write(m.d, scheduleScan);
+    else if (m.t === 'hl') setHl(m);
+    else if (m.t === 'hlprobe') send({ t: 'probe', id: m.id, marks: marks.filter(k => !k.isDisposed).length, rules: hl.rules.length, on: hl.on });
     else if (m.t === 'focus') term.focus();
-    else if (m.t === 'clear') term.clear();
+    else if (m.t === 'clear') { term.clear(); clearHl(); }
     else if (m.t === 'font') {
       if (m.size) term.options.fontSize = m.size;
       if (m.family !== undefined) term.options.fontFamily = m.family ? "'" + String(m.family).replace(/'/g, '') + "', 'Cascadia Mono', Consolas, monospace" : "'Cascadia Mono', 'Cascadia Code', Consolas, monospace";
@@ -148,7 +234,7 @@
     else if (m.t === 'pastetext') term.paste(m.d);
     else if (m.t === 'selectall') term.selectAll();
     else if (m.t === 'clearsel') term.clearSelection();
-    else if (m.t === 'reset') term.reset();
+    else if (m.t === 'reset') { term.reset(); clearHl(); }
     else if (m.t === 'top') term.scrollToTop();
     else if (m.t === 'bottom') term.scrollToBottom();
     else if (m.t === 'buffer') {

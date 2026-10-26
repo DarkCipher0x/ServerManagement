@@ -7,6 +7,12 @@
     <StackPanel x:Name="Root" Margin="20,16">
         <TextBlock x:Name="Heading" Text="Host" Style="{StaticResource H1}" Margin="0,0,0,4"/>
         <TextBlock x:Name="SubHeading" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+        <Border x:Name="FolderDefaultsNote" Visibility="Collapsed" Style="{StaticResource Card}" Margin="0,0,0,10" Padding="10,6">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Folder defaults…" Style="{StaticResource SmallButton}" Margin="8,0,0,0" Click="OnFolderDefaults" VerticalAlignment="Center"/>
+                <TextBlock x:Name="FolderDefaultsText" TextWrapping="Wrap" Style="{StaticResource Hint}" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
             <TextBlock Text="TYPE" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="0,0,10,0"/>
             <RadioButton x:Name="ProtoSsh" Content="SSH (Linux / Unix)" GroupName="proto" Margin="0,0,14,0" IsChecked="True" Checked="OnProtoChanged"/>
@@ -104,6 +110,9 @@
                     <TextBlock Text="KEEPALIVE (seconds, 0 = off)" Style="{StaticResource Label}"/>
                     <ComboBox x:Name="KeepAliveBox" IsEditable="True" Width="110" HorizontalAlignment="Left" Margin="0,0,0,10"
                               ToolTip="SSH keepalive interval. Keeps NAT / firewall state alive through idle periods and detects dead links on long sessions. 15–60 s is typical."/>
+                    <TextBlock Text="TMUX (terminals start inside your tmux session)" Style="{StaticResource Label}"/>
+                    <ComboBox x:Name="TmuxBox" Margin="0,0,0,10"
+                              ToolTip="Always-on tmux: a dropped link never loses your work, the next connect re-attaches. Linux and macOS hosts; tmux is never installed by this (⧉ tmux in a terminal installs it, asking first)."/>
                 </StackPanel>
                 <StackPanel x:Name="RdpOnly" Visibility="Collapsed">
                     <TextBlock Text="DOMAIN (optional)" Style="{StaticResource Label}"/>
@@ -111,6 +120,14 @@
                     <TextBlock Text="SIGN IN" Style="{StaticResource Label}"/>
                     <ComboBox x:Name="RdpSignOn" Margin="0,0,0,10"
                               ToolTip="Single sign-on uses the account you signed in to Windows with: no password is typed or stored. Remote Credential Guard and Restricted Admin keep your credentials off the server. Settings → Identity &amp; directory explains what the server and Group Policy need."/>
+                    <TextBlock Text="CONNECT THROUGH" Style="{StaticResource Label}"/>
+                    <ComboBox x:Name="RdpThroughBox" DisplayMemberPath="Display" Margin="0,0,0,10" SelectionChanged="OnRdpThroughChanged"
+                              ToolTip="Through SSH: Remote Desktop goes through an SSH tunnel to a saved SSH host (a bastion, or this Windows server's own OpenSSH). The tunnel opens on a random 127.0.0.1 port and closes with the tab; no RD Gateway needed."/>
+                    <StackPanel x:Name="RdpTunnelPanel" Visibility="Collapsed">
+                        <TextBlock Text="RDP SERVER SEEN FROM THAT SSH HOST (empty = the address)" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="RdpTunnelTarget" Style="{StaticResource Field}" FontFamily="{DynamicResource MonoFont}"
+                                 ToolTip="127.0.0.1 when the SSH server runs on the Windows server itself; empty = this host's address, as the SSH host reaches it"/>
+                    </StackPanel>
                     <TextBlock Text="RD GATEWAY (optional)" Style="{StaticResource Label}"/>
                     <TextBox x:Name="RdpGateway" Style="{StaticResource Field}" FontFamily="{DynamicResource MonoFont}"/>
                 </StackPanel>

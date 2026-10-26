@@ -2717,3 +2717,121 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
   right-wins, deleted+changed kept), versions per file / per run / replace and pruning, Mirror and Update, the deletion
   guard and a missing folder, jobs and the database encrypted at rest, schedule maths, Run now through the scheduler, and
   both windows built without being shown.
+
+### ADR-103 Saved sessions at exit and named workspaces (2026-10-26, 0.6.29)
+- **Context:** DarkCipher0x: "the option to save my connected sessions when i exit the app". The open tabs were already
+  written to `workspace.dcx` as they changed (ADR-022), but only an unclean exit offered them back, always disconnected.
+  Chosen with DarkCipher0x: ask at exit (with Don't ask again), reconnect on start except PRODUCTION, and keep
+  quick-connect sessions, working folders, tmux sessions and named workspaces.
+- **Decision:** `Workspace.Entry` gains `Cwd`, `Tmux`, `Path` / `LeftPath` (Files folder, both Commander panes) and
+  `AdHoc` (a quick-connect `HostEntry`; `Transient` is `[JsonIgnore]`, so no secret is ever stored). A clean exit writes
+  `workspace-exit.dcx` (encrypted) when you choose Save and exit or `SessionsOnExit` = save (also when the app closes
+  itself, unless "never"); the next clean start takes it once and calls `RestoreTabs(connect: true)`. After a crash the
+  Recover previous work screen is unchanged (disconnected). Reconnecting follows `RestoreReconnect`; PRODUCTION hosts
+  reopen disconnected; a host whose padlock, jump host or credential is locked never reopens by itself and never asks
+  to be unlocked at start (`MayReopen`; Commander panes on such hosts reopen empty). A terminal's folder is read from its
+  output only (`Sessions.ShellPlace`: OSC 7, a Debian-shape POSIX prompt or a PowerShell prompt; nothing is typed to ask)
+  and typed back once after the connect as a quoted ` cd -- '…'` / `Set-Location -LiteralPath '…'`. A terminal taken
+  into tmux with ⧉ tmux remembers the session and re-attaches after every reconnect (probe and config over the exec
+  channel; never installs), until the output shows tmux was left ("[detached …]" / "[exited]"). Named workspaces live in
+  `workspaces.dcx` (encrypted); removing one moves it to that file's archive. The title bar's ▦ Workspaces menu saves,
+  opens (adding only tabs that aren't open yet), replaces, renames and removes them. `Dialogs.Choose` gained a tick-box
+  overload. Settings → Terminals & connections → Saved sessions; `SessionsOnExit` and `RestoreReconnect` are policies.
+- **Tests:** SelfTestSavedSessions: folder parsing (OSC 7, coloured and root prompts, a virtualenv prefix, Red Hat's
+  short prompt refused, PowerShell), quoting, tmux detach / exit; the exit file taken once; named workspaces replaced,
+  renamed and archived; a quick-connect host's secret never serialised and the file encrypted; every exit choice
+  through the self-test seam; tabs reopened (a local shell with its folder, a PRODUCTION quick-connect terminal left
+  disconnected) and captured again.
+
+### ADR-104 Terminal alerts, keyword highlighting, the snippet button bar and the command palette (2026-10-26, 0.6.29)
+- **Context:** Wave A of docs/PLAN-0.7-beyond-securecrt-royalts.md: what SecureCRT (keyword highlighting, button bar,
+  triggers) and Royal TS (one search for everything) do that we didn't, done our way: nothing leaves the PC, every
+  setting is a policy, every pattern is bounded, nothing runs without a click.
+- **Decision:**
+  - **Alerts** (`SessionAlerts`, `TerminalView.Alerts`): a long command (Enter, then a prompt on the cursor's line after
+    `TerminalAlertSeconds`, read from the screen so it works in tmux; the output tail when the page is too throttled to
+    answer), the bell (`term.onBell`), a drop, or a highlight rule with Alert. Only for a tab nobody is looking at
+    (selected, visible, window active). It sets an attached `Pending` dot on the tab (DocTab template), flashes the
+    taskbar (FlashWindowEx) and, when the app isn't in front and `TerminalAlertDesktop`, shows a tray balloon whose
+    click selects the tab. One per kind per tab per 10 s; a tab can mute itself. Self-test: `NobodyWatchingForTest`;
+    nothing is drawn in test mode.
+  - **Highlighting** (`Sessions.Highlighting`, terminal.html): packs (errors, warnings, success, network, http) and
+    your `HighlightRule`s. Every pattern is compiled in .NET with a 150 ms timeout against long probe lines, empty
+    matches and inline options are refused, so JS and .NET agree and nothing backtracks on the page. The page draws
+    xterm decorations (foreground colour from the profile's own scheme) over finished lines of the normal buffer only,
+    from a marker where the last pass stopped: 8 ms per pass, 2,000 characters and 30 marks a line, 4,000 marks in all
+    (oldest disposed). The output, copies and logs are untouched. Rules are resent only when `Signature` changes.
+  - **Ctrl+click words:** a link provider over IPv4(:port), absolute paths and http(s) URLs, active only with Ctrl;
+    the host classifies (`Highlighting.Classify`) and offers a menu (SSH / add host / copy; Files / paste quoted /
+    copy; browser after confirmation / copy).
+  - **Button bar and variables** (`SnippetVariables`): `Snippet.Bar` + `Snippet.Scope` (host/folder/tag/env/shell/
+    local tokens). `{host} {address} {user} {port} {ask:…} {pick:Label|command}`; values are stripped of control
+    characters and quoted for POSIX or PowerShell (cmd and network gear: one line, unquoted). Questions are asked once,
+    host values per terminal; risky text (PasteGuard), PRODUCTION or several terminals confirm first. The Snippets menu,
+    the Snippets page's "send to terminal" and its multi-host run use the same expansion.
+  - **Command palette** (`PaletteSearch` in Core, `CommandPalette` in the app, Ctrl+Shift+P, caught by the terminal page
+    too so ^P never reaches the shell): hosts, tabs, workspaces, snippets, pages, settings cards, actions. Each word
+    must match the title (substring or letters in order) or the detail; title start and word starts score highest;
+    `PaletteRecent` (50, encrypted with the settings) lifts what you use when `PaletteLearn`.
+  - Policies: `TerminalAlerts`, `TerminalAlertSeconds`, `TerminalAlertBell`, `TerminalAlertDrop`,
+    `TerminalAlertDesktop`, `TerminalHighlight`, `TerminalHighlightPacks`, `TerminalLinks`, `TerminalButtonBar`,
+    `PaletteLearn`. `TerminalHighlightRules` (records) and `PaletteRecent` (state) are not policies.
+  - Also in Wave A: `AppSettings.TmuxAlways` and `HostEntry.Tmux` (on / off / "") take SSH terminals to Linux and macOS
+    hosts into the tmux session on connect (never installing it); `RdpSettings.Through = "ssh"` opens an ephemeral
+    tunnel per session through `TunnelManager` (127.0.0.1, free port) for the embedded control and mstsc alike.
+- **Tests:** SelfTestWaveA: pack patterns valid and fast, bad patterns refused, the page message and signature,
+  Classify; variable quoting (POSIX, PowerShell, control characters, cancel), scopes; palette scoring, recent list;
+  AutoTmux decisions; RDP tunnel helpers; a live local cmd tab: the page compiles the rules and marks an error line,
+  bell / long-command / muted alerts with the tab's dot, the scoped button bar sending a quoted snippet; and a
+  10,000-host scale budget (encrypted save, Hosts rebuild and filter, palette build and search, folder defaults).
+
+### ADR-105 Folder defaults: inherited host settings by folder (2026-10-26, 0.6.29)
+- **Context:** Royal TS-style inheritance ("these 40 hosts all use the bastion and the ops key") without changing how
+  any connection reads a host.
+- **Decision:** `AppData.FolderDefaults` holds `FolderSettings` per folder path (user, credential, jump host,
+  environment, terminal profile, VPN, tmux; null = not set there). `HostEntry.Inherits` lists the fields a host
+  follows. `FolderDefaults.Apply` (run by `AppData.Save` before writing) copies the nearest folder's value onto each
+  followed field, so every connection path keeps reading the host as before; a field no folder sets any more stays as
+  the host's own. Existing hosts follow only after "Apply to all" or a move into the folder (asked); new hosts adopt
+  their folder's defaults; the host editor's rule (`Decide`): a field follows while it equals the folder's value.
+  `Fits` skips what doesn't apply (jump host and tmux only for SSH, never the host as its own jump host, no key for
+  RDP / VNC, no credential for Telnet); setting a credential clears a direct Bitwarden / Password Safe link and sets
+  the sign-in method from its kind. Folder rename / move and delete carry or drop the defaults; shared library and
+  quick-connect hosts are never touched. The folder dialog goes through the folder's lock and the `folder.edit`
+  restriction and is audited.
+- **Tests:** SelfTestWaveA: nearest folder, adoption, RDP exclusions, a folder change reaching followers, an editor
+  change becoming the host's own, a removed default staying, jump-host rules, rename and delete; 10,000 hosts applied
+  within budget.
+
+### ADR-106 Performance pass: scale, idle cost and start-up (2026-10-26, 0.6.29)
+- **Context:** a review for 24/7 use with big inventories. With 10,000 demo hosts an encrypted save took ~4 s (mostly
+  the open screens reloading synchronously in `AppData.Changed`), a Hosts rebuild ~2 s (a folder count was a pass over
+  every host per folder, and every host became a tree node), the workspace host pane did the same on every keystroke,
+  and each terminal's 16 ms flush timer ticked for the life of the tab.
+- **Decision:**
+  - `AppData.FolderCounts` counts all folders in one pass; `AllFolders` splits each distinct group once.
+  - `LazyTreeLeaves` (Hosts tree and `SessionManagerPane`): a closed folder holds its hosts as a list plus a "…"
+    placeholder and makes the nodes when it is expanded (`Find` makes them for a selection or a lookup). TreeViews
+    virtualize (Standard mode, never Recycling, since they hold their own TreeViewItems; pixel scrolling). The pane's
+    filter rebuilds 150 ms after typing stops.
+  - Screens behind other tabs (Hosts, Snippets) mark themselves stale on `AppData.Changed` and reload when shown;
+    while the main window isn't showing (start-up, the self-test) they reload at once, so `Changed` stays synchronous
+    for everything else. `AppData.SaveSoon` (hook `SaveLater`, set by the app: 2 s, coalesced, UI thread, flushed at
+    exit) replaces the immediate save for last-connected times in the SSH, VNC and RDP connect paths. The SSH one ran
+    on the connect thread.
+  - `IdIndex<T>`: `FindHost` / `FindCredential` map an id to a position and trust a hit only when `list[i]` still has
+    that id; otherwise one scan and a rebuild. The lists stay plain lists, so the index is exact without hooks on every
+    change, and it's an immutable snapshot for readers on other threads.
+  - The terminal flush timer runs only while output is queued (armed from any thread, stops itself when empty,
+    re-checks after stopping). Hidden terminals set WebView2 `MemoryUsageTargetLevel.Low`. A hidden ServerView
+    skips its auto-refresh ticks and refreshes when shown. `ClampCsi` returns the text untouched without a 5-digit
+    number.
+  - Release publish: `EnableCompressionInSingleFile=false`. Measured in scratch publishes (windowless
+    `--export-policy-templates`): 452 ms compressed, 288 ms uncompressed, 242 ms ReadyToRun + uncompressed (614 ms
+    ReadyToRun compressed). Zipped as a download proxy: 75 MB now, 78 MB uncompressed, 114 MB with ReadyToRun, so
+    ReadyToRun stays off (46 ms for +36 MB). Installed size 81 → 195 MB; exe / MSI budgets raised to match.
+- **Tests:** SelfTestWaveA scale budget tightened (save 8 s → 3 s, Hosts rebuild 8 s → 1.5 s, filter 2 s → 1 s) and
+  extended: save with the Hosts screen open, fewer than 1,000 of 10,000 nodes made with folders closed, a host in a
+  closed folder still found, host pane rebuild and filter, 10,000 id lookups < 200 ms, the id index exact after a removal
+  with no save in between. A new test checks: no flush ticks from an idle terminal, output re-arms the timer, three
+  `SaveSoon` calls give one save, ordinary output passes `ClampCsi` unchanged, and a hidden terminal's memory target is Low.

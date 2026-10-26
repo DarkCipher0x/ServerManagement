@@ -1066,24 +1066,44 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
-                    <Border x:Name="bd" Padding="12,6,6,6" Margin="0,0,2,-1" BorderThickness="0,2,0,0" BorderBrush="Transparent" Background="Transparent">
+                    <Border x:Name="bd" Padding="10,5,4,5" Margin="0,0,2,-1" BorderThickness="0,2,0,0" BorderBrush="Transparent" Background="Transparent">
+                        <Grid>
                         <StackPanel Orientation="Horizontal">
-                            <!-- Tab group (ADR-019): the group's name, outlined and written in its colour. -->
-                            <Border x:Name="grp" Visibility="Collapsed" CornerRadius="{DynamicResource Radius}" Padding="4,0" Margin="0,0,6,0" VerticalAlignment="Center" BorderThickness="1"
+                            <!-- Tab group (ADR-019): the group's name, outlined and written in its colour. 0.6.29: printed once, on the
+                                 first tab of each run of the group's tabs; every member has the colour line underneath (grpLine). -->
+                            <Border x:Name="grp" Visibility="Collapsed" CornerRadius="{DynamicResource Radius}" Padding="4,0" Margin="0,0,5,0" VerticalAlignment="Center" BorderThickness="1"
                                     BorderBrush="{Binding Path=(svc:TabGroups.Brush), RelativeSource={RelativeSource TemplatedParent}}">
                                 <TextBlock Text="{Binding Path=(svc:TabGroups.Name), RelativeSource={RelativeSource TemplatedParent}}" FontSize="{DynamicResource FsMicro}" FontWeight="Bold"
                                            Foreground="{Binding Path=(svc:TabGroups.Brush), RelativeSource={RelativeSource TemplatedParent}}"/>
                             </Border>
                             <!-- Environment label (ADR-017): text on the environment's colour; the top edge takes the colour too. -->
-                            <Border x:Name="env" Visibility="Collapsed" CornerRadius="{DynamicResource Radius}" Padding="4,0" Margin="0,0,6,0" VerticalAlignment="Center"
+                            <Border x:Name="env" Visibility="Collapsed" CornerRadius="{DynamicResource Radius}" Padding="4,0" Margin="0,0,5,0" VerticalAlignment="Center"
                                     Background="{Binding Path=(ui:EnvTab.Brush), RelativeSource={RelativeSource TemplatedParent}}">
                                 <TextBlock Text="{Binding Path=(ui:EnvTab.Label), RelativeSource={RelativeSource TemplatedParent}}" FontSize="{DynamicResource FsMicro}" FontWeight="Bold" Foreground="{DynamicResource Bg}"/>
                             </Border>
-                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center"/>
-                            <Button x:Name="close" Content="×" MinWidth="0" Width="18" Height="18" Padding="0" Margin="8,0,0,0" FontSize="{DynamicResource FsMeta}"
+                            <!-- 0.6.29 (ADR-104): an alert from a session you weren't looking at; cleared when the tab is shown. -->
+                            <Ellipse x:Name="alert" Visibility="Collapsed" Width="7" Height="7" Margin="0,0,5,0" VerticalAlignment="Center" Fill="{DynamicResource Accent}"
+                                     ToolTip="{Binding Path=(svc:SessionAlerts.Text), RelativeSource={RelativeSource TemplatedParent}}"/>
+                            <!-- 0.6.29: long titles (portal pages) end in "…" with the whole title on hover; narrower inside a group. -->
+                            <ContentPresenter ContentSource="Header" VerticalAlignment="Center">
+                                <ContentPresenter.ContentTemplate>
+                                    <DataTemplate>
+                                        <TextBlock x:Name="t" Text="{Binding}" TextTrimming="CharacterEllipsis" MaxWidth="220" ToolTip="{Binding}"/>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Path=(svc:TabGroups.Shown), RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
+                                                <Setter TargetName="t" Property="MaxWidth" Value="150"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ContentPresenter.ContentTemplate>
+                            </ContentPresenter>
+                            <Button x:Name="close" Content="×" MinWidth="0" Width="18" Height="18" Padding="0" Margin="6,0,0,0" FontSize="{DynamicResource FsMeta}"
                                     Background="Transparent" BorderBrush="Transparent" Command="{x:Static local:Commands.CloseTab}"
                                     CommandParameter="{Binding RelativeSource={RelativeSource TemplatedParent}}" ToolTip="Close (Ctrl+W)"/>
                         </StackPanel>
+                        <Border x:Name="grpLine" Visibility="Collapsed" Height="2" VerticalAlignment="Bottom" Margin="-10,0,-4,-5" IsHitTestVisible="False"
+                                Background="{Binding Path=(svc:TabGroups.Brush), RelativeSource={RelativeSource TemplatedParent}}"/>
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsSelected" Value="True">
@@ -1096,11 +1116,22 @@
                         </Trigger>
                         <Trigger Property="Tag" Value="fixed">
                             <Setter TargetName="close" Property="Visibility" Value="Collapsed"/>
-                            <Setter TargetName="bd" Property="Padding" Value="12,6"/>
+                            <Setter TargetName="bd" Property="Padding" Value="10,5"/>
                         </Trigger>
                         <Trigger Property="svc:TabGroups.Shown" Value="True">
-                            <Setter TargetName="grp" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="grpLine" Property="Visibility" Value="Visible"/>
                         </Trigger>
+                        <Trigger Property="svc:SessionAlerts.Pending" Value="True">
+                            <Setter TargetName="alert" Property="Visibility" Value="Visible"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="svc:TabGroups.Shown" Value="True"/>
+                                <Condition Property="svc:TabGroups.Lead" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="grp" Property="Visibility" Value="Visible"/>
+                        </MultiTrigger>
                         <Trigger Property="ui:EnvTab.Shown" Value="True">
                             <Setter TargetName="env" Property="Visibility" Value="Visible"/>
                             <Setter TargetName="bd" Property="BorderBrush" Value="{Binding Path=(ui:EnvTab.Brush), RelativeSource={RelativeSource TemplatedParent}}"/>
@@ -1154,6 +1185,12 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="3"/>
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <!-- 0.6.29 performance pass: only the rows on screen are laid out and drawn; Standard (never Recycling) because the
+             trees hold their own TreeViewItems, and pixel scrolling so it scrolls as smoothly as before -->
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/>
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Standard"/>
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
     </Style>
 
     <Style x:Key="TreeToggle" TargetType="ToggleButton">
@@ -1190,6 +1227,13 @@
     <Style TargetType="TreeViewItem">
         <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
         <Setter Property="Padding" Value="{DynamicResource TreeRowPadding}"/>
+        <Setter Property="ItemsPanel">
+            <Setter.Value>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel/>
+                </ItemsPanelTemplate>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TreeViewItem">

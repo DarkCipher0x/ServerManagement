@@ -52,6 +52,7 @@ public sealed partial class TerminalView
     internal async Task OnInputAsync(string data)
     {
         LastInput = data;
+        WatchInput(data);   // 0.6.29: alerts (a long command)
         if (IsConnected) SendInput(data);
         else if (data == "\r" && !_connecting) await ConnectAsync();
         InputBroadcast.Relay(this, data);   // ADR-019: typed or pasted here → the other members too
@@ -179,7 +180,7 @@ public sealed partial class TerminalView
                     _transport is ISerialControl ? Menus.Item("BREAK (serial, 300 ms)", SendBreak, enabled: live, tip: "Cisco ROMMON, Juniper and most network gear use BREAK during boot for recovery") : null,
                     _target.Host != null ? Menus.Item("Ctrl+Alt+Del is not sent over SSH — use Reboot in Manage", () => { }, enabled: false) : null),
                 Menus.Sub("Snippets",
-                    AppData.Current.Snippets.Take(30).Select(s => (object?)Menus.Item(s.Name, () => SendRaw((s.Sudo && _target.Has(SessionCaps.Sudo) && _target.Host?.Username != "root" ? "sudo " : "") + s.Command + "\r"), enabled: live, tip: s.Command)).ToArray()),
+                    AppData.Current.Snippets.Take(30).Select(s => (object?)Menus.Item(s.Name, () => _ = SendSnippetAsync(s, new[] { this }), enabled: live, tip: s.Command)).ToArray()),
                 Menus.Sub("⌨ Broadcast input",
                     Menus.Item("To all open terminals…", () => InputBroadcast.Start(AllTerminals(), "all open terminals")),
                     tab != null && TabGroups.GetName(tab) is { Length: > 0 } g ? Menus.Item($"To the terminals in group “{g}”…", () => InputBroadcast.Start(TabGroups.Members(g).Select(t => t.Content).OfType<TerminalView>(), $"group “{g}”")) : null,
@@ -194,6 +195,8 @@ public sealed partial class TerminalView
                 Menus.Item("✕ Disconnect", UserDisconnect, enabled: live),
                 _target.CanDuplicate ? Menus.Item("⊞ Duplicate session", () => MainWindow.Instance.OpenSession(_target.Clone(), forceNew: true)) : null,
                 !_target.Has(SessionCaps.AutoReconnect) ? null : Menus.Item(AppSettings.Current.TerminalAutoReconnect ? "Auto-reconnect: on (turn off)" : "Auto-reconnect: off (turn on)", () => { AppSettings.Current.TerminalAutoReconnect = !AppSettings.Current.TerminalAutoReconnect; try { AppSettings.Save(); } catch { } }),
+                !AppSettings.Current.TerminalAlerts ? null : Menus.Item(_alertsMuted ? "🔕 Alerts for this tab: off (turn on)" : "🔔 Alerts for this tab: on (turn off)", () => _alertsMuted = !_alertsMuted,
+                    tip: "A long command finishing, a bell, a highlight alert or a drop, while you're looking elsewhere (Settings → Terminal → Alerts)"),
                 Menus.Sep(),
                 Menus.Item(_log != null ? "✓ Logging this session (turn off)" : "Log this session (encrypted)", () => SetLogging(_log == null), enabled: AppSettings.Current.SessionLogs != "on" || _log == null,
                     tip: AppSettings.Current.SessionLogs == "on" ? "Session logs are on for every session (Settings → Terminal & connections, or Group Policy)" : "Output is saved encrypted in the store's session logs, timestamped per line if the profile says so"),
@@ -277,7 +280,11 @@ public sealed partial class TerminalView
 
     private static string FileSafe(string s) => string.Concat(s.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) || c == ' ' ? '-' : c));
 
-    public void Activated() => Post(new { t = "focus" });
+    public void Activated()
+    {
+        Post(new { t = "focus" });
+        SessionAlerts.Clear(this);   // 0.6.29: you're looking at it now
+    }
 
     public void Dispose()
     {
@@ -290,7 +297,9 @@ public sealed partial class TerminalView
         ThemeManager.Changed -= OnTheme;
         Typography.TerminalChanged -= OnFonts;
         try { _reconnectCts?.Cancel(); } catch { }
-        try { _flush.Stop(); } catch { }
+        try { _flush.Stop(); _quiet?.Stop(); } catch { }
+        AppSettings.Saved -= OnTerminalSettings;
+        AppData.Changed -= OnTerminalData;
         if (_web.CoreWebView2 != null) { try { _web.CoreWebView2.WebMessageReceived -= OnMessage; _web.CoreWebView2.ContextMenuRequested -= OnContextMenu; } catch { } }
         Teardown();
         try { _web.Dispose(); } catch { }

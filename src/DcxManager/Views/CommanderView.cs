@@ -38,7 +38,11 @@ public sealed partial class CommanderView : UserControl, IDisposable
     /// <summary>The host this commander was opened for (its right pane), for switching to it instead of opening another (0.5.9).</summary>
     internal string? OpenedForHostId { get; }
 
-    public CommanderView(HostEntry? rightHost = null, string? rightPath = null)
+    /// <summary>Both panes' places ("local|C:\x", "host:id|/path"), for saved sessions (0.6.29).</summary>
+    internal (string Left, string Right) Places => (_left.State, _right.State);
+
+    /// <param name="places">A saved session's two panes (0.6.29): they reopen exactly there.</param>
+    public CommanderView(HostEntry? rightHost = null, string? rightPath = null, (string Left, string Right)? places = null)
     {
         OpenedForHostId = rightHost?.Id;
         _current = new WeakReference<CommanderView>(this);
@@ -48,8 +52,8 @@ public sealed partial class CommanderView : UserControl, IDisposable
         // is connected; the last places come back only when CommanderRestoreLast is on (off by default, Group Policy can set
         // it), or with one click (More ▾ → Reconnect the last places).
         bool restore = s.CommanderRestoreLast;
-        _left = new FilePane(this, "left", restore && s.CommanderLeft.Length > 0 ? s.CommanderLeft : "none|");
-        _right = new FilePane(this, "right", rightHost != null ? $"host:{rightHost.Id}|{rightPath ?? ""}" : restore && s.CommanderRight.Length > 0 ? s.CommanderRight : "none|");
+        _left = new FilePane(this, "left", places?.Left ?? (restore && s.CommanderLeft.Length > 0 ? s.CommanderLeft : "none|"));
+        _right = new FilePane(this, "right", places?.Right ?? (rightHost != null ? $"host:{rightHost.Id}|{rightPath ?? ""}" : restore && s.CommanderRight.Length > 0 ? s.CommanderRight : "none|"));
         _active = _left;
 
         var panes = new Grid();

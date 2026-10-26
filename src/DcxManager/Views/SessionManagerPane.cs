@@ -22,9 +22,14 @@ public sealed class SessionManagerPane : UserControl
     /// <summary>Folders opened in this session ("" = All hosts); kept across redraws and app restarts of the pane.</summary>
     private static readonly HashSet<string> Expanded = new(StringComparer.OrdinalIgnoreCase) { "" };
     private bool _building;
+    private readonly LazyTreeLeaves _leaves;
+    /// <summary>Typing in the filter redraws once the typing pauses (150 ms), not on every key (0.6.29 performance pass).</summary>
+    private readonly System.Windows.Threading.DispatcherTimer _filterPause;
 
     public SessionManagerPane()
     {
+        _leaves = new LazyTreeLeaves(HostNode);
+        _filterPause = new System.Windows.Threading.DispatcherTimer(TimeSpan.FromMilliseconds(150), System.Windows.Threading.DispatcherPriority.Input, (_, _) => { _filterPause!.Stop(); Build(); }, Dispatcher) { IsEnabled = false };
         var root = new DockPanel();
         var bar = new WrapPanel { Margin = new Thickness(8, 2, 8, 0) };
         bar.Children.Add(Small("⌨ Connect", "Connect to the selected host (Enter or double-click)", () => { if (SelectedHost is { } h) Connect(h); }));
@@ -38,7 +43,7 @@ public sealed class SessionManagerPane : UserControl
         root.Children.Add(_tree);
         Content = root;
 
-        _filter.TextChanged += (_, _) => Build();
+        _filter.TextChanged += (_, _) => { _filterPause.Stop(); _filterPause.Start(); };
         _tree.KeyDown += (_, e) => { if (e.Key == Key.Enter && SelectedHost is { } h) { e.Handled = true; Connect(h); } };
         _tree.PreviewMouseRightButtonDown += (_, e) => { if (e.OriginalSource is DependencyObject d && Menus.Ancestor<TreeViewItem>(d) is { } i) { i.IsSelected = true; i.Focus(); } };
         Menus.Attach(_tree, ContextItems);
@@ -71,35 +76,37 @@ public sealed class SessionManagerPane : UserControl
                                        || h.Group.Contains(q, StringComparison.OrdinalIgnoreCase) || (h.Tags ?? "").Contains(q, StringComparison.OrdinalIgnoreCase);
             var hosts = all.Where(Match).ToList();
 
+            // 0.6.29 performance pass: folder counts in one pass, a closed lock checked once per folder, open state set
+            // before the hosts go in, and host nodes made only when their folder is opened (LazyTreeLeaves).
+            _leaves.Clear();
+            var hidden = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            bool IsHidden(string folder) => hidden.TryGetValue(folder, out var v) ? v : hidden[folder] = Hidden(folder);
+            var counts = AppData.FolderCounts(hosts);
             var root = Folder("All hosts", "", hosts.Count, "◈");
             _tree.Items.Add(root);
             var map = new Dictionary<string, TreeViewItem>(StringComparer.OrdinalIgnoreCase) { [""] = root };
             foreach (var path in AppData.Current.AllFolders)
             {
-                int count = hosts.Count(h => AppData.InFolder(AppData.NormalizeFolder(h.Group), path));
+                int count = counts.GetValueOrDefault(path);
                 if (filtering && count == 0) continue;
                 var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
                 var node = Folder(path.Contains('/') ? path[(path.LastIndexOf('/') + 1)..] : path, path, count, "▸");
                 (map.GetValueOrDefault(parent) ?? root).Items.Add(node);
                 map[path] = node;
             }
-            foreach (var h in hosts.OrderBy(h => h.Display, StringComparer.OrdinalIgnoreCase))
-            {
-                var folder = AppData.NormalizeFolder(h.Group);
-                var parent = map.GetValueOrDefault(folder) ?? root;
-                if (Hidden(folder)) continue;   // a closed folder lock shows nothing inside it
-                parent.Items.Add(HostNode(h));
-            }
+            foreach (var (path, node) in map) node.IsExpanded = filtering || Expanded.Contains(path) && !IsHidden(path);
+            var sorted = hosts.OrderBy(h => h.Display, StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var g in sorted.GroupBy(h => AppData.NormalizeFolder(h.Group), StringComparer.OrdinalIgnoreCase))
+                if (!IsHidden(g.Key)) _leaves.Add(map.GetValueOrDefault(g.Key) ?? root, g.ToList(), filtering);   // a closed folder lock shows nothing inside it
             // Folders that are locked and closed get an "unlock to see" child, so they can still be expanded.
             foreach (var (path, node) in map)
-                if (path.Length > 0 && Hidden(path) && node.Items.Count == 0) node.Items.Add(new TreeViewItem { Header = "🔒 locked — expand to unlock", IsEnabled = false });
-            var favs = hosts.Where(h => h.Favorite).OrderBy(h => h.Display, StringComparer.OrdinalIgnoreCase).ToList();
+                if (path.Length > 0 && IsHidden(path) && node.Items.Count == 0) node.Items.Add(new TreeViewItem { Header = "🔒 locked — expand to unlock", IsEnabled = false });
+            var favs = sorted.Where(h => h.Favorite && !IsHidden(AppData.NormalizeFolder(h.Group))).ToList();
             var fav = Folder("Favourites", "★", favs.Count, "★");
-            foreach (var h in favs) if (!Hidden(AppData.NormalizeFolder(h.Group))) fav.Items.Add(HostNode(h));
-            _tree.Items.Add(fav);
-
-            foreach (var (path, node) in map) node.IsExpanded = filtering || Expanded.Contains(path) && !Hidden(path);
             fav.IsExpanded = filtering || Expanded.Contains("★");
+            _leaves.Add(fav, favs, filtering);
+            _tree.Items.Add(fav);
+            if (keep is HostEntry kh) _leaves.Find(_tree.Items, kh.Id);   // its folder's nodes exist before reselecting
             if (keep != null) Reselect(_tree.Items, keep);
         }
         finally { _building = false; }
@@ -157,13 +164,15 @@ public sealed class SessionManagerPane : UserControl
     // ---- actions ----------------------------------------------------------------------------------------------------
 
     /// <summary>Self-test: the filter text, and the hosts the tree shows (each once, Favourites not counted twice).</summary>
-    internal string Filter { get => _filter.Text; set => _filter.Text = value; }
+    internal string Filter { get => _filter.Text; set { _filter.Text = value; _filterPause.Stop(); Build(); } }   // the test doesn't wait out the typing pause
     internal IReadOnlyList<HostEntry> ShownHosts
     {
         get
         {
+            _leaves.MakeAll();
             var seen = new List<HostEntry>();
-            void Walk(ItemCollection items) { foreach (var o in items) if (o is TreeViewItem i) { if (i.Tag is HostEntry h && seen.All(x => x.Id != h.Id)) seen.Add(h); Walk(i.Items); } }
+            var ids = new HashSet<string>();
+            void Walk(ItemCollection items) { foreach (var o in items) if (o is TreeViewItem i) { if (i.Tag is HostEntry h && ids.Add(h.Id)) seen.Add(h); Walk(i.Items); } }
             Walk(_tree.Items);
             return seen;
         }

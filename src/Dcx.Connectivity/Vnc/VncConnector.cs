@@ -93,6 +93,7 @@ public static class VncConnector
                 AuditLog.Write("you", h.Display, "VNC TLS certificate pinned", RfbClient.TlsPinPretty(client.PinnedSha256));
             }
             h.LastConnected = DateTime.Now;
+            if (!h.IsAdHoc) { try { AppData.SaveSoon(); } catch { } }   // 0.6.29: kept (it used to wait for the next save)
             AuditLog.Write("you", h.Display, "VNC session opened", $"{route} · RFB {client.Version} · {client.Security}{(client.Encrypted ? " · encrypted" : " · NOT encrypted on the network")}");
             return new VncSession(client, tcp, tunnelKey, route);
         }

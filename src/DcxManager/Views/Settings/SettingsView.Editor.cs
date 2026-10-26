@@ -30,6 +30,7 @@ public sealed partial class SettingsView
         }, "PrimaryButton");
         return Card("tmux",
             "A terminal's ⧉ tmux button (SSH to Linux or macOS) starts tmux on that host, or reattaches your session there. If tmux is missing it offers to install it with the host's package manager (apt, dnf, yum, zypper, pacman, apk or brew); sudo asks for its password in the terminal. Your config below is written to ~/.config/dcx-servermanagement/tmux.conf on the host (only you can read it) and used for the session: your own ~/.tmux.conf is never touched.",
+            Check("Always start SSH terminals inside tmux (Linux and macOS hosts; a host or its folder can say on or off for itself; drops never lose your work; tmux is never installed by this)", _s.TmuxAlways, v => _s.TmuxAlways = v),
             install, Labeled("SESSION NAME", session), L("YOUR TMUX CONFIG (PASTE IT HERE; EMPTY = TMUX'S DEFAULTS / YOUR ~/.tmux.conf)"), config, Row(save), result);
     }
 

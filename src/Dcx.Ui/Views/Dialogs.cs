@@ -197,6 +197,40 @@ public static class Dialogs
         return result;
     }
 
+    /// <summary>Self-test only: when set, <see cref="Choose(string, string, string[], string, int, double)"/> records the
+    /// question and returns this answer instead of showing it.</summary>
+    public static (int Choice, bool Option)? ChooseForTests { get; set; }
+    public static List<string> SelfTestChoices { get; } = new();
+
+    /// <summary><see cref="Choose(string, string, string[], int, double)"/> with a tick box under the message ("Don't ask
+    /// again"); returns the choice and whether the box was ticked.</summary>
+    public static (int Choice, bool Option) Choose(string title, string message, string[] options, string option, int cancelIndex = -1, double width = 560)
+    {
+        if (TestMode.Running && ChooseForTests is { } answer) { lock (SelfTestChoices) SelfTestChoices.Add(title + ": " + message); return answer; }
+        if (TestMode.Running) { RefusedInSelfTest("choice: " + title); return (cancelIndex, false); }
+        var w = MakeWindow(title, width);
+        var root = new StackPanel { Margin = new Thickness(18) };
+        root.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
+        var box = new CheckBox { Content = option, Margin = new Thickness(0, 12, 0, 0) };
+        root.Children.Add(box);
+        int result = -1;
+        var p = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
+        for (int i = 0; i < options.Length; i++)
+        {
+            int idx = i;
+            var b = Btn(options[i], primary: i == 0);
+            b.Margin = new Thickness(6, 4, 0, 0);
+            if (i == 0) b.IsDefault = true;
+            b.Click += (_, _) => { result = idx; w.Close(); };
+            p.Children.Add(b);
+        }
+        w.KeyDown += (_, e) => { if (e.Key == Key.Escape) { result = cancelIndex; w.Close(); } };
+        root.Children.Add(p);
+        w.Content = root;
+        w.ShowDialog();
+        return (result, box.IsChecked == true && result != cancelIndex && result >= 0);
+    }
+
     public static void Info(string title, string message)
     {
         var app = Application.Current;

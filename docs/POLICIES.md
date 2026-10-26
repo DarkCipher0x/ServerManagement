@@ -4,7 +4,7 @@ Generated from the app's policy catalog (`PolicySettings.Catalog`, ADR-040) by e
 
 Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer, wins) and `HKCU\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (user). Templates: `policy\DarkCipherServerManagement.admx` and `policy\en-US\DarkCipherServerManagement.adml` in each release folder. A managed setting can't be changed in the app; an invalid value is ignored and listed in Settings → Security & privacy → Managed by your organisation.
 
-251 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, LastUpdateCheck, ObserveSecrets, OllamaTunnelHostId, OpenAiKey, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
+264 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, LastUpdateCheck, ObserveSecrets, OllamaTunnelHostId, OpenAiKey, PaletteRecent, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalHighlightRules, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
 
 ## Security and sign-in
 
@@ -92,15 +92,27 @@ Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer
 | `EditorVimMode` | Editor vim mode | REG_DWORD | 1 = on, 0 = off | off |
 | `EditorVimProfile` | Editor vim profile | REG_SZ | text (up to 2,048 characters) | `Default` |
 | `RdpEmbedded` | RDP embedded | REG_DWORD | 1 = on, 0 = off | on |
+| `RestoreReconnect` | Saved sessions reconnect as they reopen (PRODUCTION hosts stay disconnected; locked hosts never reopen by themselves) | REG_DWORD | 1 = on, 0 = off | on |
 | `RestoreWorkspace` | Restore workspace | REG_DWORD | 1 = on, 0 = off | on |
 | `ReuseOpenTabs` | Switch to an already-open tab of the same host instead of opening another | REG_DWORD | 1 = on, 0 = off | on |
 | `Scrollback` | Scrollback | REG_DWORD | 100–1000000 | 10000 |
 | `SessionLogs` | Terminal session logs (profile / on / off) | REG_SZ | `profile` / `on` / `off` | `profile` |
+| `SessionsOnExit` | Exiting with sessions open: ask (save and exit, or exit without saving), save (always reopen them next time) or never | REG_SZ | `ask` / `save` / `never` | `ask` |
+| `TerminalAlertBell` | The terminal bell alerts | REG_DWORD | 1 = on, 0 = off | on |
+| `TerminalAlertDesktop` | Alerts also show as Windows notifications (off: the tab badge and the taskbar flash only) | REG_DWORD | 1 = on, 0 = off | on |
+| `TerminalAlertDrop` | A session that drops by itself alerts | REG_DWORD | 1 = on, 0 = off | on |
+| `TerminalAlertSeconds` | A command running at least this many seconds alerts when it finishes (0 = never) | REG_DWORD | 0–86400 | 30 |
+| `TerminalAlerts` | Alerts from terminals you aren't looking at (a long command finished, a bell, a highlight alert, a dropped session) | REG_DWORD | 1 = on, 0 = off | on |
 | `TerminalAutoReconnect` | Terminal auto reconnect | REG_DWORD | 1 = on, 0 = off | on |
+| `TerminalButtonBar` | The snippet button bar on terminals | REG_DWORD | 1 = on, 0 = off | on |
 | `TerminalConfirmPaste` | Confirm multi-line and risky pastes | REG_DWORD | 1 = on, 0 = off | on |
 | `TerminalFont` | Terminal font | REG_SZ | text (up to 2,048 characters) | empty |
 | `TerminalFontSize` | Terminal font size | REG_DWORD | 6–40 | 14 |
+| `TerminalHighlight` | Colour keywords in terminal output (the highlight packs and the user's own rules) | REG_DWORD | 1 = on, 0 = off | on |
+| `TerminalHighlightPacks` | The highlight packs that are on: errors, warnings, success, network, http | REG_MULTI_SZ | one entry per line (up to 200) | errors, warnings, success, network |
+| `TerminalLinks` | Ctrl+click an IP address, a path or a web link in terminal output for its actions | REG_DWORD | 1 = on, 0 = off | on |
 | `TerminalRightClick` | Terminal right click | REG_SZ | `menu` / `paste` | `menu` |
+| `TmuxAlways` | Always-on tmux: every SSH terminal to a Linux or macOS host starts inside your tmux session (a host or folder can override; never installs tmux) | REG_DWORD | 1 = on, 0 = off | off |
 | `TmuxInstall` | The terminal's tmux button installs tmux when it is missing (asking first) | REG_DWORD | 1 = on, 0 = off | on |
 | `TmuxSession` | The tmux session the terminal's tmux button attaches to or creates | REG_SZ | text (up to 2,048 characters) | `main` |
 
@@ -147,6 +159,7 @@ Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer
 | `LandingPage` | Landing page | REG_SZ | text (up to 2,048 characters) | empty |
 | `NavItemOrder` | The order of the pages inside each sidebar section (page keys; empty = the default order) | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `NavSectionOrder` | Nav section order | REG_MULTI_SZ | one entry per line (up to 200) | empty |
+| `PaletteLearn` | The command palette (Ctrl+Shift+P) puts what is used most at the top | REG_DWORD | 1 = on, 0 = off | on |
 | `PinnedNavItems` | Pinned nav items | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `RememberNavExpansion` | Remember nav expansion | REG_DWORD | 1 = on, 0 = off | off |
 | `RestoreWorkspaceWindows` | Reopen the extra windows where they were (monitor, position, size) when the app starts | REG_DWORD | 1 = on, 0 = off | on |

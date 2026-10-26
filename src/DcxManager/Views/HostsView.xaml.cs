@@ -65,9 +65,10 @@ public partial class HostsView : UserControl, IDisposable
         InitializeComponent();
         InitFolderPane();   // 0.6.2: the folder pane pins or auto-collapses inside this page (HostsView.FolderPane.cs)
         InitSessions();     // 0.6.7: sessions opened from here open inside this page (HostsView.Sessions.cs)
-        AppData.Changed += Reload;
+        AppData.Changed += OnStoreChanged;
         Locks.Changed += OnLocksChanged;   // padlocks redraw (ADR-067)
-        Library.SharedLibraries.Changed += Reload;
+        Library.SharedLibraries.Changed += OnStoreChanged;
+        IsVisibleChanged += (_, _) => { if (IsVisible && _stale) { _stale = false; Reload(); } };
         _view = AppSettings.Current.HostsView;
         foreach (ComboBoxItem i in ViewBox.Items) if ((string)i.Tag == _view) ViewBox.SelectedItem = i;
         MoreSlot.Content = Menus.MoreButton(MoreMenu, style: "SmallButton");
@@ -118,7 +119,17 @@ public partial class HostsView : UserControl, IDisposable
         Reload();
     }
 
-    public void Dispose() { EndSessionArea(); AppData.Changed -= Reload; Locks.Changed -= OnLocksChanged; Library.SharedLibraries.Changed -= Reload; }
+    public void Dispose() { EndSessionArea(); AppData.Changed -= OnStoreChanged; Locks.Changed -= OnLocksChanged; Library.SharedLibraries.Changed -= OnStoreChanged; }
+
+    private bool _stale;
+    /// <summary>A Hosts tab behind other tabs rebuilds when it comes to the front, not on every save (0.6.29 performance
+    /// pass: 10,000 hosts took 2 s per save). While the main window isn't showing (start-up, the self-test) it reloads at once.</summary>
+    private void OnStoreChanged()
+    {
+        if (!IsVisible && DcxManager.MainWindow.Instance is { IsVisible: true }) { _stale = true; return; }
+        _stale = false;
+        Reload();
+    }
 
     /// <summary>Secondary actions — also folded into the list's right-click menu by Menus.MirrorButtons.</summary>
     private IEnumerable<object?> MoreMenu()
@@ -238,7 +249,9 @@ public partial class HostsView : UserControl, IDisposable
             var root = Node("All hosts", "", hosts.Count + Library.SharedLibraries.Hosts.Count, "◈");
             root.IsExpanded = _expanded.Contains("");
             // Removed folders don't keep a remembered state (no stale entries accumulate).
-            _expanded.RemoveWhere(p => p.Length > 0 && !AppData.Current.AllFolders.Contains(p, StringComparer.OrdinalIgnoreCase));
+            var folders = AppData.Current.AllFolders;   // worked out once per build (0.6.29 performance pass)
+            var known = new HashSet<string>(folders, StringComparer.OrdinalIgnoreCase);
+            _expanded.RemoveWhere(p => p.Length > 0 && !known.Contains(p));
             Folders.Items.Add(root);
             var map = new Dictionary<string, TreeViewItem>(StringComparer.OrdinalIgnoreCase) { [""] = root };
             void Cat(string label, string key, string glyph) { var n = Node(label, key, hosts.Count(h => Matches(h, key)), glyph); root.Items.Add(n); map[key] = n; }
@@ -255,12 +268,14 @@ public partial class HostsView : UserControl, IDisposable
                     Cat("(no tags)", "t:", "·");
                     break;
                 case "jump":
-                    foreach (var j in hosts.Where(h => hosts.Any(x => x.JumpHostId == h.Id)).OrderBy(h => h.Display)) Cat("via " + j.Display, "j:" + j.Id, "⇢");
+                    var jumps = hosts.Select(x => x.JumpHostId).Where(id => id != null).ToHashSet();
+                    foreach (var j in hosts.Where(h => jumps.Contains(h.Id)).OrderBy(h => h.Display)) Cat("via " + j.Display, "j:" + j.Id, "⇢");
                     Cat("(direct)", "j:", "·");
                     break;
                 default:
-                    int Count(string path) => hosts.Count(h => AppData.InFolder(AppData.NormalizeFolder(h.Group), path));
-                    foreach (var path in AppData.Current.AllFolders)
+                    var counts = AppData.FolderCounts(hosts);   // one pass, not one pass per folder
+                    int Count(string path) => counts.GetValueOrDefault(path);
+                    foreach (var path in folders)
                     {
                         var parent = path.Contains('/') ? path[..path.LastIndexOf('/')] : "";
                         var name = path.Contains('/') ? path[(path.LastIndexOf('/') + 1)..] : path;
@@ -291,7 +306,7 @@ public partial class HostsView : UserControl, IDisposable
                 Folders.Items.Add(lib); map[libKey] = lib;
             }
             AddHostLeaves(root, map, favs);   // 0.6.7: hosts inside their folders (HostsView.Tree.cs)
-            if (keepHost != null && FindLeaf(Folders.Items, keepHost) is { } leaf) { leaf.IsSelected = true; for (var p = leaf.Parent as TreeViewItem; p != null; p = p.Parent as TreeViewItem) p.IsExpanded = true; }
+            if (keepHost != null && FindLeaf(keepHost) is { } leaf) { leaf.IsSelected = true; for (var p = leaf.Parent as TreeViewItem; p != null; p = p.Parent as TreeViewItem) p.IsExpanded = true; }
             else if (map.TryGetValue(_folder, out var sel)) { sel.IsSelected = true; for (var p = sel.Parent as TreeViewItem; p != null; p = p.Parent as TreeViewItem) p.IsExpanded = true; }
             else if (_folder == "★") favs.IsSelected = true;
             else { _folder = ""; root.IsSelected = true; }
@@ -313,8 +328,8 @@ public partial class HostsView : UserControl, IDisposable
     {
         if (Library.SharedLibraries.Clients.OrderBy(c => c.State.Name).FirstOrDefault() is not { } c) { MainWindow.Instance.Status("No shared library on this PC yet: Shared library → Create or Join."); return; }
         _folder = "lib:" + c.State.Name;
-        BuildTree();
-        Apply();
+        if (_stale) { _stale = false; Reload(); }   // opened from behind other tabs: the rows first
+        else { BuildTree(); Apply(); }
     }
 
     internal string FolderForTest => _folder;
@@ -378,8 +393,12 @@ public partial class HostsView : UserControl, IDisposable
         if (!Restrictions.Check("host.edit")) return;
         if (!list.All(h => Locks.IsOpen("host:" + h.Id))) { AfterUnlock(list, "move", () => MoveHosts(list, folder)); return; }
         foreach (var h in list) h.Group = folder;
+        // 0.6.29 (ADR-105): a folder with defaults offers them to the hosts moved in (what they already follow comes along).
+        bool adopt = Services.FolderDefaults.Describe(folder, FolderDefaultsWindow.Show) is { Length: > 0 } d && !TestMode.Running
+                     && Dialogs.Confirm("Folder defaults", $"“{folder}” has defaults: {d}.\n\nShould the {list.Count} host(s) you moved follow them? Their own values for these fields are replaced.", "Follow the folder's defaults");
+        if (adopt) Services.FolderDefaults.Adopt(list, Services.FolderDefaults.Fields);
         AppData.Save();
-        AuditLog.Write("you", folder, $"moved {list.Count} host(s) into folder");
+        AuditLog.Write("you", folder, $"moved {list.Count} host(s) into folder" + (adopt ? " (they follow its defaults)" : ""));
         MainWindow.Instance.Status($"Moved {list.Count} host(s) to {folder}");
     }
 
@@ -411,6 +430,7 @@ public partial class HostsView : UserControl, IDisposable
         string Re(string g) => AppData.InFolder(g, path) ? target + g[path.Length..] : g;
         foreach (var h in AppData.Current.Hosts.Where(h => !h.IsShared)) h.Group = Re(AppData.NormalizeFolder(h.Group));
         AppData.Current.Folders = AppData.Current.Folders.Select(f => Re(AppData.NormalizeFolder(f))).Append(target).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        Services.FolderDefaults.Renamed(path, target);   // 0.6.29: its defaults move with it
         if (_expanded.Remove(path)) _expanded.Add(target);
         _folder = target;
         AppData.Save();
@@ -428,6 +448,7 @@ public partial class HostsView : UserControl, IDisposable
         if (!Dialogs.Confirm("Delete folder", $"Delete the folder “{path}” and its sub-folders?" + (inside.Count > 0 ? $"\n\nIts {inside.Count} host(s) are kept and moved to “{parent}”." : ""), "Delete folder", danger: true)) return;
         foreach (var h in inside) h.Group = parent;
         AppData.Current.Folders.RemoveAll(f => AppData.InFolder(AppData.NormalizeFolder(f), path));
+        Services.FolderDefaults.Deleted(path);
         _folder = parent == "General" ? "" : parent;
         AppData.Save();
         AuditLog.Write("you", path, "folder deleted", $"{inside.Count} host(s) moved to {parent}");
@@ -460,6 +481,7 @@ public partial class HostsView : UserControl, IDisposable
             {
                 yield return Menus.Item("Rename / move…", () => RenameFolder(folder));
                 yield return Menus.Item("Delete folder (keeps hosts)…", () => DeleteFolder(folder));
+                yield return Menus.Item("⚙ Folder defaults…", () => FolderDefaultsWindow.Edit(folder), tip: Services.FolderDefaults.Describe(folder, FolderDefaultsWindow.Show) is { Length: > 0 } d ? "Set here or above: " + d : "User, credential, jump host, environment, terminal profile, VPN and tmux for the hosts in this folder and its sub-folders");
                 // 0.5.1 (ADR-067): a folder lock guards every host in it and its sub-folders.
                 yield return LockUi.Menu("folder:" + folder, "folder " + folder);
             }

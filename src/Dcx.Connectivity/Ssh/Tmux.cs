@@ -54,9 +54,9 @@ public static class Tmux
 
     /// <summary>The line typed into the terminal: (install,) then attach to / create the session — with your config when
     /// there is one (reloaded into a tmux server that is already running).</summary>
-    public static string AttachLine(bool install, bool withConfig)
+    public static string AttachLine(bool install, bool withConfig, string? session = null)
     {
-        var name = SessionName;
+        var name = ValidName(session) ? session! : SessionName;
         var attach = withConfig
             ? $"tmux source-file \"{ConfigPath}\" 2>/dev/null; tmux -f \"{ConfigPath}\" new-session -A -s {name}"
             : $"tmux new-session -A -s {name}";

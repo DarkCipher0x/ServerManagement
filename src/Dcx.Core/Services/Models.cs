@@ -60,6 +60,11 @@ public sealed class HostEntry
     public string? TerminalProfileId { get; set; }
     /// <summary>"Connect through": the VPN profile brought up before connecting (0.3.0 §24); null = none.</summary>
     public string? VpnProfileId { get; set; }
+    /// <summary>Always-on tmux for this host's SSH terminals (0.6.29): "" = Settings → Terminal → tmux decides, "on" or "off".</summary>
+    public string Tmux { get; set; } = "";
+    /// <summary>The fields that follow the host's folder defaults (0.6.29, ADR-105): <see cref="FolderDefaults.Fields"/>. A field
+    /// not listed is the host's own; one listed is rewritten whenever its folder's default changes.</summary>
+    public List<string> Inherits { get; set; } = new();
 
     /// <summary>Files, Manage and Commander need an SSH host (not RDP or Telnet).</summary>
     [JsonIgnore] public bool IsSsh => Protocol is "ssh" or "";
@@ -79,7 +84,7 @@ public sealed class HostEntry
     [JsonIgnore] public bool IsShared => SharedFrom != null;
     [JsonIgnore] public string Display => (SharedFrom != null ? "⇄ " : "") + (string.IsNullOrWhiteSpace(Name) ? $"{Username}@{Address}" : Name);
     [JsonIgnore] public string Endpoint => Port == 22 ? $"{Username}@{Address}" : $"{Username}@{Address}:{Port}";
-    public HostEntry Clone() { var c = (HostEntry)MemberwiseClone(); c.Rdp = Rdp.Clone(); c.Vnc = Vnc.Clone(); return c; }
+    public HostEntry Clone() { var c = (HostEntry)MemberwiseClone(); c.Rdp = Rdp.Clone(); c.Vnc = Vnc.Clone(); c.Inherits = new(Inherits ?? new()); return c; }
 }
 
 /// <summary>VNC options of a host (0.5.1 #19, ADR-069). The password (or macOS account) is the host's vault credential.</summary>
@@ -123,6 +128,13 @@ public sealed class RdpSettings
     /// <summary>0 = play on this PC, 1 = on the server, 2 = off.</summary>
     public int Audio { get; set; }
     public string Gateway { get; set; } = "";
+    /// <summary>"direct" (default) or "ssh" (0.6.29): through an SSH tunnel to a saved SSH host (a bastion, or the Windows
+    /// server's own OpenSSH); it opens on a random 127.0.0.1 port and closes with the tab. No RD Gateway needed.</summary>
+    public string Through { get; set; } = "direct";
+    /// <summary>The saved SSH host the tunnel goes through; null = a saved SSH host with the same address.</summary>
+    public string? SshHostId { get; set; }
+    /// <summary>The Remote Desktop server as that SSH host sees it; empty = this host's address.</summary>
+    public string TunnelTarget { get; set; } = "";
     /// <summary>Client side of "keepalive": reconnect automatically when the link drops.</summary>
     public bool AutoReconnect { get; set; } = true;
     public int ReconnectRetries { get; set; } = 20;
@@ -204,6 +216,11 @@ public sealed class Snippet
     public string Command { get; set; } = "";
     public bool Sudo { get; set; }
     public string Description { get; set; } = "";
+    /// <summary>A button on the terminal's snippet bar (0.6.29, ADR-104).</summary>
+    public bool Bar { get; set; }
+    /// <summary>Where the button shows (comma separated, any one matches): host:&lt;name&gt;, folder:&lt;path&gt; (with its
+    /// subfolders), tag:&lt;tag&gt;, env:&lt;ENVIRONMENT&gt;, shell:posix|powershell, local; empty = every terminal.</summary>
+    public string Scope { get; set; } = "";
 }
 
 public sealed class TunnelDef : INotifyPropertyChanged

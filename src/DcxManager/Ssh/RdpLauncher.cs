@@ -17,6 +17,8 @@ public static class RdpLauncher
 {
     public static void Launch(HostEntry h)
     {
+        // 0.6.29: through SSH — a forward on a random 127.0.0.1 port, open while mstsc runs (an RD Gateway wins).
+        if (Rdp.RdpTunnel.Wanted(h) && h.Rdp.Gateway.Trim().Length == 0) { _ = LaunchThroughSshAsync(h); return; }
         // Offline mode (ADR-016): the server and any RD Gateway are checked before mstsc starts.
         if (Offline.On)
         {
@@ -27,7 +29,25 @@ public static class RdpLauncher
         LaunchNow(h);
     }
 
-    private static void LaunchNow(HostEntry h)
+    private static async Task LaunchThroughSshAsync(HostEntry h)
+    {
+        var key = Rdp.RdpTunnel.NewKey(h);
+        try
+        {
+            var (port, route) = await Rdp.RdpTunnel.OpenAsync(h, key);
+            var via = h.Clone();
+            via.Address = "127.0.0.1"; via.Port = port; via.Rdp.Through = "direct";
+            Process? p = null;
+            LaunchNow(via, started => p = started);
+            AuditLog.Write("you", h.Display, "Remote Desktop (mstsc) " + route);
+            if (p == null) { Rdp.RdpTunnel.Close(key); return; }
+            await p.WaitForExitAsync();
+        }
+        catch (Exception ex) { Ui.Dialogs.Error("Remote Desktop", "Couldn't open the SSH tunnel: " + ex.Message, explain: false); }
+        finally { Rdp.RdpTunnel.Close(key); }
+    }
+
+    private static void LaunchNow(HostEntry h, Action<Process?>? started = null)
     {
         try
         {
@@ -42,9 +62,10 @@ public static class RdpLauncher
             if (SshConnector.CredentialFor(h) is { Kind: CredentialKind.Password, Secret.Length: > 0 } c)
                 wroteCred = CredWriteDomain(target, user, c.Secret);
 
-            Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "mstsc.exe"), $"\"{file}\"") { UseShellExecute = false });
+            var proc = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "mstsc.exe"), $"\"{file}\"") { UseShellExecute = false });
+            started?.Invoke(proc);
             h.LastConnected = DateTime.Now;
-            if (!h.IsAdHoc) { try { AppData.Save(); } catch { } }
+            if (!h.IsAdHoc) { try { AppData.SaveSoon(); } catch { } }
             AuditLog.Write("you", h.Display, "opened Remote Desktop", h.Port == 3389 ? h.Address : $"{h.Address}:{h.Port}");
             Ui.Window.Status($"Remote Desktop → {h.Display}{(wroteCred ? " (vault password handed to Windows for this sign-in)" : "")}");
 

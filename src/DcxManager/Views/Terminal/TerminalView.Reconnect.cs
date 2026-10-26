@@ -32,6 +32,8 @@ public sealed partial class TerminalView
         Teardown();
         if (!wasLive) return;
         WriteLocal(ResetInputModes);
+        _cmdStarted = null;
+        if (!_userClosed) Alert("drop", $"Session dropped · {_target.Title}", $"{_target.Endpoint}: {reason}.");   // 0.6.29
         if (_target.Has(SessionCaps.AutoReconnect) && AppSettings.Current.TerminalAutoReconnect && !_userClosed)
         {
             WriteLocal($"\r\n\x1b[33m⟫ {reason}.\x1b[0m\r\n");

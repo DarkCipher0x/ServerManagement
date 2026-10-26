@@ -28,6 +28,8 @@ public sealed class SnippetsView : UserControl, IDisposable
     private readonly ListBox _hosts = new() { SelectionMode = SelectionMode.Multiple };
     private readonly TextBox _command = new() { AcceptsReturn = true, Height = 90, TextWrapping = TextWrapping.Wrap, Padding = new Thickness(6, 4, 6, 4) };
     private readonly CheckBox _sudo = new() { Content = "run with sudo", Margin = new Thickness(0, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center };
+    private readonly CheckBox _bar = new() { Content = "Show on the terminal button bar", Margin = new Thickness(0, 6, 0, 2), ToolTip = "A button above every terminal that fits the scope below (Settings → Terminal → Snippet button bar)" };
+    private readonly TextBox _scope = new() { Padding = new Thickness(6, 3, 6, 3), ToolTip = "Where the button shows, any one matches: host:<name>, folder:<path>, tag:<tag>, env:PRODUCTION, shell:posix|powershell, local. Empty = every terminal." };
     private readonly ListView _results = new();
     private readonly TextBox _output = new();
     private readonly ObservableCollection<RunResult> _runs = new();
@@ -46,15 +48,23 @@ public sealed class SnippetsView : UserControl, IDisposable
         LB("Update", (_, _) => UpdateSel());
         LB("Delete", (_, _) => DeleteSel());
         var lt = new TextBlock { Text = "SNIPPETS", Style = (Style)FindResource("Label") };
-        DockPanel.SetDock(lt, Dock.Top); DockPanel.SetDock(lbar, Dock.Bottom);
-        left.Children.Add(lt); left.Children.Add(lbar); left.Children.Add(_snippets);
-        _snippets.SelectionChanged += (_, _) => { if (_snippets.SelectedItem is Snippet s) { _command.Text = s.Command; _sudo.IsChecked = s.Sudo; } };
+        // 0.6.29 (ADR-104): the terminal button bar and where it shows.
+        var barBox = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+        barBox.Children.Add(_bar);
+        barBox.Children.Add(new TextBlock { Text = "Bar scope (empty = every terminal)", Style = (Style)FindResource("Label"), Margin = new Thickness(0, 4, 0, 2) });
+        barBox.Children.Add(_scope);
+        var vars = new TextBlock { Text = "Variables: {host} {address} {user} {port} {ask:Label=default} {pick:Label|command}", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
+        vars.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        barBox.Children.Add(vars);
+        DockPanel.SetDock(lt, Dock.Top); DockPanel.SetDock(lbar, Dock.Bottom); DockPanel.SetDock(barBox, Dock.Bottom);
+        left.Children.Add(lt); left.Children.Add(lbar); left.Children.Add(barBox); left.Children.Add(_snippets);
+        _snippets.SelectionChanged += (_, _) => { if (_snippets.SelectedItem is Snippet s) { _command.Text = s.Command; _sudo.IsChecked = s.Sudo; _bar.IsChecked = s.Bar; _scope.Text = s.Scope; } };
         Menus.ForList(_snippets, left, () => _snippets.SelectedItem is not Snippet s ? Array.Empty<object?>() : new object?[]
         {
             Menus.Item("▶ Run on selected hosts", () => _ = RunAsync(), enabled: _hosts.SelectedItems.Count > 0),
             Menus.Sub("⌨ Send to an open terminal",
                 MainWindow.Instance.Panes.AllTabs.Select(t => t.Content).OfType<TerminalView>().Where(t => t.IsConnected)
-                    .Select(t => (object?)Menus.Item(t.Host?.Display ?? "terminal", () => t.SendRaw((s.Sudo && t.Host?.Username != "root" ? "sudo " : "") + s.Command + "\r"))).ToArray()),
+                    .Select(t => (object?)Menus.Item(t.Host?.Display ?? "terminal", () => _ = t.SendSnippetAsync(s, new[] { t }))).ToArray()),
             Menus.Sep(),
             Menus.Item("Copy command", () => Menus.Clip(s.Command)),
             Menus.Item("Rename…", () => { if (Dialogs.Prompt("Rename snippet", "Name:", s.Name) is { Length: > 0 } n) { s.Name = n; AppData.Save(); } }),
@@ -123,11 +133,22 @@ public sealed class SnippetsView : UserControl, IDisposable
         root.Children.Add(title); root.Children.Add(body);
         Content = root;
 
-        AppData.Changed += Reload;
+        AppData.Changed += OnStoreChanged;
+        IsVisibleChanged += (_, _) => { if (IsVisible && _stale) { _stale = false; Reload(); } };
         Reload();
     }
 
-    public void Dispose() { AppData.Changed -= Reload; _cts?.Cancel(); }
+    public void Dispose() { AppData.Changed -= OnStoreChanged; _cts?.Cancel(); }
+
+    private bool _stale;
+    /// <summary>Behind other tabs the page reloads when it comes back, not on every save (0.6.29 performance pass: one list
+    /// item per host each time). While the main window isn't showing (the self-test) it reloads at once.</summary>
+    private void OnStoreChanged()
+    {
+        if (!IsVisible && DcxManager.MainWindow.Instance is { IsVisible: true }) { _stale = true; return; }
+        _stale = false;
+        Reload();
+    }
 
     private static string Script(Snippet s) =>
         $"#!/usr/bin/env bash\n# {s.Name}{(s.Description.Length > 0 ? " — " + s.Description : "")}\n# exported from DarkCipher ServerManagement {DateTime.Now:yyyy-MM-dd}\nset -euo pipefail\n\n{(s.Sudo ? "sudo " : "")}{s.Command}\n";
@@ -155,8 +176,9 @@ public sealed class SnippetsView : UserControl, IDisposable
     {
         if (!Restrictions.Check("snippet.edit")) return;
         if (_command.Text.Trim().Length == 0) return;
+        if (SnippetVariables.CheckScope(_scope.Text) is { } bad) { Dialogs.Error("Snippet scope", bad); return; }
         if (Dialogs.Prompt("Save snippet", "Name:") is not { Length: > 0 } name) return;
-        AppData.Current.Snippets.Add(new Snippet { Name = name, Command = _command.Text.Trim(), Sudo = _sudo.IsChecked == true });
+        AppData.Current.Snippets.Add(new Snippet { Name = name, Command = _command.Text.Trim(), Sudo = _sudo.IsChecked == true, Bar = _bar.IsChecked == true, Scope = _scope.Text.Trim() });
         AppData.Save();
     }
 
@@ -164,7 +186,8 @@ public sealed class SnippetsView : UserControl, IDisposable
     {
         if (!Restrictions.Check("snippet.edit")) return;
         if (_snippets.SelectedItem is not Snippet s) return;
-        s.Command = _command.Text.Trim(); s.Sudo = _sudo.IsChecked == true;
+        if (SnippetVariables.CheckScope(_scope.Text) is { } bad) { Dialogs.Error("Snippet scope", bad); return; }
+        s.Command = _command.Text.Trim(); s.Sudo = _sudo.IsChecked == true; s.Bar = _bar.IsChecked == true; s.Scope = _scope.Text.Trim();
         AppData.Save();
     }
 
@@ -182,6 +205,14 @@ public sealed class SnippetsView : UserControl, IDisposable
         var cmd = _command.Text.Trim();
         if (hosts.Count == 0 || cmd.Length == 0) { Dialogs.Info("Run", "Choose at least one host and enter a command."); return; }
         bool sudo = _sudo.IsChecked == true;
+        // 0.6.29: variables. Questions once; {host}, {address}… per host, quoted for a POSIX shell.
+        var answers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var q in SnippetVariables.Questions(cmd))
+        {
+            if (Dialogs.Prompt(q.Label, q.PickCommand != null ? $"{q.Label} (the same for every host):" : $"{q.Label}:", q.Default) is not { } a) return;
+            answers[q.Label] = a;
+        }
+        string For(HostEntry h) => SnippetVariables.HasVariables(cmd) ? SnippetVariables.Expand(cmd, new(h, "posix", h.Environment, false), q => answers.GetValueOrDefault(q.Label, "")) ?? cmd : cmd;
         // Grouped by environment; any PRODUCTION host means typing PRODUCTION (ADR-017).
         if (!Envs.ConfirmMany(hosts, "Run on hosts", $"Run on {hosts.Count} host(s){(sudo ? " as root (sudo)" : "")}:\n\n{cmd}", "Run", danger: sudo)) return;
         _runs.Clear();
@@ -196,7 +227,7 @@ public sealed class SnippetsView : UserControl, IDisposable
             try
             {
                 r.State = "running…";
-                var res = await SshPool.RunAsync(r.Host, cmd, sudo, ct, TimeSpan.FromMinutes(10));
+                var res = await SshPool.RunAsync(r.Host, For(r.Host), sudo, ct, TimeSpan.FromMinutes(10));
                 r.Output = res.Combined;
                 r.State = res.Ok ? "✓ ok" : $"✕ exit {res.ExitCode}";
                 AuditLog.Write("you", r.Host.Display, "multi-run: " + (sudo ? "sudo " : "") + cmd, res.Ok ? "ok" : $"exit {res.ExitCode}");

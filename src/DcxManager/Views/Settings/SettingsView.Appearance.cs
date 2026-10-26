@@ -435,6 +435,11 @@ public sealed partial class SettingsView
                 if (!v) _s.ExpandedNavSections = new();
                 else MainWindow.Instance?.SaveNavExpansion();   // what is expanded now is what the next start shows
             }),
+            Check("The command palette (Ctrl+Shift+P) puts what I use most at the top (off: forgets what it learned)", _s.PaletteLearn, v =>
+            {
+                _s.PaletteLearn = v;
+                if (!v) _s.PaletteRecent = new();
+            }),
             Row(Btn("Unpin every Cloud providers screen", () => { _s.CloudPinned.Clear(); Save(); CloudWorkspaceView.Current?.Refresh(); MainWindow.Instance?.Status("Cloud provider pins cleared."); })));
     }
 

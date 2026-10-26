@@ -117,7 +117,7 @@ public static class SshConnector
         if (!host.IsAdHoc)
         {
             host.LastConnected = DateTime.Now;
-            try { AppData.Save(); } catch { }
+            try { AppData.SaveSoon(); } catch { }   // 0.6.29: not an encrypted write + every screen's reload on the connect thread
         }
         var s = new SshSession<T> { Client = client, Host = host };
         s.Chain.AddRange(chain);

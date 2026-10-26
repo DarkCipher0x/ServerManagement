@@ -16,7 +16,7 @@ public partial class MainWindow
     private Popup? _quickPopup;
     private ListBox? _quickList;
 
-    private void FocusQuickConnect() { QuickConnect.Focus(); QuickConnect.SelectAll(); }
+    internal void FocusQuickConnect() { QuickConnect.Focus(); QuickConnect.SelectAll(); }
 
     /// <summary>The chosen protocol (self-test reads it).</summary>
     internal string QuickProto => _quickProto;

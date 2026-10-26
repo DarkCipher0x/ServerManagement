@@ -62,7 +62,8 @@ The guide tool (`tools\guide\Guide.csproj`) uses `Markdig` 0.37.0.
 | `UseWindowsForms` | true | only for the embedded Remote Desktop ActiveX (`AxHost`, ADR-013); the implicit `System.Windows.Forms` and `System.Drawing` usings are removed so WinForms types never clash with WPF |
 | `RuntimeIdentifier` / `PlatformTarget` | `win-x64` / `x64` | |
 | `AssemblyName` / `RootNamespace` | `DcxServerManager` / `DcxManager` | the exe is `DcxServerManager.exe` |
-| `SelfContained`, `PublishSingleFile`, `IncludeNativeLibrariesForSelfExtract`, `EnableCompressionInSingleFile` | true | one self-contained exe; no .NET install on the target PC |
+| `SelfContained`, `PublishSingleFile`, `IncludeNativeLibrariesForSelfExtract` | true | one self-contained exe; no .NET install on the target PC |
+| `EnableCompressionInSingleFile` | false | 0.6.29: start-up doesn't decompress 80 MB first (windowless start 452 → 288 ms; installed 195 MB, download about the same as the installer compresses it). ReadyToRun measured 242 ms but adds ~36 MB to the download, so it's off |
 | `DebugType` | `none` | **no `.pdb`** in the output (build.ps1 also refuses one) |
 | `PathMap` | `$(MSBuildProjectDirectory)=/_/` | keeps local build paths (the user name) out of the binary |
 | `SatelliteResourceLanguages` | `en` | no localisation satellites |

@@ -23,6 +23,7 @@ public partial class HostsView
     {
         get
         {
+            Leaves.MakeAll();
             var seen = new List<HostEntry>();
             void Walk(ItemCollection items) { foreach (var o in items) if (o is TreeViewItem { Visibility: Visibility.Visible } i) { if (i.Tag is HostEntry h && seen.All(x => x.Id != h.Id)) seen.Add(h); Walk(i.Items); } }
             Walk(Folders.Items);
@@ -31,7 +32,11 @@ public partial class HostsView
     }
     internal string TreeFilterText { get => TreeFilter.Text; set => TreeFilter.Text = value; }
     internal void RebuildForTest() => Reload();
-    internal TreeViewItem? TreeLeafForTest(string id) => FindLeaf(Folders.Items, id);
+    /// <summary>Self-test (0.6.29 scale budget): types into the list filter and returns how many rows show.</summary>
+    internal int FilterListForTest(string q) { Search.Text = q; return (List.ItemsSource as System.Collections.ICollection)?.Count ?? -1; }
+    internal TreeViewItem? TreeLeafForTest(string id) => FindLeaf(id);
+    /// <summary>Self-test: host nodes made so far (closed folders make theirs when opened).</summary>
+    internal int TreeLeafCountForTest() { int n = 0; void W(ItemCollection items) { foreach (var o in items) if (o is TreeViewItem i) { if (i.Tag is HostEntry) n++; W(i.Items); } } W(Folders.Items); return n; }
     internal string ParentKeyForTest(TreeViewItem item) => ParentKey(item);
 
     private void InitTree()
@@ -49,23 +54,25 @@ public partial class HostsView
         bool filtering = q.Length > 0;
         bool Hit(HostEntry h) => !filtering || $"{h.Display} {h.Address} {h.Username} {h.Tags} {h.Group}".Contains(q, StringComparison.OrdinalIgnoreCase);
         var local = AppData.Current.Hosts.Where(h => !h.IsShared && Hit(h)).OrderBy(h => h.Display, StringComparer.OrdinalIgnoreCase).ToList();
+        Leaves.Clear();
+        // A closed folder lock shows nothing inside it; each distinct folder is checked once.
+        var hidden = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        string FolderOf(HostEntry h) => AppData.NormalizeFolder(h.Group);
+        bool Hidden(string folder) => hidden.TryGetValue(folder, out var v) ? v : hidden[folder] = HiddenFolder(folder);
+        var shown = local.Where(h => !Hidden(FolderOf(h))).ToList();
         if (_view == "folders")
         {
-            foreach (var h in local)
-            {
-                var folder = AppData.NormalizeFolder(h.Group);
-                if (HiddenFolder(folder)) continue;   // a closed folder lock shows nothing inside it
-                (map.GetValueOrDefault(folder) ?? root).Items.Add(HostLeaf(h));
-            }
+            foreach (var g in shown.GroupBy(FolderOf, StringComparer.OrdinalIgnoreCase))
+                AddLeaves(map.GetValueOrDefault(g.Key) ?? root, g.ToList(), filtering);
         }
         else
             foreach (var (key, node) in map)
                 if (key.Length > 0 && !key.StartsWith("lib:"))
-                    foreach (var h in local.Where(h => Matches(h, key) && !HiddenFolder(AppData.NormalizeFolder(h.Group)))) node.Items.Add(HostLeaf(h));
-        foreach (var h in local.Where(h => h.Favorite && !HiddenFolder(AppData.NormalizeFolder(h.Group)))) favs.Items.Add(HostLeaf(h));
+                    AddLeaves(node, shown.Where(h => Matches(h, key)).ToList(), filtering);
+        AddLeaves(favs, shown.Where(h => h.Favorite).ToList(), filtering);
         // Shared library collections hold their hosts too (read as shared).
         foreach (var (key, node) in map.Where(kv => kv.Key.StartsWith("lib:") && kv.Key.Contains(" / ")))
-            foreach (var h in Library.SharedLibraries.Hosts.Where(h => Matches(h, key) && Hit(h)).OrderBy(h => h.Display, StringComparer.OrdinalIgnoreCase)) node.Items.Add(HostLeaf(h));
+            AddLeaves(node, Library.SharedLibraries.Hosts.Where(h => Matches(h, key) && Hit(h)).OrderBy(h => h.Display, StringComparer.OrdinalIgnoreCase).ToList(), filtering);
         // Closed folder locks: an "unlock to see" child so they can still be opened.
         foreach (var (path, node) in map)
             if (_view == "folders" && path.Length > 0 && HiddenFolder(path) && node.Items.Count == 0)
@@ -84,17 +91,13 @@ public partial class HostsView
         }
     }
 
-    /// <summary>The first host node of <paramref name="id"/> (keeps the selection across a rebuild).</summary>
-    private static TreeViewItem? FindLeaf(ItemCollection items, string id)
-    {
-        foreach (var o in items)
-            if (o is TreeViewItem i)
-            {
-                if (i.Tag is HostEntry h && h.Id == id) return i;
-                if (FindLeaf(i.Items, id) is { } found) return found;
-            }
-        return null;
-    }
+    // Host nodes are made when their folder opens (0.6.29 performance pass, LazyTreeLeaves).
+    private LazyTreeLeaves? _leavesLazy;
+    private LazyTreeLeaves Leaves => _leavesLazy ??= new LazyTreeLeaves(HostLeaf);
+    private void AddLeaves(TreeViewItem node, List<HostEntry> hosts, bool now) => Leaves.Add(node, hosts, now);
+
+    /// <summary>The first host node of <paramref name="id"/> (keeps the selection across a rebuild), made if need be.</summary>
+    private TreeViewItem? FindLeaf(string id) => Leaves.Find(Folders.Items, id);
 
     /// <summary>Expanding a folder behind a closed lock asks to unlock it first, then shows its hosts.</summary>
     private void UnlockOnExpand(TreeViewItem item, string path)

@@ -202,6 +202,9 @@ public sealed class RdpView : UserControl, IHostView, IDisposable
                 RdpLauncher.Launch(_host);
                 return;
             }
+            // 0.6.29: through SSH — the forward is opened (or checked) first, then this runs again with its port.
+            if (RdpTunnel.Wanted(_host) && !_tunnelReady) { _ = OpenTunnelThenConnectAsync(); return; }
+            _tunnelReady = false;
             // 0.5.0 (ADR-062): single sign-on with the Windows account — no password from the vault or typed.
             var signOn = AppSettings.Current.SsoRdpAllowed ? r.SignOn : "password";
             bool sso = signOn is "windows" or "rcg" or "restricted";
@@ -215,14 +218,15 @@ public sealed class RdpView : UserControl, IHostView, IDisposable
             dynamic o = _ax.Ocx;
             var fit = Fit;
             var (w, h) = fit == "fixed" ? (Math.Clamp(r.Width, 640, 8192), Math.Clamp(r.Height, 480, 8192)) : PanePixels();
-            Set(() => o.Server = _host.Address, "Server");
+            bool tunnelled = RdpTunnel.Wanted(_host) && _tunnelPort > 0;
+            Set(() => o.Server = tunnelled ? "127.0.0.1" : _host.Address, "Server");
             Set(() => o.UserName = _host.Username, "UserName");
             Set(() => o.Domain = r.Domain.Trim(), "Domain");
             Set(() => o.DesktopWidth = w, "DesktopWidth");
             Set(() => o.DesktopHeight = h, "DesktopHeight");
             Set(() => o.ColorDepth = 32, "ColorDepth");
             dynamic a = o.AdvancedSettings2;
-            Set(() => a.RDPPort = _host.Port, "RDPPort");
+            Set(() => a.RDPPort = tunnelled ? _tunnelPort : _host.Port, "RDPPort");
             Set(() => a.EnableCredSspSupport = true, "EnableCredSspSupport");
             Set(() => o.AdvancedSettings5.AuthenticationLevel = 2, "AuthenticationLevel");
             Set(() => a.RedirectClipboard = r.Clipboard, "RedirectClipboard");
@@ -265,7 +269,7 @@ public sealed class RdpView : UserControl, IHostView, IDisposable
                 if (cred == null) _password = null;   // a typed password is used once; reconnect asks again
             }
             State = "connecting";
-            SetStatus($"{Endpoint} · connecting as {_host.Username}…");
+            SetStatus($"{Endpoint} · connecting as {_host.Username}{(tunnelled ? " " + _route : "")}…");
             o.Connect();
         }
         catch (Exception ex)
@@ -273,6 +277,36 @@ public sealed class RdpView : UserControl, IHostView, IDisposable
             State = "failed";
             App.Log("RDP connect", ex);
             SetStatus("✕ " + ex.Message);
+        }
+    }
+
+    // ---- through SSH (0.6.29) ------------------------------------------------------------------------------------------
+
+    private string? _tunnelKey;
+    private int _tunnelPort;
+    private bool _tunnelReady;
+    private string _route = "";
+    /// <summary>Self-test: the local port of the SSH forward (0 = direct, or not open).</summary>
+    internal int TunnelPort => _tunnelPort;
+
+    private async Task OpenTunnelThenConnectAsync()
+    {
+        try
+        {
+            SetStatus($"{Endpoint} · opening the SSH tunnel…");
+            _tunnelKey ??= RdpTunnel.NewKey(_host);
+            (_tunnelPort, _route) = await RdpTunnel.OpenAsync(_host, _tunnelKey);
+            if (_disposed) { RdpTunnel.Close(_tunnelKey); return; }
+            _tunnelReady = true;
+            ConnectNow();
+        }
+        catch (Exception ex)
+        {
+            State = "failed";
+            _tunnelPort = 0;
+            SetStatus($"✕ {Endpoint} · couldn't open the SSH tunnel: {ex.Message}");
+            ShowIdle("The SSH tunnel didn't open", ex.Message + "\n\nThe host's Remote Desktop settings (Connect through) are in its editor.");
+            if (ex is not InvalidOperationException) App.Log("RDP tunnel", ex);
         }
     }
 
@@ -351,7 +385,7 @@ public sealed class RdpView : UserControl, IHostView, IDisposable
                 State = "signed in"; _loggedIn = true;
                 SetStatus($"● {Endpoint} · signed in as {_host.Username}");
                 _host.LastConnected = DateTime.Now;
-                if (!_host.IsAdHoc) { try { AppData.Save(); } catch { } }
+                if (!_host.IsAdHoc) { try { AppData.SaveSoon(); } catch { } }
                 AuditLog.Write("you", _host.Display, "opened Remote Desktop (embedded)", Endpoint);
                 Incidents.IncidentStore.RecordConnection(_host, "Remote Desktop");
                 if (Fit == "resize") { _resize.Stop(); _resize.Start(); }
@@ -385,6 +419,7 @@ public sealed class RdpView : UserControl, IHostView, IDisposable
         try { if (_connected) _ax.Ocx.Disconnect(); } catch { }
         _disposed = true;
         _password = null;
+        RdpTunnel.Close(_tunnelKey);   // 0.6.29: the SSH forward closes with the tab
         try { _ax.Event -= OnRdpEvent; _wfh.Child = null; _ax.Dispose(); _wfh.Dispose(); } catch (Exception ex) { App.Log("RDP dispose", ex); }
     }
 }

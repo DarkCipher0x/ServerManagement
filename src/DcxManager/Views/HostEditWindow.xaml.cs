@@ -28,6 +28,8 @@ public partial class HostEditWindow : Window
         ThemeManager.TrackScale(this, Root);
         _adHoc = adHoc;
         _host = host?.Clone() ?? new HostEntry { Username = AppSettings.Current.DefaultUsername };
+        // 0.6.29 (ADR-105): a new host in a folder with defaults starts with them (and follows them while they stay).
+        if (!adHoc && (host == null || seedIsNew) && FolderDefaults.All.Count > 0) FolderDefaults.Adopt(new[] { _host }, FolderDefaults.Fields);
 
         Heading.Text = adHoc ? "Ad-hoc connection" : host == null || seedIsNew ? "Add host" : "Edit host";
         KeepAliveBox.ItemsSource = new[] { "0", "15", "30", "60", "120" };
@@ -103,11 +105,49 @@ public partial class HostEditWindow : Window
         VpnBox.ItemsSource = vpns;
         VpnBox.SelectedItem = vpns.FirstOrDefault(v => v.Id != null && v.Id == _host.VpnProfileId) ?? vpns[0];
 
+        // 0.6.29: always-on tmux and Remote Desktop through SSH.
+        TmuxBox.ItemsSource = new[] { $"(as Settings → Terminal → tmux say: {(AppSettings.Current.TmuxAlways ? "always" : "off")})", "Always start inside tmux", "Never" };
+        TmuxBox.SelectedIndex = _host.Tmux switch { "on" => 1, "off" => 2, _ => 0 };
+        var rdpThrough = new List<HostChoice> { new("(direct)", null), new("Through SSH: a saved SSH host with the same address", null) };
+        rdpThrough.AddRange(AppData.Current.Hosts.Where(x => x.IsSsh && !x.IsAdHoc && x.Id != _host.Id).OrderBy(x => x.Display).Select(x => new HostChoice("Through SSH: " + x.Display, x)));
+        RdpThroughBox.ItemsSource = rdpThrough;
+        RdpThroughBox.SelectedItem = r.Through != "ssh" ? rdpThrough[0] : rdpThrough.FirstOrDefault(c => c.Host != null && c.Host.Id == r.SshHostId) ?? rdpThrough[1];
+        RdpTunnelTarget.Text = r.TunnelTarget;
+        GroupBox.SelectionChanged += (_, _) => Dispatcher.BeginInvoke(ShowFolderDefaults);
+        GroupBox.LostFocus += (_, _) => ShowFolderDefaults();
+        ShowFolderDefaults();
+
         (_host.Auth switch { AuthMethod.Password => AuthPassword, AuthMethod.KeyboardInteractive => AuthInteractive, _ => AuthKey }).IsChecked = true;
         Loaded += (_, _) => (AddressBox.Text.Length == 0 ? AddressBox : NameBox.Text.Length == 0 && !adHoc ? NameBox : (Control)OkButton).Focus();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e) => ThemeManager.ApplyTitleBar(this);
+
+    private void OnRdpThroughChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (RdpTunnelPanel != null) RdpTunnelPanel.Visibility = RdpThroughBox.SelectedIndex > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>The folder's defaults (0.6.29, ADR-105): what this host's folder (or one above it) sets, and that a field
+    /// follows it while it shows the folder's value.</summary>
+    private void ShowFolderDefaults()
+    {
+        if (FolderDefaultsNote == null || _adHoc) return;
+        var group = string.IsNullOrWhiteSpace(GroupBox.Text) ? "General" : GroupBox.Text.Trim();
+        var d = FolderDefaults.Describe(group, FolderDefaultsWindow.Show);
+        FolderDefaultsNote.Visibility = d.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var follows = _host.Inherits.Count > 0 && AppData.NormalizeFolder(_host.Group).Equals(AppData.NormalizeFolder(group), StringComparison.OrdinalIgnoreCase)
+            ? " This host follows: " + string.Join(", ", _host.Inherits.Select(FolderDefaults.Title)) + "." : "";
+        FolderDefaultsText.Text = $"Folder defaults: {d}.{follows} A field follows the folder while it shows the folder's value; another value makes it this host's own.";
+    }
+
+    private void OnFolderDefaults(object sender, RoutedEventArgs e)
+    {
+        var group = string.IsNullOrWhiteSpace(GroupBox.Text) ? "General" : GroupBox.Text.Trim();
+        var folder = FolderDefaults.Effective(group, "user")?.Folder ?? FolderDefaults.Fields.Select(f => FolderDefaults.Effective(group, f)?.Folder).FirstOrDefault(f => f != null) ?? group;
+        FolderDefaultsWindow.Edit(folder);
+        ShowFolderDefaults();
+    }
 
     private bool IsRdp => ProtoRdp?.IsChecked == true;
     private bool IsTelnet => ProtoTelnet?.IsChecked == true;
@@ -285,7 +325,11 @@ public partial class HostEditWindow : Window
         rdp.Audio = Math.Max(0, RdpAudio.SelectedIndex); rdp.AutoReconnect = RdpReconnect.IsChecked == true;
         rdp.ReconnectRetries = int.TryParse(RdpRetries.Text, out var rr) ? rr : 20;
         rdp.SignOn = RdpSettings.SignOnChoices[Math.Max(0, RdpSignOn.SelectedIndex)].Id;
+        rdp.Through = RdpThroughBox.SelectedIndex > 0 ? "ssh" : "direct";
+        rdp.SshHostId = rdp.Through == "ssh" ? (RdpThroughBox.SelectedItem as HostChoice)?.Host?.Id : null;
+        rdp.TunnelTarget = RdpTunnelTarget.Text.Trim();
         h.Rdp = rdp;
+        h.Tmux = TmuxBox.SelectedIndex switch { 1 => "on", 2 => "off", _ => "" };
         h.KerberosSignOn = SshKerberos.IsChecked == true && h.Protocol == "ssh";
         if (h.Protocol is "rdp" or "vnc") { h.Auth = AuthMethod.Password; h.JumpHostId = null; }
         if (h.IsTelnet) { h.Auth = AuthMethod.Password; h.JumpHostId = null; h.SudoCredentialId = null; h.CredentialId = null; return h; }
@@ -376,6 +420,7 @@ public partial class HostEditWindow : Window
         bool save = !_adHoc || SaveHost.IsChecked == true;
         var h = Build(save, out var newCred);
         if (h == null) return;
+        if (save) FolderDefaults.Decide(h);   // 0.6.29: fields showing the folder's value follow it
         if (newCred != null)
         {
             AppData.Current.Credentials.Add(newCred);

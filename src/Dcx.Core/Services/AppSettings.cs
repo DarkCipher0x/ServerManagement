@@ -33,6 +33,12 @@ public sealed class AppSettings
     public int AutoReconnectMaxSeconds { get; set; } = 30;
     /// <summary>After an unclean shutdown, offer to reopen the tabs that were open (terminals reopen disconnected).</summary>
     public bool RestoreWorkspace { get; set; } = true;
+    /// <summary>Exiting with sessions open (0.6.29, DarkCipher0x: "the option to save my connected sessions when i exit the
+    /// app"): "ask" (Save and exit / Exit without saving / Cancel), "save" (always, without asking) or "never".</summary>
+    public string SessionsOnExit { get; set; } = "ask";
+    /// <summary>Saved sessions (at exit, or a named workspace) reconnect as they reopen. PRODUCTION hosts always reopen
+    /// disconnected, and locked hosts never reopen by themselves.</summary>
+    public bool RestoreReconnect { get; set; } = true;
 
     // Vultr
     public List<VultrAccount> VultrAccounts { get; set; } = new();
@@ -252,6 +258,36 @@ public sealed class AppSettings
     /// <summary>Your own tmux config, written to ~/.config/dcx-servermanagement/tmux.conf on the host and used by the
     /// button (never your ~/.tmux.conf). Empty: tmux's own defaults / your ~/.tmux.conf.</summary>
     public string TmuxConfig { get; set; } = "";
+    /// <summary>Always-on tmux (0.6.29): every SSH terminal to a Linux or macOS host starts inside your tmux session, so a
+    /// dropped link never loses work. A host or its folder can say on or off for itself. tmux is never installed by this.</summary>
+    public bool TmuxAlways { get; set; }
+
+    // Terminal alerts, highlighting and the button bar (0.6.29, ADR-104)
+    /// <summary>Alerts from terminals you aren't looking at: a long command finished, a bell, a highlight rule with an alert,
+    /// or the session dropped. A badge on the tab, and a Windows notification when the app isn't in front.</summary>
+    public bool TerminalAlerts { get; set; } = true;
+    /// <summary>A command counts as long (and its end alerts) after this many seconds; 0 = never.</summary>
+    public int TerminalAlertSeconds { get; set; } = 30;
+    /// <summary>The terminal bell (BEL) alerts.</summary>
+    public bool TerminalAlertBell { get; set; } = true;
+    /// <summary>A session that drops by itself (not ✕ Disconnect) alerts.</summary>
+    public bool TerminalAlertDrop { get; set; } = true;
+    /// <summary>Windows notifications for alerts (off: the badge on the tab and the taskbar flash only).</summary>
+    public bool TerminalAlertDesktop { get; set; } = true;
+    /// <summary>Colour keywords in terminal output (errors, warnings, success, addresses…) from the packs and your own rules.</summary>
+    public bool TerminalHighlight { get; set; } = true;
+    /// <summary>The built-in highlight packs that are on (Sessions/HighlightPacks.cs ids).</summary>
+    public List<string> TerminalHighlightPacks { get; set; } = new() { "errors", "warnings", "success", "network" };
+    /// <summary>Your own highlight rules (a regular expression, a colour, optionally an alert).</summary>
+    public List<Sessions.HighlightRule> TerminalHighlightRules { get; set; } = new();
+    /// <summary>Ctrl+click an IP address, a path or a web link in terminal output for its actions (connect, open in Files, copy…).</summary>
+    public bool TerminalLinks { get; set; } = true;
+    /// <summary>The snippet button bar on terminals (snippets marked for it, scoped by host, folder, tag or environment).</summary>
+    public bool TerminalButtonBar { get; set; } = true;
+    /// <summary>The command palette (Ctrl+Shift+P) puts what you use most at the top.</summary>
+    public bool PaletteLearn { get; set; } = true;
+    /// <summary>What the command palette ran recently (keys, newest first; state).</summary>
+    public List<string> PaletteRecent { get; set; } = new();
     /// <summary>Show multi-line, risky or control-character pastes before they reach the shell (Services/PasteGuard.cs).
     /// Hidden control characters are always removed, even when this is off.</summary>
     public bool TerminalConfirmPaste { get; set; } = true;

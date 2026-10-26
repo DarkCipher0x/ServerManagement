@@ -37,13 +37,28 @@ public partial class MainWindow
         var active = Panes.ActiveTab;
         foreach (var t in Panes.AllTabs)
         {
-            string? kind = null, id = null;
-            if (t.Content is TerminalView { Target: Sessions.LocalTarget lt }) { kind = "local"; id = lt.Profile.Id; }
+            string? kind = null, id = null, cwd = null, tmux = null, path = null, left = null;
+            HostEntry? adHoc = null;
+            if (t.Content is TerminalView { Target: Sessions.LocalTarget lt } ltv) { kind = "local"; id = lt.Profile.Id; cwd = ltv.Place().Cwd; }
             else if (t.Content is TerminalView { Target: Sessions.SerialTarget st }) { if (AppData.Current.SerialProfiles.Contains(st.Profile)) { kind = "serial"; id = st.Profile.Id; } }
-            else if (t.Content is IHostView { Host: { IsAdHoc: false } h } && !string.IsNullOrEmpty(h.Id))
+            else if (t.Content is CommanderView cv)
+            {
+                // 0.6.29: both panes, exactly where they were.
+                kind = "commander"; id = cv.OpenedForHostId ?? "";
+                (left, path) = cv.Places;
+            }
+            else if (t.Content is BrowserView bv)
+            {
+                if (Browser.Portals.Find(bv.Bookmark.Id) != null) { kind = "portal"; id = bv.Bookmark.Id; }   // saved portals only
+            }
+            else if (t.Content is IHostView { Host: { } h } && !string.IsNullOrEmpty(h.Id) && !h.IsShared)
             {
                 kind = t.Content switch { TerminalView => "terminal", SftpView => "files", ServerView => "server", RdpView => "rdp", VncView => "vnc", _ => null };
                 id = h.Id;
+                // 0.6.29: a quick-connect host goes with its settings (never its password: that was never part of it).
+                if (h.IsAdHoc) adHoc = h.Clone();
+                if (t.Content is TerminalView tv) (cwd, tmux) = tv.Place();
+                if (t.Content is SftpView sv && sv.CurrentPath.Length > 0) path = sv.CurrentPath;
             }
             if (kind == null || id == null) continue;
             var pane = Panes.PaneOf(t);
@@ -55,6 +70,7 @@ public partial class MainWindow
                 Floating = fi >= 0, Pane = fi >= 0 ? fi : Math.Max(0, pane == null ? 0 : main.IndexOf(pane)),
                 WindowPane = win == null || pane == null ? 0 : Math.Max(0, PaneHost.PanesOf(win).ToList().IndexOf(pane)),
                 Active = t == active, Group = g.Length > 0 ? g : null,
+                Cwd = cwd, Tmux = tmux, Path = path, LeftPath = left, AdHoc = adHoc,
             });
         }
         return entries;
@@ -72,44 +88,87 @@ public partial class MainWindow
     {
         "local" => Sessions.LocalShells.Find(e.HostId) != null,
         "serial" => AppData.Current.SerialProfiles.Any(s => s.Id == e.HostId),
-        _ => AppData.Current.FindHost(e.HostId) != null,
+        "commander" => e.HostId.Length == 0 || AppData.Current.FindHost(e.HostId) != null,
+        "portal" => Browser.Portals.Find(e.HostId) != null,
+        _ => e.AdHoc != null || AppData.Current.FindHost(e.HostId) != null,
     }).ToList();
 
     /// <summary>After an unclean exit (or with work left in the recovery journal) one screen offers everything that
-    /// can be recovered (ADR-022). Never during the self-test, which builds and renders the screen itself.</summary>
+    /// can be recovered (ADR-022). After a clean exit that saved its sessions (0.6.29), they reopen straight away.
+    /// Never during the self-test, which builds and renders the screen itself.</summary>
     private void OfferRestore()
     {
         if (SelfTest.Running || Environment.GetCommandLineArgs().Contains("--selftest")) return;
+        var saved = Workspace.TakeSavedOnExit();   // taken either way: after a crash the crash list is the newer one
         var tabs = AppSettings.Current.RestoreWorkspace && Workspace.UncleanLastExit ? Reopenable(Workspace.Load()) : new();
         var journal = Recovery.Previous;
+        if (!Workspace.UncleanLastExit && Reopenable(saved) is { Count: > 0 } back)
+        {
+            RestoreTabs(back, connect: true);
+            Status($"Reopened the {back.Count} tab(s) saved at the last exit.");
+        }
         if (tabs.Count == 0 && journal == null) return;
         RecoveryWindow.Show(this, Workspace.UncleanLastExit, tabs, journal);
     }
 
-    /// <summary>Reopens saved tabs disconnected (never auto-connected), in their panes, pop-outs and groups.</summary>
-    public void RestoreTabs(IReadOnlyList<Workspace.Entry> entries)
+    /// <summary>Whether a saved tab may reopen by itself: the host, its jump host and its credential are all unlocked
+    /// (a locked one never reopens by itself and never asks to be unlocked at start, ADR-067).</summary>
+    private static bool MayReopen(HostEntry h) =>
+        (h.IsAdHoc || Locks.IsOpen("host:" + h.Id))
+        && (h.JumpHostId is not { Length: > 0 } j || Locks.IsOpen("host:" + j))
+        && (h.CredentialId is not { Length: > 0 } c || Locks.IsOpen("cred:" + c));
+
+    /// <summary>A Commander pane's saved place, or nothing when its host is gone or locked.</summary>
+    private static string PanePlace(string? state)
+    {
+        if (string.IsNullOrEmpty(state)) return "none|";
+        var r = Files.FsRef.Parse(state.Split('|', 2)[0]);
+        return r.Kind == "host" && (r.Host is not { } h || !MayReopen(h)) ? "none|" : state;
+    }
+
+    /// <summary>Reopens saved tabs in their panes, pop-outs and groups. After a crash (<paramref name="connect"/> false)
+    /// they come back disconnected. Saved sessions (exit, named workspaces: 0.6.29) reconnect when Settings says so,
+    /// except PRODUCTION hosts, which wait for ↻; terminals go back to their folder or tmux session.</summary>
+    public void RestoreTabs(IReadOnlyList<Workspace.Entry> entries, bool connect = false)
     {
         var opened = new List<(Workspace.Entry Entry, TabItem Tab)>();
+        connect &= AppSettings.Current.RestoreReconnect;
         foreach (var e in entries)
         {
             var before = Panes.AllTabs.ToHashSet();
-            if (e.Kind == "local") { if (Sessions.LocalShells.Find(e.HostId) is { } shell) OpenLocal(shell, connectOnOpen: false, forceNew: true); }
-            else if (e.Kind == "serial") { if (AppData.Current.SerialProfiles.FirstOrDefault(s => s.Id == e.HostId) is { } sp) OpenSession(new Sessions.SerialTarget(sp), connectOnOpen: false); }
-            else if (AppData.Current.FindHost(e.HostId) is { } h && !Locks.IsLocked("host:" + h.Id))   // a locked host never reopens by itself (ADR-067)
+            try
             {
-                switch (e.Kind)
+                if (e.Kind == "local") { if (Sessions.LocalShells.Find(e.HostId) is { } shell) OpenLocal(shell, connectOnOpen: connect, forceNew: true); }
+                else if (e.Kind == "serial") { if (AppData.Current.SerialProfiles.FirstOrDefault(s => s.Id == e.HostId) is { } sp) OpenSession(new Sessions.SerialTarget(sp), connectOnOpen: connect); }
+                else if (e.Kind == "portal") { if (Browser.Portals.Find(e.HostId) is { } b && PortalUi.ClosedTarget(b) == null) PortalUi.Open(b, window: false); }
+                else if (e.Kind == "commander")
                 {
-                    case "terminal": OpenTerminal(h, connectOnOpen: false, forceNew: true); break;
-                    case "files": OpenFiles(h, forceNew: true); break;
-                    case "server": OpenServer(h); break;
-                    case "rdp":
-                        if (AppSettings.Current.RdpEmbedded && h.Rdp.Gateway.Trim().Length == 0 && Rdp.RdpAxHost.AvailableClsid() != null)
-                            try { AddTab("🖥 " + h.Display, new RdpView(h, connectOnOpen: false)); } catch (Exception ex) { App.Log("Restore RDP tab", ex); }
-                        break;
-                    case "vnc": AddTab("🖵 " + h.Display, new VncView(h, connectOnOpen: false)); break;   // reconnects on ↻, never by itself
+                    var forHost = e.HostId.Length > 0 ? AppData.Current.FindHost(e.HostId) : null;
+                    AddTab("⇆ " + (forHost?.Display ?? "File commander"), new CommanderView(forHost, null, (PanePlace(e.LeftPath), PanePlace(e.Path))));
+                }
+                else if ((e.AdHoc ?? AppData.Current.FindHost(e.HostId)) is { } h && MayReopen(h))   // a locked host never reopens by itself (ADR-067)
+                {
+                    if (e.AdHoc != null) h.IsAdHoc = true;   // not stored: it is what makes the copy a quick-connect host again
+                    bool c = connect && !Envs.IsProduction(Envs.For(h));
+                    switch (e.Kind)
+                    {
+                        case "terminal": OpenTerminal(h, connectOnOpen: c, forceNew: true); break;
+                        case "files": OpenFiles(h, e.Path, forceNew: true); break;
+                        case "server": OpenServer(h); break;
+                        case "rdp":
+                            if (AppSettings.Current.RdpEmbedded && h.Rdp.Gateway.Trim().Length == 0 && Rdp.RdpAxHost.AvailableClsid() != null)
+                                AddTab("🖥 " + h.Display, new RdpView(h, connectOnOpen: c));
+                            break;
+                        case "vnc": AddTab("🖵 " + h.Display, new VncView(h, connectOnOpen: c)); break;   // otherwise it reconnects on ↻
+                    }
                 }
             }
-            if (Panes.AllTabs.FirstOrDefault(t => !before.Contains(t)) is { } tab) opened.Add((e, tab));
+            catch (Exception ex) { App.Log("Restore " + e.Kind + " tab", ex); }
+            if (Panes.AllTabs.FirstOrDefault(t => !before.Contains(t)) is { } tab)
+            {
+                if (tab.Content is TerminalView tv) tv.RestorePlace(e.Cwd, e.Tmux);
+                opened.Add((e, tab));
+            }
         }
         if (opened.Count == 0) return;
         foreach (var (e, t) in opened) if (e.Group is { Length: > 0 } g) TabGroups.Assign(t, g);

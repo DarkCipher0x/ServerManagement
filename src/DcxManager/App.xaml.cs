@@ -30,11 +30,31 @@ public partial class App : Application
     /// project offers a hook instead of referencing upward; the composition root — this method — connects them, before
     /// anything below the screens runs. A hook left unset has a safe default (nothing shared, no theme add-on, no tabs).
     /// </summary>
+    private static DispatcherTimer? _saveLater;
+    private static Action? _saveLaterWork;
+
+    /// <summary>Deferred store saves (<see cref="AppData.SaveSoon"/>): 2 s after the last request, once, on the UI thread.</summary>
+    private static void SaveLater(Action save)
+    {
+        var d = Current?.Dispatcher;
+        if (d == null) { save(); return; }
+        d.BeginInvoke(() =>
+        {
+            _saveLaterWork = save;
+            _saveLater ??= new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Background, (_, _) => { _saveLater!.Stop(); var w = _saveLaterWork; _saveLaterWork = null; w?.Invoke(); }, d);
+            _saveLater.Stop(); _saveLater.Start();
+        });
+    }
+
+    /// <summary>A deferred save still waiting (written now: at exit, before a backup or a profile switch).</summary>
+    internal static void FlushSaveLater() { if (_saveLaterWork is { } w) { _saveLater?.Stop(); _saveLaterWork = null; w(); } }
+
     private static void WireLayers()
     {
         // Core: shared library ids resolve through the library; the cloud link of a host; the recovery journal's file.
         AppData.SharedHost = Library.SharedLibraries.FindHost;
         AppData.SharedCredential = Library.SharedLibraries.FindCredential;
+        AppData.SaveLater = SaveLater;   // 0.6.29: last-connected bookkeeping saves once, a moment later, on the UI thread
         CredentialSources.Install();   // 0.6.17 (ADR-096): vault credentials kept in Bitwarden or Password Safe
         SafeMetadata.CloudLink = h => Cloud.CloudProviders.ForHost(h) is { } c ? c.Provider.Title : null;
         StorageGuard.OpenDataLocation = () => SettingsView.Current?.PickNewDataLocation();
@@ -350,6 +370,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        try { FlushSaveLater(); } catch { }   // a last-connected time still waiting for its deferred save
         try { AppLock.Stop(); } catch { }
         try { LockGate.Uninstall(); } catch { }
         try { PasswordSafeSessions.CheckInAll(); } catch { }   // 0.5.0: no Password Safe checkout outlives the app

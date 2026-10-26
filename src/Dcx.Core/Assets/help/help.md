@@ -38,6 +38,21 @@ Links printed by a server (OSC 8 hyperlinks) never open inside the app: clicking
 ## tmux from the terminal
 keywords: tmux, multiplexer, persistent session, reattach, screen, tmux config, tmux.conf, install tmux
 On an SSH session to a Linux or macOS host, the terminal's ⧉ tmux button starts tmux or reattaches your session there (default name "main"), so long jobs survive a dropped connection. If tmux isn't installed, it asks whether to install it with the host's package manager (apt, dnf, yum, zypper, pacman, apk or brew); sudo asks for its password right in the terminal. Settings → Terminals & connections → tmux: the session name, whether to offer the install, and **your own tmux config** — paste it and Save; the next ⧉ tmux writes it to ~/.config/dcx-servermanagement/tmux.conf on that host (only you can read it) and uses it. Your own ~/.tmux.conf is never changed. Inside tmux the button just says you're already in it.
+**Always in tmux:** Settings → Terminals & connections → tmux → "Always start SSH terminals inside tmux" takes every SSH terminal to a Linux or macOS host straight into your tmux session, so a dropped connection or a closed laptop never loses your work. A host (host editor → tmux: Always / Never) or its folder (folder defaults) can say otherwise for itself. A host without tmux says so in the status line and connects normally: tmux is only ever installed from the ⧉ tmux button, after asking. Detach or exit tmux and that tab stays out of it until you reconnect.
+
+## Alerts from terminals you aren't looking at
+keywords: alert, notify, notification, bell, finished, long command, done, background tab, flash, taskbar, dropped, monitor output, activity
+When a terminal tab you aren't looking at needs you, its tab gets a dot, the taskbar button flashes, and (when the app isn't in front) Windows shows a notification; click it to go straight to that tab. What alerts (Settings → Terminals & connections → **Alerts**):
+- **A long command finished:** you pressed Enter, and the screen shows a prompt again after at least 30 seconds (your choice; 0 = never). It reads the screen, so it works inside tmux too; a question such as `[y/N]` or a password prompt isn't a prompt and keeps waiting.
+- **The bell** (BEL), as many build scripts ring when they finish.
+- **A dropped session.**
+- **A highlight rule marked "alert"** (see keyword highlighting).
+At most one alert of a kind per tab every 10 seconds. A tab's menu → Session → "🔔 Alerts for this tab" switches its own off. Alerts stay on this PC. Group Policy can set each setting.
+
+## Keyword highlighting and Ctrl+click
+keywords: highlight, highlighting, keyword, colour, color, error, warning, regex, regular expression, ip address, click, link, path, url, ctrl+click, trigger
+Terminal output is coloured as it arrives: **errors and failures** red, **warnings** yellow, **success** green, **network addresses** (IPv4, MAC, IPv6) cyan, **HTTP status codes** by class. Pick the packs and add your own rules in Settings → Terminals & connections → **Highlighting & button bar**: a name, a regular expression, a colour, Match case, and "Alert when it shows in a tab I'm not looking at". Your rules draw on top of the packs. Only the drawing changes: the output, what you copy and the session log are untouched, and full-screen programs (vim, top, htop) are left alone. Every pattern is checked before it's used: empty matches, inline options like (?i) and patterns that backtrack badly on long lines are refused. Long lines are coloured up to 2,000 characters.
+**Ctrl+click** an IP address, an absolute path or a web link in the output for a menu: SSH to that address, add it as a host or copy it; open a path in Files (SFTP), paste it at the prompt quoted, or copy it; open a link in your browser (after showing it) or copy it. Nothing happens without a click in that menu.
 
 ## Terminal profiles: colours, cursor, encoding, key mappings
 keywords: terminal profile, colour scheme, color scheme, solarized, green screen, cursor, underline, bar, blink, encoding, latin-1, iso-8859-1, cp437, ibm437, windows-1252, key mapping, keymap, backspace, ^H, per-host profile, per-session
@@ -86,7 +101,7 @@ Once it's on, what you type or paste in any of them is sent to all of them.
 
 ## Tab groups
 keywords: tab group, group tabs, label tabs, colour tabs, workspace group, change group
-Right-click a tab → Tab group → New group… (or pick an existing group). The group's name appears on each tab in its colour; the name is always printed. Groups are kept for this session.
+Right-click a tab → Tab group → New group… (or pick an existing group). The group's name is printed in its colour on the first tab of the group, and every tab in the group has a line in that colour underneath, so a group takes little room. Long tab titles (portal pages) end in "…" (the full title shows on hover), a little shorter inside a group. Groups last for this session, and come back with saved sessions and named workspaces (see Saved sessions and workspaces).
 The "Group …" menu has: next tab in the group, broadcast input to the group's terminals, reconnect or disconnect them all, and close the group's tabs.
 
 ## Telnet (legacy devices)
@@ -482,6 +497,18 @@ Unsaved edits and unfinished transfers are also kept when you simply exit, or Wi
 How it works: the unsaved text and the transfer list are kept in an encrypted recovery file, written about 2 seconds after a change (nothing is written while nothing changes) and at once on a fatal error or when Windows shuts down. Notes and incidents save themselves about a second after you stop typing, and are saved at once on a fatal error too. A sudden power cut can lose only the last couple of seconds of typing.
 Not recovered: AI conversations (kept in memory only, by design) and half-filled settings or host dialogs.
 
+## Saved sessions and workspaces
+keywords: save sessions, exit, reopen, restore tabs, workspace, layout, homelab, reconnect on start, remember tabs, session restore, tmux reattach, working folder
+When you exit with tabs open, the app asks: **Save and exit** (they come back at the next start), **Exit without saving** or **Cancel**. Tick **Don't ask again** to make your choice the default; Settings → Terminals & connections → **Saved sessions** changes it (Ask, Always save, Never save) and has the switch for reconnecting.
+What comes back, in the same panes, extra windows and tab groups, with the same tab in front:
+- **Terminals** reconnect and go back to their working folder (typed for you as ` cd -- '/the/folder'`; the leading space keeps it out of your shell history). The folder is read from what the shell printed: OSC 7, a Debian / Ubuntu prompt (`user@host:/path$`) or a PowerShell prompt. A prompt that shows only the folder's name (Red Hat's `[user@host dir]$`) can't tell where it is, so that terminal reconnects in your home folder.
+- **tmux:** a terminal you took into tmux with ⧉ tmux is re-attached to its session after every reconnect, so long-running work is still there. It stops once you detach or exit tmux. tmux is never installed during a reconnect.
+- **Files** at their folder, **File commander** with both panes, **Remote Desktop**, **VNC**, **Manage** and saved **portal** tabs.
+- **Quick-connect sessions** are kept with their settings (address, user, port, key or credential reference), never a password: one you typed is asked for again.
+- **PRODUCTION** hosts reopen disconnected: press Enter or ↻. Locked hosts (and hosts whose credential or jump host is locked) never reopen by themselves.
+**Named workspaces:** ▦ Workspaces in the title bar → **Save the open tabs as a workspace…** (Homelab, VPS…). Each one can be opened (reconnected, or disconnected), replaced with the open tabs, renamed or removed. Opening a workspace adds its tabs beside the ones already open; a tab of the same kind and host that's already open isn't opened twice. A removed workspace is archived in the encrypted store, not deleted.
+Everything is stored encrypted. Group Policy can set both settings ("Terminals and connections").
+
 ## Tabs, split panes, tiling and pop-out windows
 keywords: tabs, split, tile, tiling, pane, layout, resize, side by side, grid, pop out, window, new window, monitor, multi-monitor, second monitor, host pane, detach, sidebar, customise, customize
 Every view opens as a tab. Right-click a tab (or use the shortcuts) to arrange your workspace:
@@ -606,6 +633,8 @@ F1 or sidebar → Help & FAQ. Type a question: matching articles are found insta
 ## Snippets and multi-host runs
 keywords: snippets, saved commands, run on many hosts, bulk, parallel, multi-run, batch
 Sidebar → Snippets & multi-run: save commands (optionally with sudo), pick hosts (All / None / Group…) and "▶ Run on selected hosts" — results per host appear in the table below. Snippets are also available in Manage → Shell.
+**Variables:** `{host}` (the host's name), `{address}`, `{user}`, `{port}`; `{ask:Label}` or `{ask:Label=default}` asks when you send it; `{pick:Label|command}` runs the command on the host and lets you choose from its output lines (for example `{pick:Service|systemctl list-units --type=service --plain --no-legend | cut -d' ' -f1}`); `{{` and `}}` are literal braces. Every value is quoted for the shell it lands in (POSIX or PowerShell) and line breaks are dropped, so an answer can never run a second command. Sent to several terminals, the questions are asked once and each terminal gets its own host's values.
+**Terminal button bar:** tick "Show on the terminal button bar" and the snippet becomes a button above each terminal its **scope** fits: `host:<name>`, `folder:<path>` (with its sub-folders), `tag:<tag>`, `env:PRODUCTION`, `shell:posix` / `shell:powershell` or `local`, separated by commas (any one matches; empty = every terminal). Click to send it to that terminal; right-click to send it to the tab group, the pane or every open terminal. A risky command, a PRODUCTION terminal or more than one terminal is shown first. Settings → Terminals & connections → Highlighting & button bar can hide the bar.
 
 ## Tunnels and SOCKS proxies
 keywords: tunnel, port forward, forwarding, socks, proxy, local forward, remote forward, dynamic
@@ -884,6 +913,11 @@ Every section starts collapsed, so the app opens clean; click a header to expand
 ## Host folders and the inventory explorer
 keywords: folders, tree, group, organise, organize, drag, favourites, inventory, explorer, move host
 Hosts has a folder tree on the left (All hosts, your folders, ★ Favourites). Folders nest with "/" (e.g. Clients/Acme/Prod). Drag hosts onto a folder, or right-click → Move to folder. Right-click a folder: new sub-folder, rename/move, delete (keeps the hosts), add host here, open terminals for every host and tile them, check reachability, health report, export the folder (encrypted) or import into it.
+**Folder defaults:** right-click a folder → ⚙ Folder defaults… sets a user name, credential, jump host, environment, terminal profile, VPN or tmux for the hosts in it and its sub-folders (the nearest folder wins). Saving asks whether every host in it follows now, or only new hosts and those already following. A host follows a field while it keeps the folder's value: change it in the host editor and it's the host's own from then on (the editor shows "from <folder>" for what it inherits). Fields that don't fit a host are skipped: a jump host and tmux only for SSH, and a key never goes to Remote Desktop or VNC. Moving hosts into a folder offers its defaults; renaming a folder takes its defaults along. Shared library hosts are never changed.
+
+## Command palette (Ctrl+Shift+P)
+keywords: command palette, ctrl+shift+p, search everything, jump to, quick open, go to, run command, find host, find setting
+Ctrl+Shift+P (also from inside a terminal) opens one search box for everything: hosts (Enter connects; Shift+Enter or right-click for Files, Manage, a new terminal, copy address), open tabs, named workspaces, snippets (sent to the active terminal), every page, every settings card, and actions such as Lock, Tile, New window, Screenshot and Save workspace. Type parts of a name, an address, a folder or a tag: every word must match. What you open most comes first (Settings → Navigation → Navigation & explorers can switch this off, which forgets the list; it is kept encrypted). The palette opens what you pick the normal way, so locks, restrictions and confirmations still apply.
 
 ## Backup, export and import (encrypted .dcxbackup)
 keywords: backup, export, import, restore, transfer, another pc, migrate, dcxbackup, merge, replace, tick, choose, selective, secrets, api keys
@@ -894,6 +928,7 @@ Import / restore shows the file's contents in the same tree, all ticked: untick 
 keywords: rdp, remote desktop, mstsc, windows server, keepalive, reconnect, gateway, full screen
 A host can be SSH or RDP (the selector at the top of the host editor). RDP hosts open INSIDE the app in a tab, using Windows' own Remote Desktop control: pop it out to its own window or dock it back without dropping the session, ⛶ Full screen (the connection bar at the top brings you back), Ctrl+Alt+Del (or Ctrl+Alt+End inside the session), 📷 screenshot, ↻ Reconnect, and a display choice — Resize to window (the remote resolution follows the pane), Scale to window, or Fixed (the host's resolution). The password is given to the control in memory only; nothing is written to disk (no .rdp file, no bitmap cache). Device redirection follows the host's settings: clipboard on, drives/printers/microphone off by default; smart cards, ports and cameras are never redirected embedded. Windows-key combinations go to the remote computer in full screen.
 Right-click → "Open in mstsc" (or Settings → Terminal & connections → untick "Open Remote Desktop inside the app") uses Windows' Remote Desktop Connection window instead; hosts with an RD Gateway always open there. In mstsc the .rdp file is generated: resolution or full screen, multi-monitor, clipboard/drive/printer/audio redirection, admin session, RD Gateway, and auto-reconnect with retries (the client-side keepalive). A vault password is handed to Windows only for that sign-in and removed again; it never goes into a file or on a command line.
+**Through SSH:** host editor → Remote Desktop → CONNECT THROUGH → Through SSH (the same address, or a saved SSH host such as a bastion). Each session opens its own tunnel from 127.0.0.1 on a free port to the target (the host's address as the SSH host sees it, or the target you enter) and closes it when the tab or the mstsc window closes; nothing listens beyond this PC. Kerberos single sign-on and Remote Credential Guard need the real server name, so they don't work through the tunnel: a password from the vault does. An RD Gateway, when set, is used instead of the tunnel.
 Server-side keepalive is a Windows policy on the server: right-click the host → "RDP server keepalive commands…" for the exact reg add lines. Right-click → Screenshot Remote Desktop window captures the open session.
 
 ## Moving the data store

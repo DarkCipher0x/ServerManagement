@@ -36,6 +36,9 @@
                     </Border>
                     <Button x:Name="QuickGo" Content="Connect" Style="{StaticResource PrimaryButton}" Margin="6,0,0,0" Padding="10,3" VerticalAlignment="Center" Click="OnQuickGo" ToolTip="Connect to what is typed, with the chosen protocol (Enter)"/>
                 </StackPanel>
+                <!-- 0.6.29: named sets of tabs (saved sessions) -->
+                <Button DockPanel.Dock="Right" x:Name="WorkspacesButton" Content="▦ Workspaces ▾" Style="{StaticResource SmallButton}" Margin="0,0,14,0" VerticalAlignment="Center" Click="OnWorkspacesMenu"
+                        ToolTip="Save the open tabs as a named workspace (Homelab, VPS…) and open it again later, reconnected"/>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Logo, name and tagline: a theme add-on may replace them (ADR-030, MainWindow.ApplyBranding) -->
                     <Border x:Name="LogoPlate" Margin="0,0,12,0" VerticalAlignment="Center" CornerRadius="20">

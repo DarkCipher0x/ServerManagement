@@ -32,8 +32,11 @@ public sealed partial class TerminalView
                     var s = new string(chars, 0, n);
                     Enqueue(s);
                     RequestQuickFlush();
+                    ArmFlush();
                     _log?.Write(s);   // the whole output, even when the screen throttles
                     OutputText?.Invoke(s);
+                    WatchTmux(s);
+                    WatchOutputForAlerts();
                 }
             }
         }
@@ -75,6 +78,30 @@ public sealed partial class TerminalView
             });
         }
         catch { Interlocked.Exchange(ref _quickFlush, 0); }
+    }
+
+    /// <summary>The 16 ms flush timer runs only while output is waiting (0.6.29 performance pass: it used to tick for the
+    /// life of every tab, 60 wake-ups a second each, idle or not). Any thread arms it; it stops itself once the queue is
+    /// empty, and re-checks after stopping so output arriving in between re-arms it.</summary>
+    private int _flushArmed;
+    /// <summary>Self-test: timer ticks so far (an idle terminal adds none).</summary>
+    internal int FlushTicks;
+
+    private void ArmFlush()
+    {
+        if (_disposed || Interlocked.Exchange(ref _flushArmed, 1) == 1) return;
+        try { Dispatcher.BeginInvoke(DispatcherPriority.Background, () => { if (!_disposed) _flush.Start(); }); }
+        catch { Interlocked.Exchange(ref _flushArmed, 0); }
+    }
+
+    private void FlushTick()
+    {
+        FlushTicks++;
+        Flush();
+        if (PendingChars > 0) return;
+        _flush.Stop();
+        Interlocked.Exchange(ref _flushArmed, 0);
+        if (PendingChars > 0) ArmFlush();
     }
 
     private void Flush()
@@ -121,7 +148,8 @@ public sealed partial class TerminalView
     internal static string ClampCsiDigits(string seq) => Big.Replace(seq, m => int.TryParse(m.Value, out var n) && n <= 9999 ? m.Value : "9999");
 
     internal static string ClampCsi(string s) =>
-        s.IndexOf('\x1b') < 0 && s.IndexOf('\u009b') < 0 ? s : Csi.Replace(s, m => Big.IsMatch(m.Value) ? ClampCsiDigits(m.Value) : m.Value);
+        // No 5-digit number anywhere (nearly all output) means nothing to clamp: one scan instead of a rebuilt string.
+        s.IndexOf('\x1b') < 0 && s.IndexOf('\u009b') < 0 || !Big.IsMatch(s) ? s : Csi.Replace(s, m => Big.IsMatch(m.Value) ? ClampCsiDigits(m.Value) : m.Value);
 
     /// <summary>Index of an unfinished CSI (or a lone ESC) at the very end of <paramref name="s"/>, else -1.</summary>
     internal static int IncompleteCsiTail(string s)
@@ -173,7 +201,7 @@ public sealed partial class TerminalView
     private void WriteLocal(string text)
     {
         Enqueue(text);
-        if (!_flush.IsEnabled && !_disposed) _flush.Start();
+        ArmFlush();
     }
 
     private void Post(object message)

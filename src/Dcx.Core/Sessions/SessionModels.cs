@@ -41,6 +41,24 @@ public sealed class TerminalProfile
     };
 }
 
+/// <summary>One of your own keyword highlight rules (0.6.29, ADR-104): a regular expression coloured in terminal output,
+/// optionally raising an alert when it shows in a tab you aren't looking at.</summary>
+public sealed class HighlightRule
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Name { get; set; } = "";
+    /// <summary>A regular expression (the same syntax in .NET and the terminal page: no inline options).</summary>
+    public string Pattern { get; set; } = "";
+    /// <summary>red, yellow, green, cyan, blue, magenta, grey or white (the terminal scheme's own colours).</summary>
+    public string Colour { get; set; } = "yellow";
+    public bool CaseSensitive { get; set; }
+    /// <summary>Raise an alert when it shows in a tab you aren't looking at.</summary>
+    public bool Alert { get; set; }
+    public bool Enabled { get; set; } = true;
+
+    public HighlightRule Copy() => (HighlightRule)MemberwiseClone();
+}
+
 /// <summary>A saved serial / USB-serial console (stored encrypted in data.dcx with the hosts).</summary>
 public sealed class SerialProfile
 {

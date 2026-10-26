@@ -248,6 +248,14 @@ public static partial class SelfTest
         try { await FolderSyncTests.RunAsync(Path.GetDirectoryName(reportPath)!, Ok, Fail); }
         catch (Exception ex) { Fail("folder sync tests", ex); }
 
+        // 0.6.29: saved sessions (exit choice, named workspaces, folders and tmux, quick-connect hosts).
+        try { await SavedSessionsTests.RunAsync(Ok, Fail); }
+        catch (Exception ex) { Fail("saved sessions tests", ex); }
+
+        // 0.6.29 Wave A (ADR-104, ADR-105): folder defaults, highlighting, alerts, button bar, palette, tmux, RDP via SSH, scale.
+        try { await WaveATests.RunAsync(Ok, Fail); }
+        catch (Exception ex) { Fail("Wave A tests", ex); }
+
         // 0.3.0: Synology DSM provider (fake DSM Web API).
         try { await SynologyTests.RunAsync(Ok, Fail); }
         catch (Exception ex) { Fail("Synology tests", ex); }

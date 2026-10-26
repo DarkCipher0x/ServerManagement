@@ -86,6 +86,8 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
         ["Terminal & connections"] = ("Terminals & connections", "new terminal tabs"),
         ["Terminal profiles"] = ("Terminals & connections", "per profile · a host can pick its own"),
         ["Text editor"] = ("Terminals & connections", "the text and hex editors · Vim profiles"),
+        ["Alerts"] = ("Terminals & connections", "every terminal tab · a tab can switch its own off"),
+        ["Highlighting & button bar"] = ("Terminals & connections", "every terminal tab · new output"),
         ["Theme"] = ("Appearance", "whole app"),
         ["Branding & colours"] = ("Appearance", "whole app · can be set by Group Policy or a theme add-on"),
         ["Layout and text"] = ("Appearance", "whole app · terminals separate"),
@@ -148,6 +150,9 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
     private static string _lastCategory = CoreCategories[0].Name;
 
     /// <summary>Where a card lives and what its settings apply to: the app's own table, or the module that contributed it.</summary>
+    /// <summary>The app's own card titles with their tab (the command palette lists them).</summary>
+    internal static IEnumerable<(string Title, string Category)> CardTitles => Placement.Select(p => (p.Key, p.Value.Category));
+
     private static (string Category, string? Scope)? PlacementOf(string title) =>
         Placement.TryGetValue(title, out var p) ? (p.Category, p.Scope) : AppModules.FindSettingsCard(title) is { } c ? (c.Category, c.Scope) : null;
     public string ShownCategory { get; private set; } = "";
@@ -165,7 +170,7 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
         {
             ("Security & privacy", ProtectionCard), ("Security & privacy", LocksCard), ("Security & privacy", PolicyCard), ("Security & privacy", Security), ("Security & privacy", TeamCard), ("Security & privacy", OfflineCard), ("Security & privacy", AiFeaturesCard),
             ("Cloud providers", Vultr), ("Cloud providers", ContaboCard), ("Cloud providers", HetznerCard), ("Cloud providers", AzureCard), ("Cloud providers", GcpCard),
-            ("Terminals & connections", Terminal), ("Terminals & connections", TerminalProfilesCard), ("Terminals & connections", TmuxCard), ("Terminals & connections", EditorCard),
+            ("Terminals & connections", Terminal), ("Terminals & connections", SavedSessionsCard), ("Terminals & connections", TerminalProfilesCard), ("Terminals & connections", TmuxCard), ("Terminals & connections", AlertsCard), ("Terminals & connections", HighlightCard), ("Terminals & connections", EditorCard),
             ("Appearance", ThemeCard), ("Appearance", BrandingCard), ("Appearance", LayoutCard), ("Appearance", TypographyCard),
             ("Navigation", SidebarCard), ("Navigation", NavigationCard),
             ("Identity & directory", IdentityAccountCard), ("Identity & directory", AutoSignInCard), ("Identity & directory", DirectoryConnectionsCard), ("Identity & directory", SsoCard), ("Identity & directory", ProfilesCard),
