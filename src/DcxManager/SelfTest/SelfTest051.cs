@@ -319,52 +319,27 @@ public static class Release051Tests
             return Task.CompletedTask;
         });
 
-        await Run("0.6.7 (DarkCipher0x): sessions opened from Hosts open inside the Hosts tab, beside its folder pane (or as separate tabs); other screens never land inside it", () =>
+        await Run("0.6.31 (DarkCipher0x): sessions opened from Hosts open in the main tab bar, never as tabs inside the Hosts tab (\"so they are all in the same tab bar\")", () =>
         {
             var mw = MainWindow.Instance ?? throw new Exception("no main window");
             var P = mw.Panes;
-            var before = s.HostsOpenIn;
             var mine = new List<TabItem>();
             var host = new HostEntry { Id = "selftest-inside", Name = "inside-host", Address = "192.0.2.40", Port = 22, Username = "test" };
             try
             {
-                HostsView.SetOpenIn("hosts");
                 mw.Navigate("hosts");
                 var page = P.AllTabs.Select(t => t.Content).OfType<HostsView>().FirstOrDefault() ?? throw new Exception("no Hosts tab");
-                page.ApplyOpenIn();
-                if (page.SessionPane is not { } area || page.ListTab is not { } listTab || !area.Items.Contains(listTab)) throw new Exception("the Hosts tab has no session area with the host list in it");
-                // Connect from the page: the session opens inside the Hosts tab.
-                page.ArmSessions();
                 var t1 = mw.AddTab("inside", new TerminalView(host, connectOnOpen: false));
                 mine.Add(t1);
-                if (P.PaneOf(t1) != area) throw new Exception("a session from Hosts didn't open inside the Hosts tab");
-                if (page.HeaderRow.Visibility == Visibility.Visible) throw new Exception("the page's title and toolbar didn't step aside for the session");
-                // A screen that isn't a session never lands inside the Hosts tab, even while you're in there.
-                var t2 = mw.AddTab("not-a-session", new Border());
-                mine.Add(t2);
-                if (P.IsEmbedded(P.PaneOf(t2))) throw new Exception("a non-session screen opened inside the Hosts tab");
-                // Back to the list: the toolbar returns; the list tab can't be closed or dragged away.
-                area.SelectedItem = listTab;
-                if (page.HeaderRow.Visibility != Visibility.Visible) throw new Exception("the toolbar didn't come back with the list");
-                if ((listTab.Tag as string) != "fixed") throw new Exception("the list tab is closable");
-                // Splits work inside the Hosts tab.
-                if (!P.Split(t1, Orientation.Horizontal) || P.EmbeddedPanes.Count() != 2) throw new Exception("split inside the Hosts tab");
-                // Not armed, from the main window: a session opens as an ordinary tab.
-                P.ActivateMain();
-                var t3 = mw.AddTab("outside", new TerminalView(host, connectOnOpen: false));
-                mine.Add(t3);
-                if (P.IsEmbedded(P.PaneOf(t3))) throw new Exception("a session not opened from Hosts landed inside it");
-                // Separate tabs: the sessions move out to ordinary tabs; the list is the page's own again.
-                HostsView.SetOpenIn("tab");
-                if (page.SessionPane != null || P.IsEmbedded(P.PaneOf(t1)) || !P.Contains(t1) || P.Panes.Any(p => p.Items.Contains(listTab))) throw new Exception("switching to separate tabs didn't move the sessions out");
-                if (PolicySettings.Catalog.FirstOrDefault(x => x.Name == nameof(AppSettings.HostsOpenIn)) is not { Choices: { } ch } || !ch.SequenceEqual(new[] { "hosts", "tab" }))
-                    throw new Exception("HostsOpenIn is not a policy with the choices hosts, tab");
+                if (P.IsEmbedded(P.PaneOf(t1)) || P.EmbeddedPanes.Any()) throw new Exception("a session landed in a tab bar inside a tab");
+                if (P.WindowOf(t1) != null) throw new Exception("a session from Hosts didn't open in the main window's tab bar");
+                if (page.HeaderRow.Visibility != Visibility.Visible || page.ToolbarRow.Visibility != Visibility.Visible) throw new Exception("the Hosts page hid its title or toolbar");
+                if (PolicySettings.Catalog.Any(x => x.Name == nameof(AppSettings.HostsOpenIn)) || !PolicySettings.Excluded.ContainsKey(nameof(AppSettings.HostsOpenIn)))
+                    throw new Exception("HostsOpenIn is still a policy");
             }
             finally
             {
                 foreach (var t in mine) if (P.Contains(t)) mw.CloseTab(t);
-                HostsView.SetOpenIn(before == "tab" ? "tab" : "hosts");
-                s.HostsOpenIn = before;
                 P.ActivateMain();
             }
             return Task.CompletedTask;
@@ -658,34 +633,41 @@ public static class Release051Tests
             return Task.CompletedTask;
         });
 
-        await Run("0.6.2 (DarkCipher0x): the Hosts page's folder pane pins open or auto-collapses INSIDE the page; nothing docks beside the sessions", () =>
+        await Run("0.6.31 (DarkCipher0x): the hosts panel pins open or auto-collapses beside every tab of the main window (\"for the whole frame\")", () =>
         {
             var mw = MainWindow.Instance ?? throw new Exception("no main window");
             var before = s.HostsDock;
             TabItem? probe = null;
             try
             {
-                mw.Navigate("hosts");
-                var page = mw.Panes.AllTabs.Select(t => t.Content).OfType<HostsView>().FirstOrDefault() ?? throw new Exception("Hosts did not open as a tab");
-                // Pinned (the default): the pane has its column beside the list, as before.
+                var (col, host, strip, splitter) = mw.HostPaneParts;
+                var page = mw.HostsPage;
+                if (!page.PaneInWindow || host.Child != page.FolderPane) throw new Exception("the Hosts page's folder pane isn't the main window's hosts panel");
+                if (page.FolderHost.Visibility == Visibility.Visible || page.FolderCol.Width.Value > 0.5) throw new Exception("the Hosts page still lays out its own folder pane");
+                // Pinned (the default): its own resizable column, beside whatever tab is in front.
                 HostsView.SetFolderMode("pinned");
-                if (page.FolderHost.Visibility != Visibility.Visible || Grid.GetColumnSpan(page.FolderHost) != 1 || page.FolderStrip.Visibility == Visibility.Visible)
-                    throw new Exception("pinned: the folder pane is not in its column");
-                if (page.FolderCol.Width.Value is < 140 or > 520) throw new Exception("pinned: folder pane width " + page.FolderCol.Width.Value);
-                if ((string)page.PinButton.Content != "📌") throw new Exception("pinned: the pane's pin shows " + page.PinButton.Content);
-                // Opening a session tab changes nothing on the Hosts page (no pane beside the sessions any more).
+                if (host.Visibility != Visibility.Visible || strip.Visibility == Visibility.Visible || splitter.Visibility != Visibility.Visible)
+                    throw new Exception("pinned: the hosts panel is not open in its column");
+                if (col.Width.Value is < 140 or > 520) throw new Exception("pinned: hosts panel width " + col.Width.Value);
+                if ((string)page.PinButton.Content != "📌") throw new Exception("pinned: the panel's pin shows " + page.PinButton.Content);
                 probe = mw.AddTab("selftest", new Border());
-                if (!page.FolderPaneOpen) throw new Exception("pinned: the pane folded when a tab opened");
-                // Auto-collapse: a narrow strip inside the page; the pane slides out over the list and back.
+                if (!mw.HostPaneShowing || host.Visibility != Visibility.Visible) throw new Exception("pinned: the panel folded when another tab came to the front");
+                // Auto-collapse: a slim strip; opening widens the column (never over a terminal's native window) and folds back.
                 HostsView.SetFolderMode("auto");
-                if (Math.Abs(page.FolderCol.Width.Value - 22) > 0.5 || page.FolderStrip.Visibility != Visibility.Visible || page.FolderHost.Visibility == Visibility.Visible)
-                    throw new Exception("auto: the pane did not fold to the strip (column " + page.FolderCol.Width.Value + ")");
-                if ((string)page.PinButton.Content != "📍") throw new Exception("auto: the pane's pin shows " + page.PinButton.Content);
-                page.SetFolderOpen(true);
-                if (page.FolderHost.Visibility != Visibility.Visible || Grid.GetColumnSpan(page.FolderHost) != 3 || Math.Abs(page.FolderCol.Width.Value - 22) > 0.5)
-                    throw new Exception("auto: the open pane is not sliding out over the list (the list must not resize)");
-                page.SetFolderOpen(false);
-                if (page.FolderHost.Visibility == Visibility.Visible) throw new Exception("auto: the pane did not slide back");
+                if (Math.Abs(col.Width.Value - 22) > 0.5 || strip.Visibility != Visibility.Visible || host.Visibility == Visibility.Visible)
+                    throw new Exception("auto: the panel did not fold to the strip (column " + col.Width.Value + ")");
+                if ((string)page.PinButton.Content != "📍") throw new Exception("auto: the panel's pin shows " + page.PinButton.Content);
+                page.SetFolderOpen(true);   // the panel's own controls reach the main window's column
+                if (host.Visibility != Visibility.Visible || col.Width.Value < 22 + 150) throw new Exception("auto: the panel did not open beside the tabs (column " + col.Width.Value + ")");
+                mw.SetHostPaneOpen(false);
+                if (host.Visibility == Visibility.Visible || Math.Abs(col.Width.Value - 22) > 0.5) throw new Exception("auto: the panel did not fold back");
+                // Closing the Hosts tab keeps the page (and so the panel) alive; reopening shows the same page.
+                mw.Navigate("hosts");
+                var hostsTab = mw.Panes.AllTabs.FirstOrDefault(t => t.Content == page) ?? throw new Exception("the Hosts tab isn't the main window's Hosts page");
+                mw.CloseTab(hostsTab);
+                if (host.Child != page.FolderPane || page.Folders.Items.Count == 0) throw new Exception("closing the Hosts tab took the hosts panel with it");
+                mw.Navigate("hosts");
+                if (mw.Panes.AllTabs.Count(t => t.Content is HostsView) != 1 || !mw.Panes.AllTabs.Any(t => t.Content == page)) throw new Exception("reopening Hosts didn't reuse the one page");
                 // 0.5.8–0.6.1's "tab" reads as pinned; the policy offers pinned / auto.
                 s.HostsDock = "tab";
                 if (HostsView.FolderMode != "pinned") throw new Exception("the old 'tab' value isn't read as pinned");
@@ -697,6 +679,45 @@ public static class Release051Tests
                 if (probe != null && mw.Panes.Contains(probe)) mw.CloseTab(probe);
                 HostsView.SetFolderMode(before == "auto" ? "auto" : "pinned");
                 s.HostsDock = before;
+            }
+            return Task.CompletedTask;
+        });
+
+        await Run("0.6.31 (DarkCipher0x): a tab group stacks into one tab (\"cascade the tabs ... so it takes less space\"), and any of its tabs is one pick away", () =>
+        {
+            var mw = MainWindow.Instance ?? throw new Exception("no main window");
+            var P = mw.Panes;
+            var mine = new List<TabItem>();
+            try
+            {
+                for (int i = 0; i < 3; i++) mine.Add(mw.AddTab("stack-" + i, new Border()));
+                var outsider = mw.AddTab("stack-outsider", new Border());
+                mine.Add(outsider);
+                foreach (var t in mine.Take(3)) TabGroups.Assign(t, "stack-test");
+                P.Select(mine[1]);
+                TabGroups.SetStacked("stack-test", true);
+                var shown = mine.Take(3).Where(t => t.Visibility == Visibility.Visible).ToList();
+                if (shown.Count != 1 || shown[0] != mine[1]) throw new Exception("stacked: " + shown.Count + " tabs show (the one in front must be the only one)");
+                if (!TabGroups.GetStacked(mine[1]) || TabGroups.GetStackText(mine[1]) != "3 ▾" || !TabGroups.GetLead(mine[1])) throw new Exception("stacked: the chip doesn't say 3 ▾ on the face tab");
+                if (TabGroups.StackOf(mine[1]).Count != 3) throw new Exception("the chip's list doesn't hold the group's 3 tabs");
+                // Picking another of its tabs (the chip's list, the wheel, Ctrl+Tab) makes that one the face.
+                P.Select(mine[2]);
+                if (mine[2].Visibility != Visibility.Visible || mine[1].Visibility == Visibility.Visible) throw new Exception("the picked tab didn't become the face");
+                // Another tab in front: the group keeps showing the one used last.
+                P.Select(outsider);
+                if (mine[2].Visibility != Visibility.Visible || mine.Take(2).Any(t => t.Visibility == Visibility.Visible)) throw new Exception("the face changed when another tab came to the front");
+                if (outsider.Visibility != Visibility.Visible) throw new Exception("a tab outside the group was hidden");
+                // Leaving the group shows the tab again; spreading out shows them all.
+                TabGroups.Remove(mine[0]);
+                if (mine[0].Visibility != Visibility.Visible || TabGroups.GetStackText(mine[2]) != "2 ▾") throw new Exception("a tab that left the stack stayed hidden");
+                TabGroups.SetStacked("stack-test", false);
+                if (mine.Any(t => t.Visibility != Visibility.Visible) || mine.Any(TabGroups.GetStacked)) throw new Exception("spreading out didn't show every tab");
+                if (TabGroups.Members("stack-test").Count(TabGroups.GetLead) != 1) throw new Exception("spread out: the group's name isn't printed once");
+            }
+            finally
+            {
+                TabGroups.SetStacked("stack-test", false);
+                foreach (var t in mine) { TabGroups.Remove(t); if (P.Contains(t)) mw.CloseTab(t); }
             }
             return Task.CompletedTask;
         });

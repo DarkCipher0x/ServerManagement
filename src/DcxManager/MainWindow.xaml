@@ -86,9 +86,24 @@
             </Border>
             <GridSplitter x:Name="SideSplitter" Grid.Column="1" Width="4" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
                           Background="Transparent" ToolTip="Drag to resize the sidebar · double-click or Ctrl+B to hide/show" DragCompleted="OnSideResized" MouseDoubleClick="OnSideToggle"/>
-            <!-- Documents: split / tiled panes (Views/PaneHost.cs). (0.5.8–0.6.1 had a host pane beside them; 0.6.2 moved
-                 pin / auto-collapse into the Hosts page's own folder pane, DarkCipher0x: "INSIDE the tab/window of hosts".) -->
-            <Border x:Name="DocArea" Grid.Column="2"/>
+            <!-- The hosts panel beside every tab, then the documents: split / tiled panes (Views/PaneHost.cs). 0.6.31
+                 (DarkCipher0x: "it should all be on the same frame ... i still want the ability to pin the hosts panel ... it
+                 just needs to be for the whole frame"): the Hosts page's folder pane lives here, pinned or auto-collapsing
+                 (Shell/MainWindow.HostPane.cs); sessions all open in the one tab bar. -->
+            <Grid x:Name="DocGrid" Grid.Column="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="HostPaneCol" Width="0"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border x:Name="HostPaneStrip" Grid.Column="0" Visibility="Collapsed" Cursor="Hand" AllowDrop="True" Background="Transparent"
+                        BorderThickness="0,0,2,0" BorderBrush="{DynamicResource Line}"
+                        AutomationProperties.Name="Show the hosts panel" ToolTip="Hosts: point here to slide the hosts panel out"/>
+                <Border x:Name="HostPaneHost" Grid.Column="0" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0" Padding="8,8,6,8" Visibility="Collapsed"/>
+                <GridSplitter x:Name="HostPaneSplitter" Grid.Column="1" Width="4" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                              Background="Transparent" ToolTip="Drag to resize the hosts panel" Visibility="Collapsed"/>
+                <Border x:Name="DocArea" Grid.Column="2"/>
+            </Grid>
             <!-- Right dock region: filled by a module (0.2.0 phase 3) — the AI Engineer sidebar (Views/AiDock.cs, Ctrl+Shift+A): docked / collapsed / hidden / detached -->
             <GridSplitter x:Name="DockSplitter" Grid.Column="3" Width="4" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
                           Background="Transparent" ToolTip="Drag to resize the sidebar · double-click to collapse it" Visibility="Collapsed"/>

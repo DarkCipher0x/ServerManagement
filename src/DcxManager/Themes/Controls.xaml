@@ -1071,10 +1071,17 @@
                         <StackPanel Orientation="Horizontal">
                             <!-- Tab group (ADR-019): the group's name, outlined and written in its colour. 0.6.29: printed once, on the
                                  first tab of each run of the group's tabs; every member has the colour line underneath (grpLine). -->
+                            <!-- 0.6.31: the chip stacks the group into one tab; on a stacked group it says how many tabs it holds and
+                                 opens a list of them (the mouse wheel over it steps through them). Wired in DocPane. -->
                             <Border x:Name="grp" Visibility="Collapsed" CornerRadius="{DynamicResource Radius}" Padding="4,0" Margin="0,0,5,0" VerticalAlignment="Center" BorderThickness="1"
+                                    Background="Transparent" Tag="groupchip" ToolTip="Click to stack this group's tabs into one tab"
                                     BorderBrush="{Binding Path=(svc:TabGroups.Brush), RelativeSource={RelativeSource TemplatedParent}}">
-                                <TextBlock Text="{Binding Path=(svc:TabGroups.Name), RelativeSource={RelativeSource TemplatedParent}}" FontSize="{DynamicResource FsMicro}" FontWeight="Bold"
-                                           Foreground="{Binding Path=(svc:TabGroups.Brush), RelativeSource={RelativeSource TemplatedParent}}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Path=(svc:TabGroups.Name), RelativeSource={RelativeSource TemplatedParent}}" FontSize="{DynamicResource FsMicro}" FontWeight="Bold"
+                                               Foreground="{Binding Path=(svc:TabGroups.Brush), RelativeSource={RelativeSource TemplatedParent}}"/>
+                                    <TextBlock x:Name="grpCount" Visibility="Collapsed" Margin="4,0,0,0" Text="{Binding Path=(svc:TabGroups.StackText), RelativeSource={RelativeSource TemplatedParent}}"
+                                               FontSize="{DynamicResource FsMicro}" FontWeight="Bold" Foreground="{Binding Path=(svc:TabGroups.Brush), RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </StackPanel>
                             </Border>
                             <!-- Environment label (ADR-017): text on the environment's colour; the top edge takes the colour too. -->
                             <Border x:Name="env" Visibility="Collapsed" CornerRadius="{DynamicResource Radius}" Padding="4,0" Margin="0,0,5,0" VerticalAlignment="Center"
@@ -1132,6 +1139,10 @@
                             </MultiTrigger.Conditions>
                             <Setter TargetName="grp" Property="Visibility" Value="Visible"/>
                         </MultiTrigger>
+                        <Trigger Property="svc:TabGroups.Stacked" Value="True">
+                            <Setter TargetName="grpCount" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="grp" Property="ToolTip" Value="A stacked group: click for its tabs, or turn the mouse wheel here to step through them"/>
+                        </Trigger>
                         <Trigger Property="ui:EnvTab.Shown" Value="True">
                             <Setter TargetName="env" Property="Visibility" Value="Visible"/>
                             <Setter TargetName="bd" Property="BorderBrush" Value="{Binding Path=(ui:EnvTab.Brush), RelativeSource={RelativeSource TemplatedParent}}"/>

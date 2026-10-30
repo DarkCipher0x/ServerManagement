@@ -179,7 +179,9 @@ public sealed class AppSettings
     public string HostsDock { get; set; } = "pinned";
     /// <summary>0.6.7 (ADR-086; DarkCipher0x: "the terminal windows you open, should open within the tab... so that you can still
     /// pop out the hosts while viewing the terminal ... give the options to change it"): where sessions opened from the
-    /// Hosts page go: "hosts" (default: tabs inside the Hosts tab, beside its folder pane) or "tab" (separate tabs).</summary>
+    /// Hosts page go: "hosts" (default: tabs inside the Hosts tab, beside its folder pane) or "tab" (separate tabs).
+    /// Retired in 0.6.31 (ADR-109): sessions always open in the main tab bar, beside the main window's hosts panel; kept
+    /// only so older settings files still load.</summary>
     public string HostsOpenIn { get; set; } = "hosts";
     /// <summary>0.6.4 (ADR-082): the host pane in extra windows (other monitors): "pinned" (open, default) or "auto"
     /// (folds to a "Hosts" tab at the window's edge and slides out when pointed at).</summary>

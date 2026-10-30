@@ -61,9 +61,8 @@
                 </DockPanel>
             </Border>
             <GridSplitter x:Name="FolderSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext" Background="Transparent"/>
-        <!-- 0.6.7 (ADR-086): sessions opened from this page open as tabs in here, beside the folder pane; the host list is
-             its first tab ("All hosts"). Settings → Navigation → Open sessions from Hosts: inside the Hosts tab / separate tabs. -->
-        <Border x:Name="SessionArea" Grid.Column="2" Visibility="Collapsed"/>
+        <!-- 0.6.31 (ADR-109): sessions opened from here open in the main tab bar; in the main window this page's folder pane
+             is the hosts panel beside every tab (Shell/MainWindow.HostPane.cs). -->
         <ListView Grid.Column="2" x:Name="List" MouseDoubleClick="OnTerminal" SelectionMode="Extended">
             <ListView.View>
                 <GridView>

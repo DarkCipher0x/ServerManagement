@@ -346,12 +346,9 @@ public sealed partial class SettingsView
         var landing = Choice(new[] { ("", "Dashboard (default)") }.Concat(entries.Where(e => e.Key != "dashboard").Select(e => (e.Key, e.Title))), _s.LandingPage,
             v => { _s.LandingPage = v; Save(); }, "The screen opened when the app starts (workspace restore after a crash still reopens your tabs).");
 
-        // 0.6.2: the Hosts page's folder pane, pinned open or auto-collapsing inside the page.
+        // 0.6.31 (ADR-109): the hosts panel beside every tab of the main window, pinned open or auto-collapsing.
         var hostsDock = Choice(new[] { ("pinned", "Pinned open (default)"), ("auto", "Auto-collapse") }, HostsView.FolderMode,
-            v => HostsView.SetFolderMode(v), "The folder pane on the left of the Hosts page. Pinned: open beside the hosts. Auto-collapse: folds to a narrow strip inside the page; point at it to slide the folders out. Also the 📌 / 📍 on the pane itself.");
-        // 0.6.7 (ADR-086): where sessions opened from the Hosts page go.
-        var openIn = Choice(new[] { ("hosts", "Inside the Hosts tab (default)"), ("tab", "As separate tabs") }, HostsView.OpenIn,
-            v => HostsView.SetOpenIn(v), "Inside the Hosts tab: terminals, files and desktops you open from Hosts open as tabs inside it, beside the folder pane (which can still slide out over them). Separate tabs: each opens as its own tab, as before.");
+            v => HostsView.SetFolderMode(v), "The hosts panel on the left of the main window, beside every tab. Pinned: always open. Auto-collapse: folds to a slim Hosts strip; point at it to open the panel. Also the 📌 / 📍 on the panel itself. Sessions always open in the main tab bar.");
         // 0.6.4 (ADR-082): extra windows for other monitors, each with a host pane.
         var windowPane = Choice(new[] { ("pinned", "Pinned open (default)"), ("auto", "Auto-collapse") }, _s.WindowHostPane,
             v => { if (MainWindow.Instance?.Panes.Floats.FirstOrDefault() is { } fw) fw.SetMode(v); else { _s.WindowHostPane = v; Save(); } },
@@ -376,7 +373,7 @@ public sealed partial class SettingsView
         }
         FillPins();
         return Card("Sidebar", "",
-            Labeled("SIDEBAR", style), Labeled("SIDEBAR WIDTH (expanded)", width), Labeled("OPEN ON START", landing), Labeled("HOSTS FOLDER PANE", hostsDock), Labeled("OPEN SESSIONS FROM HOSTS", openIn), Labeled("HOST PANE IN EXTRA WINDOWS", windowPane), restoreWindows,
+            Labeled("SIDEBAR", style), Labeled("SIDEBAR WIDTH (expanded)", width), Labeled("OPEN ON START", landing), Labeled("HOSTS PANEL", hostsDock),Labeled("HOST PANE IN EXTRA WINDOWS", windowPane), restoreWindows,
             L($"PINNED PAGES (at most {NavLayout.MaxPinned})"), pinsNote, pins);
     }
 

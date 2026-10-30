@@ -669,7 +669,8 @@ internal static class StressTests
     private static async Task<string> ViewLeaksAsync(MainWindow main)
     {
         var refs = new List<(string Name, WeakReference Ref)>();
-        foreach (var key in new[] { "settings", "notes", "incidents", "addons", "privacy", "commander", "serial", "infra", "hosts", "credentials", "knownhosts", "snippets", "tunnels", "lan", "toolbox", "ansible", "reports", "observe", "help", "audit", "apiexplorer", "assistant" })
+        // Not "hosts": since 0.6.31 the main window keeps its one Hosts page for life (its folder pane is the hosts panel, ADR-109).
+        foreach (var key in new[] { "settings", "notes", "incidents", "addons", "privacy", "commander", "serial", "infra", "credentials", "knownhosts", "snippets", "tunnels", "lan", "toolbox", "ansible", "reports", "observe", "help", "audit", "apiexplorer", "assistant" })
         {
             var (r, _) = OpenScreen(main, key);
             await Idle(250);

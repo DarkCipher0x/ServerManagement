@@ -27,7 +27,7 @@ public partial class MainWindow
         switch (key)
         {
             case "dashboard": OpenSingleton(key, "◈ Dashboard", () => new DashboardView(), closable: false); break;
-            case "hosts": OpenSingleton(key, "▣ Hosts", () => new HostsView()); break;
+            case "hosts": OpenSingleton(key, "▣ Hosts", HostsPageForTab); break;
             case "commander": OpenSingleton(key, "⇆ File commander", () => new CommanderView()); break;
             case "notes": OpenSingleton(key, "✎ Notes", () => new NotesView()); break;
             case "docs": OpenSingleton(key, "📄 Docs", () => new DocsView()); break;
@@ -49,7 +49,7 @@ public partial class MainWindow
             case "beyondtrust": OpenSingleton(key, "⛨ BeyondTrust", () => new BeyondTrustView()); break;
             case "bitwarden": OpenSingleton(key, "🔑 Bitwarden", () => new BitwardenView()); break;   // 0.6.14 (ADR-093)
             case "credentials": (OpenSingleton(key, "⚿ Credentials", () => new CredentialsView()).Content as CredentialsView)?.ShowSharedOnly(false); break;
-            case "team:hosts": (OpenSingleton("hosts", "▣ Hosts", () => new HostsView()).Content as HostsView)?.ShowShared(); break;
+            case "team:hosts": (OpenSingleton("hosts", "▣ Hosts", HostsPageForTab).Content as HostsView)?.ShowShared(); break;
             case "team:credentials": (OpenSingleton("credentials", "⚿ Credentials", () => new CredentialsView()).Content as CredentialsView)?.ShowSharedOnly(true); break;
             case "knownhosts": OpenSingleton(key, "✓ Known hosts", () => new KnownHostsView()); break;
             case "library": OpenSingleton(key, "⇄ Shared library", () => new SharedLibraryView()); break;

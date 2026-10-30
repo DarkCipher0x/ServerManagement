@@ -93,6 +93,10 @@ public partial class MainWindow
             group.Length == 0 ? null : new object?[]
             {
                 Menus.Item($"Next tab in “{group}”", () => { var i = members.IndexOf(tab); Panes.Select(members[(i + 1) % members.Count]); }, enabled: members.Count > 1),
+                // 0.6.31: the group's tabs cascade into one tab (its chip lists them).
+                TabGroups.IsStacked(group)
+                    ? Menus.Item($"Spread out “{group}”", () => TabGroups.SetStacked(group, false))
+                    : Menus.Item($"Stack “{group}” into one tab", () => TabGroups.SetStacked(group, true), enabled: members.Count > 1),
                 Menus.Item("⌨ Broadcast input to the group's terminals…", () => InputBroadcast.Start(terms, $"group “{group}”"), enabled: terms.Count > 1),
                 Menus.Item("↻ Reconnect the group's terminals", () => { foreach (var t in terms.Where(t => !t.IsConnected)) _ = t.ConnectAsync(); }, enabled: terms.Any(t => !t.IsConnected)),
                 Menus.Item("✕ Disconnect the group's terminals", () => { foreach (var t in terms) t.Disconnect(); }, enabled: terms.Any(t => t.IsConnected)),

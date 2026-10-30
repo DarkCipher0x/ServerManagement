@@ -2310,7 +2310,7 @@ and checks crypto, storage, typography, network classes, the AI guards and more,
   config is skipped). SelfTest051 checks the lines, the base64 round trip, name and size limits, and where the button
   shows. Hand test: OUTSTANDING "0.6.6 tmux".
 
-### ADR-086 Sessions inside the Hosts tab (2026-10-23, 0.6.7)
+### ADR-086 Sessions inside the Hosts tab (2026-10-23, 0.6.7; superseded by ADR-109 in 0.6.31)
 - **Context:** DarkCipher0x: "the terminal windows you open, should open within the tab... so that you can still pop out the
   hosts while viewing the terminal... it seems to default to creating a new tab when opening a terminal, so please fix
   that and give the options to change it".
@@ -2880,3 +2880,35 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
   closed folder still found, host pane rebuild and filter, 10,000 id lookups < 200 ms, the id index exact after a removal
   with no save in between. A new test checks: no flush ticks from an idle terminal, output re-arms the timer, three
   `SaveSoon` calls give one save, ordinary output passes `ClampCsi` unchanged, and a hidden terminal's memory target is Low.
+
+### ADR-109 One tab bar, the hosts panel beside every tab, stacked tab groups (2026-10-30, 0.6.31)
+- **Context:** ADR-086 opened sessions from Hosts as tabs inside the Hosts tab, so the folder pane stayed beside them.
+  That gave two tab bars, one inside the other, and a workspace restore or a reconnect brought the sessions back as
+  ordinary tabs ("the nested tabs, when i reconnect, arent nested anymore. Id rather just get rid of that nested look,
+  so they are all in the same tab bar"). The pinnable pane itself was liked ("that looks perfect - it just needs to be
+  for the whole frame"). A separate request was to cascade a tab group so it takes less room, while keeping any of its
+  tabs easy to pick.
+- **Decision:**
+  - The embedded session area is removed (HostsView.Sessions.cs is gone, with `ArmSessions` and the `SessionArea`).
+    Every session opens in the main tab bar. `HostsOpenIn` stays in AppSettings only so old files load; it is in
+    `PolicySettings.Excluded` ("retired in 0.6.31") and no longer in Settings or the Hosts menu.
+  - The main window owns one `HostsView` for its whole life (`MainWindow.HostsPage`). `TakeFolderPane()` moves the
+    page's folder pane (📌 / 📍, the filter, the tree, ＋ Host / ＋ Folder) into a column of `DocGrid`, left of the
+    document area (Shell/MainWindow.HostPane.cs). The Hosts tab shows the page's list. Closing the tab keeps the page
+    (`Dispose` returns early when `PaneInWindow`), and `HostsPageForTab` detaches it from its old tab before reuse.
+  - Pinned: the panel has its own column (140 px minimum, the splitter saves `HostsDockWidth`). Auto: a 22 px "Hosts"
+    strip; pointing at it, clicking it or dragging onto it widens the column to strip + panel, and the panel folds back
+    450 ms after the pointer leaves or on a click into the tabs. The column widens rather than drawing over the tabs,
+    because terminals (WebView2) and desktops (ActiveX) are native windows ("airspace"), as in FloatWindow. `HostsDock`
+    keeps its policy choices (pinned / auto). Extra windows keep their own SessionManagerPane.
+  - Tab groups can be stacked (`TabGroups.SetStacked`): each run of a stacked group's tabs in a strip shows one tab,
+    the one in front or else the one used last. Its chip reads "name N ▾". Clicking the chip lists the run's tabs to
+    pick from, with "Spread out", and the mouse wheel over the chip steps through them. Clicking an unstacked group's
+    chip stacks it, and the tab menu has Stack / Spread out. `DocPane.OnSelectionChanged` re-runs `RefreshLeads`, so
+    whatever brings a hidden tab to the front (Ctrl+Tab, "switch to the open tab", the picker) makes it the face.
+    Only tabs the stack hid are shown again (`HiddenByStack`). The workspace saves `GroupStacked` per entry.
+- **Tests:** SelfTest051: sessions from Hosts open in the main tab bar with no embedded panes, and HostsOpenIn is no
+  longer a policy. The hosts panel is the page's folder pane: pinned column, auto strip 22, opening widens the column,
+  folding back, closing the Hosts tab keeps the panel, reopening reuses the one page, "tab" read as pinned. Stacking:
+  one tab shows, the chip says 3 ▾, picking a hidden tab makes it the face, the face is kept when another tab is in
+  front, a tab leaving the group shows again (2 ▾), spreading out shows all.

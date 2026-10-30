@@ -11,7 +11,7 @@ namespace DcxManager.Views;
 /// style: a filter, a small toolbar (Connect, ＋ Host, Properties), the tree — All hosts → folders → hosts, and
 /// ★ Favourites — and ＋ Folder at the bottom. Double-click or Enter connects (to the open tab when there is one,
 /// ADR-076), in the window the pane belongs to (<see cref="BeforeOpen"/>); right-click has the host's or folder's
-/// actions. The main window has no such pane: it has the sidebar and the Hosts page.
+/// actions. The main window has its own: the Hosts page's folder pane as the hosts panel beside every tab (0.6.31, Shell/MainWindow.HostPane.cs).
 /// Locks (ADR-067): a closed folder lock hides what's inside until it is opened; a locked host shows its padlock and
 /// asks before anything opens. Shared-library hosts stay on the Hosts page.
 /// </summary>

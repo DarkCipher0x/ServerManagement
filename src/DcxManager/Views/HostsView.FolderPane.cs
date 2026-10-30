@@ -92,6 +92,24 @@ public partial class HostsView
         FolderStrip.BorderThickness = new Thickness(0, 0, 2, 0);
     }
 
+    /// <summary>The folder pane lives in the main window's hosts panel, beside every tab (0.6.31; this is then the main
+    /// window's one Hosts page).</summary>
+    internal bool PaneInWindow { get; private set; }
+
+    /// <summary>Hands the folder pane to the main window's hosts panel (0.6.31, Shell/MainWindow.HostPane.cs): the page
+    /// keeps only its list, and stays alive when its tab closes.</summary>
+    internal FrameworkElement TakeFolderPane()
+    {
+        PaneInWindow = true;
+        FolderHost.Child = null;
+        FolderHost.Visibility = Visibility.Collapsed;
+        FolderStrip.Visibility = Visibility.Collapsed;
+        FolderSplitter.Visibility = Visibility.Collapsed;
+        FolderCol.MinWidth = 0;
+        FolderCol.Width = new GridLength(0);
+        return FolderPane;
+    }
+
     /// <summary>Lays the pane out for the current mode.</summary>
     internal void ApplyFolderPane()
     {
@@ -100,9 +118,13 @@ public partial class HostsView
         PinButton.Content = auto ? "📍" : "📌";
         PinButton.IsEnabled = !managed;
         PinButton.ToolTip = managed ? "🔒 Set by your organisation (Group Policy: HostsDock)."
+            : PaneInWindow
+                ? auto ? "Auto-collapse: the hosts panel folds to a Hosts strip beside the tabs and opens when you point at it. Click to pin it open."
+                       : "Pinned: the hosts panel stays open beside every tab. Click to auto-collapse it to a strip (it opens when you point at it)."
             : auto ? "Auto-collapse: the folder pane folds to a strip on the left of this page and slides out when you point at it. Click to pin it open."
                    : "Pinned: the folder pane stays open beside the hosts. Click to auto-collapse it to a strip (it slides out when you point at it).";
-        System.Windows.Automation.AutomationProperties.SetName(PinButton, auto ? "Pin the folder pane open" : "Auto-collapse the folder pane");
+        System.Windows.Automation.AutomationProperties.SetName(PinButton, auto ? "Pin the hosts panel open" : "Auto-collapse the hosts panel");
+        if (PaneInWindow) return;   // laid out by the main window
         FolderStrip.Visibility = auto ? Visibility.Visible : Visibility.Collapsed;
         FolderSplitter.Visibility = auto ? Visibility.Collapsed : Visibility.Visible;
         if (auto)
@@ -143,13 +165,13 @@ public partial class HostsView
     /// <summary>Slides the auto-collapsing pane out (or back). Does nothing while pinned.</summary>
     internal void SetFolderOpen(bool open)
     {
+        if (PaneInWindow) { MainWindow.Instance?.SetHostPaneOpen(open); return; }
         if (FolderMode != "auto" || open == _folderOpen) return;
         _folderOpen = open;
         if (!open) _folderClose?.Stop();
         // 0.6.7: a terminal (WebView2) or desktop (ActiveX) is a native window WPF can't draw over ("airspace"), so over a
         // session the pane opens beside it (the column widens) instead of on top; over the host list it slides over.
-        bool beside = open && _listTab != null && !_listTab.IsSelected;
-        FolderCol.Width = new GridLength(beside ? FolderStripWidth + FolderWidth : FolderStripWidth);
+        FolderCol.Width = new GridLength(FolderStripWidth);   // over the list it slides over (a standalone page has no sessions)
         FolderHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -160,7 +182,8 @@ public partial class HostsView
         AppSettings.Current.HostsDock = mode == "auto" ? "auto" : "pinned";
         try { AppSettings.Save(); } catch (Exception ex) { App.Log("Hosts folder pane mode", ex); }
         foreach (var hv in MainWindow.Instance?.Panes.AllTabs.Select(t => t.Content).OfType<HostsView>() ?? Enumerable.Empty<HostsView>()) { hv._folderOpen = false; hv.ApplyFolderPane(); }
-        MainWindow.Instance?.Status(mode == "auto" ? "The folder pane auto-collapses: point at the FOLDERS strip to slide it out." : "The folder pane is pinned open.");
+        MainWindow.Instance?.ApplyHostPane();   // 0.6.31: the hosts panel beside every tab
+        MainWindow.Instance?.Status(mode == "auto" ? "The hosts panel auto-collapses: point at the Hosts strip beside the tabs to open it." : "The hosts panel is pinned open beside every tab.");
     }
 
     private void OnPinToggle(object sender, RoutedEventArgs e) => SetFolderMode(FolderMode == "auto" ? "pinned" : "auto");

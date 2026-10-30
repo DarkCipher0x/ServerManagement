@@ -1,8 +1,8 @@
-# Security report — ServerManagement 0.6.30 – DarkCipher Systems
+# Security report — ServerManagement 0.6.31 – DarkCipher Systems
 
-**Date:** 2026-10-30. **Version under test:** 0.6.30 (the build this report ships with), on .NET 10 (LTS, security
+**Date:** 2026-10-30. **Version under test:** 0.6.31 (the build this report ships with), on .NET 10 (LTS, security
 fixes until November 2028; ADR-092). The first public beta was 0.6.22 (2026-10-24). The 0.6.30 sweep of everything
-added since then is in §4g; the earlier 0.6.x surfaces and the pre-launch audit are in §4b–§4f and in "Live attacks".
+added since then is in §4g (0.6.31 changes only the window layout and tab groups: no new inputs or connections); the earlier 0.6.x surfaces and the pre-launch audit are in §4b–§4f and in "Live attacks".
 The probe-by-probe list (§3) covers 0.4.0–0.5.1; later probes are described with their sweeps. **Prepared by:** the maintainers,
 from the automated suites that run on every build. **Scope:** the Windows application, its data store, every input it
 takes from outside (servers, files, policies, add-ons, web and API answers) and every connection it makes.

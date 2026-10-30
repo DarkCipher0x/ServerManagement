@@ -34,6 +34,7 @@ public partial class MainWindow : Window
         _cursorBlink.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(1, System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.Zero)));
         _cursorBlink.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.55))));
         DocArea.Child = Panes;
+        InitHostPane();   // 0.6.31: the hosts panel beside every tab (Shell/MainWindow.HostPane.cs)
         RightDock = AppModules.CreateRightDock(this, DockCol, DockSplitter, DockHost);
         Panes.ActiveTabChanged += OnActiveTab;
         Activated += (_, _) => Panes.ActivateMain();   // 0.6.4: new tabs open in the window you're in

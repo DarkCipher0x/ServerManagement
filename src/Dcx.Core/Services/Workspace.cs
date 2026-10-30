@@ -20,6 +20,8 @@ public static class Workspace
         public int WindowPane { get; init; }
         public bool Active { get; init; }
         public string? Group { get; init; }
+        /// <summary>0.6.31: the tab's group was stacked into one tab.</summary>
+        public bool GroupStacked { get; init; }
         /// <summary>0.6.29: a terminal's working folder (from OSC 7 or its prompt), typed back after the reconnect.</summary>
         public string? Cwd { get; init; }
         /// <summary>0.6.29: the tmux session the terminal was in; re-attached on every reconnect.</summary>

@@ -16,8 +16,24 @@ public sealed class DocPane : TabControl
         Frame = frame;
         Style = (Style)Application.Current.Resources["DocTabs"];
         AllowDrop = true;
+        PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            if (GroupChipOf(e.OriginalSource) is not { } tab) return;
+            e.Handled = true;   // the chip is a button of its own: no select, no drag
+            if (TabGroups.GetStacked(tab)) ShowStack(tab);
+            else TabGroups.SetStacked(TabGroups.GetName(tab), true);
+        };
         PreviewMouseWheel += (_, e) =>
         {
+            if (GroupChipOf(e.OriginalSource) is { } face && TabGroups.GetStacked(face))
+            {
+                // Over a stacked group's chip the wheel steps through its tabs.
+                var run = TabGroups.StackOf(face);
+                int i = run.ToList().IndexOf(face);
+                Frame.Host.Select(run[((i + (e.Delta < 0 ? 1 : -1)) % run.Count + run.Count) % run.Count]);
+                e.Handled = true;
+                return;
+            }
             if (e.OriginalSource is not DependencyObject d || Menus.Ancestor<TabItem>(d) == null) return;
             if (Template?.FindName("TabScroll", this) is ScrollViewer sv) { sv.ScrollToHorizontalOffset(sv.HorizontalOffset - e.Delta); e.Handled = true; }
         };
@@ -36,6 +52,33 @@ public sealed class DocPane : TabControl
     {
         base.OnItemsChanged(e);
         TabGroups.RefreshLeads(this);
+    }
+
+    /// <summary>The tab in front becomes its stacked group's face (0.6.31).</summary>
+    protected override void OnSelectionChanged(SelectionChangedEventArgs e)
+    {
+        base.OnSelectionChanged(e);
+        TabGroups.RefreshLeads(this);
+    }
+
+    /// <summary>The tab whose group chip <paramref name="source"/> is in (0.6.31), if it is.</summary>
+    private static TabItem? GroupChipOf(object source)
+    {
+        for (var d = source as DependencyObject; d != null && d is not TabItem; d = d is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d))
+            if (d is Border { Tag: "groupchip" }) return Menus.Ancestor<TabItem>(d);
+        return null;
+    }
+
+    /// <summary>A stacked group's tabs, to pick one (0.6.31): the one in front ticked, the rest by title.</summary>
+    internal void ShowStack(TabItem face)
+    {
+        var name = TabGroups.GetName(face);
+        var run = TabGroups.StackOf(face);
+        var items = run.Select(t => (object?)Menus.Item((t == face ? "✓ " : "") + (t.Header as string ?? t.Header?.ToString() ?? "tab"), () => Frame.Host.Select(t)))
+            .Append(Menus.Sep())
+            .Append(Menus.Item($"Spread out “{name}”", () => TabGroups.SetStacked(name, false)))
+            .ToArray();
+        if (face.Template?.FindName("grp", face) is FrameworkElement chip) Menus.ShowBelow(chip, items);
     }
 
     /// <summary>Wires the tab-strip tools from the DocTabs template (they live in the template, so they're found here).</summary>

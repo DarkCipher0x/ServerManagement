@@ -130,10 +130,10 @@ public partial class HostsView
         return item;
     }
 
-    /// <summary>Connects to a host from the tree, into the Hosts tab when sessions open there.</summary>
+    /// <summary>Connects to a host from the tree: a tab in the main window's tab bar (0.6.31: never a tab inside a tab).</summary>
     private void ConnectFromTree(HostEntry h)
     {
-        ArmSessions();
+        if (PaneInWindow) MainWindow.Instance?.Panes.ActivateMain();
         MainWindow.Instance?.OpenTerminal(h);   // RDP, VNC and Telnet hosts open the right session by themselves
     }
 
@@ -142,7 +142,6 @@ public partial class HostsView
     {
         if (TreeHost is not { } h) return FolderMenu(_folder);
         SelectInList(h);
-        ArmSessions();
         return HostMenu();
     }
 

@@ -69,7 +69,7 @@ public partial class MainWindow
             {
                 Floating = fi >= 0, Pane = fi >= 0 ? fi : Math.Max(0, pane == null ? 0 : main.IndexOf(pane)),
                 WindowPane = win == null || pane == null ? 0 : Math.Max(0, PaneHost.PanesOf(win).ToList().IndexOf(pane)),
-                Active = t == active, Group = g.Length > 0 ? g : null,
+                Active = t == active, Group = g.Length > 0 ? g : null, GroupStacked = g.Length > 0 && TabGroups.IsStacked(g),
                 Cwd = cwd, Tmux = tmux, Path = path, LeftPath = left, AdHoc = adHoc,
             });
         }
@@ -172,6 +172,7 @@ public partial class MainWindow
         }
         if (opened.Count == 0) return;
         foreach (var (e, t) in opened) if (e.Group is { Length: > 0 } g) TabGroups.Assign(t, g);
+        foreach (var g in opened.Where(o => o.Entry.GroupStacked && o.Entry.Group is { Length: > 0 }).Select(o => o.Entry.Group!).Distinct(StringComparer.OrdinalIgnoreCase)) TabGroups.SetStacked(g, true);
         var active = opened.FirstOrDefault(o => o.Entry.Active).Tab;
         var mainGroups = opened.Where(o => !o.Entry.Floating).GroupBy(o => o.Entry.Pane).OrderBy(g => g.Key).Select(g => (IReadOnlyList<TabItem>)g.Select(o => o.Tab).ToList()).ToList();
         if (mainGroups.Count > 1) Panes.Arrange(mainGroups, active);

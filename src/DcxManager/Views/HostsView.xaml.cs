@@ -64,7 +64,6 @@ public partial class HostsView : UserControl, IDisposable
     {
         InitializeComponent();
         InitFolderPane();   // 0.6.2: the folder pane pins or auto-collapses inside this page (HostsView.FolderPane.cs)
-        InitSessions();     // 0.6.7: sessions opened from here open inside this page (HostsView.Sessions.cs)
         AppData.Changed += OnStoreChanged;
         Locks.Changed += OnLocksChanged;   // padlocks redraw (ADR-067)
         Library.SharedLibraries.Changed += OnStoreChanged;
@@ -119,7 +118,10 @@ public partial class HostsView : UserControl, IDisposable
         Reload();
     }
 
-    public void Dispose() { EndSessionArea(); AppData.Changed -= OnStoreChanged; Locks.Changed -= OnLocksChanged; Library.SharedLibraries.Changed -= OnStoreChanged; }
+    public void Dispose()
+    {
+        if (PaneInWindow) return;   // 0.6.31: the main window's one Hosts page outlives its tab (its folder pane is the hosts panel)
+        AppData.Changed -= OnStoreChanged; Locks.Changed -= OnLocksChanged; Library.SharedLibraries.Changed -= OnStoreChanged; }
 
     private bool _stale;
     /// <summary>A Hosts tab behind other tabs rebuilds when it comes to the front, not on every save (0.6.29 performance
@@ -142,16 +144,11 @@ public partial class HostsView : UserControl, IDisposable
         yield return Menus.Item("⌕ Find hosts on the network…", () => HostImportWindow.Show(Window.GetWindow(this)),
             enabled: Restrictions.Allowed("host.add") && Restrictions.Allowed("network.scan"),
             tip: "Scan your network for SSH, Remote Desktop and VNC, review what answered (✦ the AI can suggest names), tick and import");
-        // 0.6.2: the folder pane, pinned or auto-collapsing inside this page (also its own 📌 / 📍).
+        // The hosts panel (0.6.31: beside every tab), pinned or auto-collapsing (also its own 📌 / 📍).
         bool paneManaged = PolicySettings.Get(nameof(AppSettings.HostsDock)) != null;
         yield return FolderMode == "auto"
-            ? Menus.Item("📌 Pin the folder pane open", () => SetFolderMode("pinned"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : null)
-            : Menus.Item("📍 Auto-collapse the folder pane", () => SetFolderMode("auto"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : "Folds to a strip on the left of this page; point at it to slide the folders out");
-        // 0.6.7 (ADR-086): sessions inside this tab, or separate tabs.
-        bool openManaged = PolicySettings.Get(nameof(AppSettings.HostsOpenIn)) != null;
-        yield return OpenIn == "hosts"
-            ? Menus.Item("⧉ Open sessions as separate tabs", () => SetOpenIn("tab"), enabled: !openManaged, tip: openManaged ? "🔒 Set by your organisation (Group Policy: HostsOpenIn)." : "Terminals and desktops you open from Hosts get their own tabs, as before")
-            : Menus.Item("▣ Open sessions inside the Hosts tab", () => SetOpenIn("hosts"), enabled: !openManaged, tip: openManaged ? "🔒 Set by your organisation (Group Policy: HostsOpenIn)." : "Terminals and desktops you open from Hosts open as tabs inside it, beside the folder pane");
+            ? Menus.Item("📌 Pin the hosts panel open", () => SetFolderMode("pinned"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : null)
+            : Menus.Item("📍 Auto-collapse the hosts panel", () => SetFolderMode("auto"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : "Folds to a Hosts strip beside the tabs; point at it to open the panel");
         yield return Menus.Item("⧉ Duplicate", () => OnDuplicate(this, ev), enabled: one != null);
         yield return Menus.Item(one is { Favorite: true } ? "☆ Remove from favourites" : "★ Add to favourites", () => OnFavourite(this, ev), enabled: sel.Count > 0);
         yield return Menus.Item("Copy address", () => OnCopyAddress(this, ev), enabled: one != null);

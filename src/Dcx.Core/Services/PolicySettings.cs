@@ -24,6 +24,7 @@ public static class PolicySettings
     /// <summary>Settings that are never policies, and why.</summary>
     public static readonly IReadOnlyDictionary<string, string> Excluded = new Dictionary<string, string>
     {
+        [nameof(AppSettings.HostsOpenIn)] = "retired in 0.6.31: sessions always open in the main tab bar",
         [nameof(AppSettings.VultrAccounts)] = "per-user cloud accounts with their API keys (secrets never go in the registry)",
         [nameof(AppSettings.ContaboAccounts)] = "per-user cloud accounts with their credentials",
         [nameof(AppSettings.HetznerAccounts)] = "per-user cloud projects with their tokens",
@@ -87,7 +88,7 @@ public static class PolicySettings
         ("AI", Array.Empty<string>(), new[] { "Ai", "Ollama", "Foundry", "OpenAi", "Anthropic", "ClaudeCode" }),
         ("Terminals and connections", new[] { nameof(AppSettings.Scrollback), nameof(AppSettings.DefaultUsername), nameof(AppSettings.LocalSshKeysAutoImport), nameof(AppSettings.ConnectTimeoutSeconds), nameof(AppSettings.AutoReconnectMaxSeconds), nameof(AppSettings.RestoreWorkspace), nameof(AppSettings.SessionsOnExit), nameof(AppSettings.RestoreReconnect), nameof(AppSettings.RdpEmbedded), nameof(AppSettings.ReuseOpenTabs), nameof(AppSettings.CloudSyncHosts), nameof(AppSettings.EditorVimMode), nameof(AppSettings.EditorVimProfile), nameof(AppSettings.EditorLineNumbers), nameof(AppSettings.EditorSyntaxColours), nameof(AppSettings.SessionLogs) }, new[] { "Terminal", "Tmux" }),
         ("Appearance", new[] { nameof(AppSettings.Theme), nameof(AppSettings.AccentColor), nameof(AppSettings.ThemePreset), nameof(AppSettings.StatusIntensity), nameof(AppSettings.FollowWindowsHighContrast), nameof(AppSettings.Corners), nameof(AppSettings.Motion), nameof(AppSettings.Density), nameof(AppSettings.MonoAccents), nameof(AppSettings.ThemeAddon) }, new[] { "Ui", "MonoFont", "EditorFont", "Branding" }),
-        ("Navigation and dashboard", new[] { nameof(AppSettings.LandingPage), nameof(AppSettings.PinnedNavItems), nameof(AppSettings.HiddenNavItems), nameof(AppSettings.NavSectionOrder), nameof(AppSettings.NavItemOrder), nameof(AppSettings.HiddenNavSections), nameof(AppSettings.RememberNavExpansion), nameof(AppSettings.CloudPinned), nameof(AppSettings.HostsView), nameof(AppSettings.HostsHiddenColumns), nameof(AppSettings.HostsDock), nameof(AppSettings.HostsOpenIn), nameof(AppSettings.WindowHostPane), nameof(AppSettings.RestoreWorkspaceWindows), nameof(AppSettings.PaletteLearn) }, new[] { "Sidebar", "Dashboard" }),
+        ("Navigation and dashboard", new[] { nameof(AppSettings.LandingPage), nameof(AppSettings.PinnedNavItems), nameof(AppSettings.HiddenNavItems), nameof(AppSettings.NavSectionOrder), nameof(AppSettings.NavItemOrder), nameof(AppSettings.HiddenNavSections), nameof(AppSettings.RememberNavExpansion), nameof(AppSettings.CloudPinned), nameof(AppSettings.HostsView), nameof(AppSettings.HostsHiddenColumns), nameof(AppSettings.HostsDock),nameof(AppSettings.WindowHostPane), nameof(AppSettings.RestoreWorkspaceWindows), nameof(AppSettings.PaletteLearn) }, new[] { "Sidebar", "Dashboard" }),
         ("Data, backups and files", new[] { nameof(AppSettings.ScreenshotDir), nameof(AppSettings.ScreenshotDefault), nameof(AppSettings.CommanderShowHidden), nameof(AppSettings.CommanderRestoreLast) }, new[] { "Snapshot", "AutoSnapshots", "Transfer", "Backup", "FileSync" }),
         ("Syslog, log sinks and notifications", Array.Empty<string>(), new[] { "Syslog", "Smtp", "Notify", "Observe", "Grafana" }),
         ("Updates", new[] { nameof(AppSettings.UpdateSource), nameof(AppSettings.UpdateEndpoint), nameof(AppSettings.AutoCheckUpdates), nameof(AppSettings.UpdateCheckInterval), nameof(AppSettings.AutoDownloadUpdates) }, Array.Empty<string>()),
@@ -110,7 +111,6 @@ public static class PolicySettings
     {
         [nameof(AppSettings.Theme)] = new[] { "System", "Dark", "Light" },
         [nameof(AppSettings.HostsDock)] = new[] { "pinned", "auto" },
-        [nameof(AppSettings.HostsOpenIn)] = new[] { "hosts", "tab" },
         [nameof(AppSettings.SessionsOnExit)] = new[] { "ask", "save", "never" },
         [nameof(AppSettings.WindowHostPane)] = new[] { "pinned", "auto" },
         [nameof(AppSettings.UpdateSource)] = new[] { "github", "url" },
@@ -325,12 +325,11 @@ public static class PolicySettings
         [nameof(AppSettings.AddonBlockedIds)] = "Add-on ids that may never be installed or run",
         [nameof(AppSettings.LockedCategories)] = "Categories locked by your organisation (audit, credentials, hosts, …)",
         [nameof(AppSettings.CommanderRestoreLast)] = "File commander reconnects to its last places when it opens",
-        [nameof(AppSettings.HostsDock)] = "The Hosts page's folder pane: pinned open or auto-collapsing (pinned or auto)",
+        [nameof(AppSettings.HostsDock)] = "The hosts panel beside every tab of the main window: pinned open or auto-collapsing (pinned or auto)",
         [nameof(AppSettings.TmuxInstall)] = "The terminal's tmux button installs tmux when it is missing (asking first)",
         [nameof(AppSettings.TmuxSession)] = "The tmux session the terminal's tmux button attaches to or creates",
         [nameof(AppSettings.M365AdminEnabled)] = "The Microsoft 365 admin page (Intune, Defender and Entra, read-only)",
         [nameof(AppSettings.CloudPcEnabled)] = "The Cloud PCs page (Windows 365 / Azure Virtual Desktop through the Windows App)",
-        [nameof(AppSettings.HostsOpenIn)] = "Where sessions opened from the Hosts page go (hosts = inside the Hosts tab, tab = separate tabs)",
         [nameof(AppSettings.WindowHostPane)] = "The host pane in extra windows (other monitors): pinned open or auto-collapsing (pinned or auto)",
         [nameof(AppSettings.RestoreWorkspaceWindows)] = "Reopen the extra windows where they were (monitor, position, size) when the app starts",
         [nameof(AppSettings.SessionsOnExit)] = "Exiting with sessions open: ask (save and exit, or exit without saving), save (always reopen them next time) or never",

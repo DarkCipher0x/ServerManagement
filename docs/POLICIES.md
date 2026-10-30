@@ -4,7 +4,7 @@ Generated from the app's policy catalog (`PolicySettings.Catalog`, ADR-040) by e
 
 Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer, wins) and `HKCU\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (user). Templates: `policy\DarkCipherServerManagement.admx` and `policy\en-US\DarkCipherServerManagement.adml` in each release folder. A managed setting can't be changed in the app; an invalid value is ignored and listed in Settings → Security & privacy → Managed by your organisation.
 
-265 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, LastUpdateCheck, LocalSshKeysSeen, ObserveSecrets, OllamaTunnelHostId, OpenAiKey, PaletteRecent, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalHighlightRules, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
+264 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, HostsOpenIn, LastUpdateCheck, LocalSshKeysSeen, ObserveSecrets, OllamaTunnelHostId, OpenAiKey, PaletteRecent, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalHighlightRules, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
 
 ## Security and sign-in
 
@@ -153,9 +153,8 @@ Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer
 | `DashboardOrder` | Dashboard order | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `HiddenNavItems` | Hidden nav items | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `HiddenNavSections` | Hidden nav sections | REG_MULTI_SZ | one entry per line (up to 200) | empty |
-| `HostsDock` | The Hosts page's folder pane: pinned open or auto-collapsing (pinned or auto) | REG_SZ | `pinned` / `auto` | `pinned` |
+| `HostsDock` | The hosts panel beside every tab of the main window: pinned open or auto-collapsing (pinned or auto) | REG_SZ | `pinned` / `auto` | `pinned` |
 | `HostsHiddenColumns` | Hosts hidden columns | REG_MULTI_SZ | one entry per line (up to 200) | empty |
-| `HostsOpenIn` | Where sessions opened from the Hosts page go (hosts = inside the Hosts tab, tab = separate tabs) | REG_SZ | `hosts` / `tab` | `hosts` |
 | `HostsView` | Hosts view | REG_SZ | text (up to 2,048 characters) | `folders` |
 | `LandingPage` | Landing page | REG_SZ | text (up to 2,048 characters) | empty |
 | `NavItemOrder` | The order of the pages inside each sidebar section (page keys; empty = the default order) | REG_MULTI_SZ | one entry per line (up to 200) | empty |
