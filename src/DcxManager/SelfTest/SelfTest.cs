@@ -256,6 +256,10 @@ public static partial class SelfTest
         try { await WaveATests.RunAsync(Ok, Fail); }
         catch (Exception ex) { Fail("Wave A tests", ex); }
 
+        // 0.6.30 (ADR-107): this PC's own SSH keys (a scratch .ssh folder of demo keys, never the real one).
+        try { await LocalKeysTests.RunAsync(Path.GetDirectoryName(reportPath)!, Ok, Fail); }
+        catch (Exception ex) { Fail("SSH keys on this PC tests", ex); }
+
         // 0.3.0: Synology DSM provider (fake DSM Web API).
         try { await SynologyTests.RunAsync(Ok, Fail); }
         catch (Exception ex) { Fail("Synology tests", ex); }

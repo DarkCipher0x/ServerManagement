@@ -36,7 +36,8 @@ public static class SnippetVariables
     public static bool HasVariables(string command) => Token.Matches(command ?? "").Any(m => m.Value is not ("{{" or "}}"));
 
     /// <summary>The command with every variable filled in and quoted, or null when a question was cancelled (answer
-    /// returned null). <paramref name="answer"/> is called once per <see cref="Questions"/> entry.</summary>
+    /// returned null). <paramref name="answer"/> is called once per <see cref="Questions"/> entry. Throws
+    /// <see cref="UnquotableException"/> for a value an unquotable shell can't be given safely.</summary>
     public static string? Expand(string command, Context c, Func<Question, string?> answer)
     {
         var answers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -60,28 +61,67 @@ public static class SnippetVariables
                     "user" => h?.Username ?? System.Environment.UserName,
                     _ => (h?.Port ?? 0).ToString(),
                 };
-                return Quote(v, c.Shell);
+                return Word(v, c.Shell, "{" + m.Groups[1].Value + "}");
             }
             var label = (m.Groups[2].Success ? m.Groups[2].Value : m.Groups[4].Value).Trim();
-            return Quote(answers.TryGetValue(label, out var s) ? s : "", c.Shell);
+            return Word(answers.TryGetValue(label, out var s) ? s : "", c.Shell, "“" + label + "”");
         });
+    }
+
+    /// <summary>A value for the command line. Where the shell can't be quoted reliably, a value that isn't safe unquoted is
+    /// refused (0.6.30 sweep: a {pick:} answer from one host's output went unquoted into a cmd or network device session
+    /// the same snippet was sent to, so that host could add a command of its own there).</summary>
+    private static string Word(string value, string shell, string what)
+    {
+        var q = Quote(value, shell);
+        if (shell is "posix" or "powershell" || SafeUnquoted(q)) return q;
+        throw new UnquotableException($"{what} has characters that can't be sent safely to a terminal whose shell can't be quoted (cmd, a Windows or network device session): only letters, digits, spaces and _ @ + = : , . / - \\ go there.");
     }
 
     /// <summary>A value as one word for the shell: POSIX single quotes ('\'' inside), PowerShell single quotes ('' inside);
     /// plain words are left as they are. Line breaks and control characters are always dropped.</summary>
-    public static string Quote(string value, string shell)
+    /// <remarks>0.6.30 sweep: PowerShell ends a single-quoted string at any of its five single quotes (' ‘ ’ ‚ ‛), not
+    /// only the ASCII one, so each is doubled; "@" (splatting) and "," (an array) aren't plain words there. Unicode format
+    /// characters (bidi overrides, zero-width) are dropped too, so a value can't look different in the confirmation.</remarks>
+    public static string Quote(string? value, string shell)
     {
-        var sb = new StringBuilder(value.Length);
-        foreach (var ch in value ?? "") if (ch >= 0x20 && ch != 0x7F && !(ch >= 0x80 && ch <= 0x9F)) sb.Append(ch);
-        var v = sb.ToString();
-        if (v.Length > 0 && v.All(ch => char.IsAsciiLetterOrDigit(ch) || "_@%+=:,./-".Contains(ch))) return v;
+        var v = Clean(value);
+        var plain = shell == "powershell" ? "_%+=:./-" : "_@%+=:,./-";
+        // PowerShell reads an unquoted word starting with "-" as a parameter name ("-Recurse"); quoted, it stays a value.
+        if (v.Length > 0 && v.All(ch => char.IsAsciiLetterOrDigit(ch) || plain.Contains(ch)) && !(shell == "powershell" && v[0] == '-')) return v;
         return shell switch
         {
             "posix" => "'" + v.Replace("'", "'\\''") + "'",
-            "powershell" => "'" + v.Replace("'", "''") + "'",
-            _ => v,   // cmd, network gear, serial: no quoting can be relied on; the value still can't break the line
+            "powershell" => PowerShellQuoted(v),
+            _ => v,   // cmd, network gear, serial: no quoting can be relied on (Expand refuses what isn't safe there)
         };
     }
+
+    /// <summary>A PowerShell single-quoted string: every one of its single-quote characters doubled.</summary>
+    public static string PowerShellQuoted(string v)
+    {
+        var sb = new StringBuilder(v.Length + 2).Append('\'');
+        foreach (var ch in v) { sb.Append(ch); if (IsPowerShellQuote(ch)) sb.Append(ch); }
+        return sb.Append('\'').ToString();
+    }
+
+    public static bool IsPowerShellQuote(char ch) => ch is '\'' or '‘' or '’' or '‚' or '‛';
+
+    /// <summary>The value without control characters (C0, DEL, C1) or Unicode format characters.</summary>
+    public static string Clean(string? value)
+    {
+        var sb = new StringBuilder(value?.Length ?? 0);
+        foreach (var ch in value ?? "")
+            if (ch >= 0x20 && ch != 0x7F && !(ch >= 0x80 && ch <= 0x9F) && char.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.Format) sb.Append(ch);
+        return sb.ToString();
+    }
+
+    /// <summary>What may go unquoted into a shell that can't be quoted reliably (cmd, a Windows or network device session):
+    /// letters, digits, spaces and _ @ + = : , . / - \ — no command separator, redirection, variable or escape.</summary>
+    public static bool SafeUnquoted(string v) => v.All(ch => char.IsLetterOrDigit(ch) || ch == ' ' || "_@+=:,./-\\".Contains(ch));
+
+    /// <summary>A value that can't be given to this terminal's shell safely (Expand refuses it rather than send it).</summary>
+    public sealed class UnquotableException(string message) : ArgumentException(message);
 
     /// <summary>The choices from a pick command's output: trimmed non-empty lines, first 500.</summary>
     public static List<string> Choices(string output) =>

@@ -124,14 +124,15 @@ public sealed partial class TerminalView
             }
             if (!present || !IsConnected) { _restoreCwd = null; return; }
             LastTmuxLine = Tmux.AttachLine(false, withConfig, name);
-            _transport?.Write(LastTmuxLine + "\r");
+            // Nothing awaits this task: a transport that died between the probe and the write is logged, not left unobserved.
+            try { _transport?.Write(LastTmuxLine + "\r"); } catch (Exception ex) { App.Log("tmux: re-attach", ex); }
             _restoreCwd = null;
             return;
         }
         if (ShellPlace.ChangeDirLine(_restoreCwd, Shell) is { } cd)
         {
             await Task.Delay(400);
-            if (IsConnected) _transport?.Write(cd + "\r");
+            try { if (IsConnected) _transport?.Write(cd + "\r"); } catch (Exception ex) { App.Log("saved session: folder", ex); }
         }
         _restoreCwd = null;
     }

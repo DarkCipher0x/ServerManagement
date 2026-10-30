@@ -2803,6 +2803,51 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
   change becoming the host's own, a removed default staying, jump-host rules, rename and delete; 10,000 hosts applied
   within budget.
 
+### ADR-107 This PC's own SSH keys: import and pick-up at start (2026-10-28, 0.6.30)
+- **Context:** DarkCipher0x asked for the desktop's default SSH key to go into the credential store by itself, set up
+  from Quick Start. Until now a key file got in only through the editor's file picker or a `~/.ssh/config` import.
+- **Decision:**
+  - `LocalKeys` (Connectivity) scans `%USERPROFILE%\.ssh` read-only. OpenSSH's default identities come first, in ssh's
+    order (`id_ed25519`, `id_ecdsa`, `id_rsa`), then any other file whose head is a private key. `config`,
+    `known_hosts`, `authorized_keys`, `.pub`/`.txt`/backups and files over 64 KB are skipped.
+  - Each key is Ready, NeedsPassphrase (OpenSSH cipher ≠ none, encrypted PEM/PKCS#8, PuTTY encryption), AlreadyStored
+    (same fingerprint or text) or Unsupported (FIDO `_sk`: the hardware signs and SSH.NET can't; or unreadable).
+    The .pub gives the comment, and the fingerprint of a key with a passphrase. `Found` is a class, not a record, so
+    the key text can't reach a `ToString()`.
+  - Import goes through `LocalKeyImport.Import` from Quick Start's new "Your SSH keys" page or Credentials →
+    ⇩ From ~/.ssh. It follows ＋ Add's rules (viewer profile, `credential.add` restriction, the Credentials lock, asked
+    to open). A passphrase is asked up to three times and kept with the key. The first default identity can become
+    `DefaultKeyCredentialId` when none is set.
+  - `LocalSshKeysAutoImport` (off by default, policy under Terminals and connections) runs `PickUpAsync` after start.
+    Each key is looked at once (`LocalSshKeysSeen`, by fingerprint, else a file hash; state, not a policy). New keys
+    without a passphrase are copied in. A passphrase key is only mentioned in the status bar. Keys already stored are
+    remembered, so a removed key stays removed. It never changes quick connect's key, because that would switch quick
+    connect from password to key sign-in without asking.
+  - Not done: keys held only by the Windows OpenSSH agent. An agent signs but never exports, so there is no file to copy.
+- **Tests:** `LocalKeysTests` on a scratch .ssh of demo keys (the self-test never reads the real folder:
+  `LocalKeys.Dir` points nowhere in test mode). Covered: order, states and skipped files; Quick Start's page importing
+  through its own button (a wrong passphrase asked again); quick connect's key; the files byte-identical; the pick-up
+  (once, removed stays removed, passphrase only mentioned, restriction obeyed). The Quick Start test now expects
+  sixteen pages.
+
+### ADR-108 The 0.6.30 pentest sweep: quoting, shared tunnels and remote names (2026-10-30, 0.6.30)
+- **Context:** DarkCipher0x asked for "a full pentest and debugging sweep". Every surface added since the 0.6.22 report
+  was reviewed and probed (docs/SECURITY-REPORT.md §4g). Six findings needed code changes.
+- **Decision:**
+  - PowerShell quoting doubles all five of its single quotes (' ‘ ’ ‚ ‛), in `SnippetVariables.PowerShellQuoted`.
+    `ShellPlace.ChangeDirLine` and snippet values both use it. Snippet values in PowerShell also quote `@`, `,` and
+    a leading `-`. Values everywhere lose C0/C1 controls and Unicode format characters (bidi, zero-width).
+  - Where a shell can't be quoted (cmd, Windows and network device sessions), `Expand` refuses a value that isn't
+    letters, digits, spaces and `_ @ + = : , . / - \`, with `UnquotableException`. Both callers show why and send
+    nothing to any terminal.
+  - `HostEntry.TunnelHost` picks an RDP/VNC host's SSH tunnel. A shared library host may only use an SSH host of the
+    same library. Your own hosts never fall back to a shared one. The library rebuild now remaps `Rdp/Vnc.SshHostId`.
+  - Remote listings keep only plain names (`SftpFs.RemoteNameOk`: no `.`, `..`, `/` or NUL). SCP lines must also name
+    a file directly in the folder. A stat time no date can hold no longer fails the listing.
+  - `LocalKeys` reads at most 64 KB through the open handle (a symlink's size can lie). It strips control and format
+    characters from shown names and comments, and lists a key asking for over 1,000 bcrypt rounds as Unsupported.
+- **Tests:** pentest section K (0.6.30 surfaces) and seven new fuzzers in the stress suite.
+
 ### ADR-106 Performance pass: scale, idle cost and start-up (2026-10-26, 0.6.29)
 - **Context:** a review for 24/7 use with big inventories. With 10,000 demo hosts an encrypted save took ~4 s (mostly
   the open screens reloading synchronously in `AppData.Changed`), a Hosts rebuild ~2 s (a folder count was a pass over

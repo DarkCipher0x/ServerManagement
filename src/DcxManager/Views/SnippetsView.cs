@@ -205,14 +205,20 @@ public sealed class SnippetsView : UserControl, IDisposable
         var cmd = _command.Text.Trim();
         if (hosts.Count == 0 || cmd.Length == 0) { Dialogs.Info("Run", "Choose at least one host and enter a command."); return; }
         bool sudo = _sudo.IsChecked == true;
-        // 0.6.29: variables. Questions once; {host}, {address}… per host, quoted for a POSIX shell.
+        // 0.6.29: variables. Questions once; {host}, {address}… per host, quoted for its shell (as the terminal decides it:
+        // POSIX for Linux/Unix hosts, no quoting a Windows or network host's shell can be relied on).
         var answers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var q in SnippetVariables.Questions(cmd))
         {
             if (Dialogs.Prompt(q.Label, q.PickCommand != null ? $"{q.Label} (the same for every host):" : $"{q.Label}:", q.Default) is not { } a) return;
             answers[q.Label] = a;
         }
-        string For(HostEntry h) => SnippetVariables.HasVariables(cmd) ? SnippetVariables.Expand(cmd, new(h, "posix", h.Environment, false), q => answers.GetValueOrDefault(q.Label, "")) ?? cmd : cmd;
+        static string ShellOf(HostEntry h) => h.EffectivePlatform is "windows" or "network" ? "" : "posix";
+        string For(HostEntry h) => SnippetVariables.HasVariables(cmd) ? SnippetVariables.Expand(cmd, new(h, ShellOf(h), h.Environment, false), q => answers.GetValueOrDefault(q.Label, "")) ?? cmd : cmd;
+        // 0.6.30 sweep: every host's command is worked out before anything runs, so a value one host's shell can't be
+        // given safely stops the whole run, not just that host.
+        try { foreach (var h in hosts) For(h); }
+        catch (SnippetVariables.UnquotableException ex) { Dialogs.Error("Run on hosts", ex.Message + "\n\nNothing was run."); return; }
         // Grouped by environment; any PRODUCTION host means typing PRODUCTION (ADR-017).
         if (!Envs.ConfirmMany(hosts, "Run on hosts", $"Run on {hosts.Count} host(s){(sudo ? " as root (sudo)" : "")}:\n\n{cmd}", "Run", danger: sudo)) return;
         _runs.Clear();

@@ -194,6 +194,9 @@ public static class SharedLibraries
                     var h = h0.Clone();
                     h.Id = ItemId(c.Id, i.Item);
                     h.CredentialId = Ref(h0.CredentialId); h.SudoCredentialId = Ref(h0.SudoCredentialId); h.JumpHostId = Ref(h0.JumpHostId);
+                    // 0.6.30 sweep: a VNC / Remote Desktop tunnel goes through an SSH host of this library, never one of this PC's.
+                    if (h.Vnc != null) h.Vnc.SshHostId = Ref(h0.Vnc?.SshHostId);
+                    if (h.Rdp != null) h.Rdp.SshHostId = Ref(h0.Rdp?.SshHostId);
                     h.Group = "⇄ " + label; h.Favorite = false; h.SharedFrom = label;
                     h.VultrInstanceId = h.VultrAccountId = h.CloudProvider = h.CloudInstanceId = h.CloudAccountId = null;
                     // 0.6.17 (ADR-096): links into Bitwarden / Password Safe name the member's own vault; on this PC they would read

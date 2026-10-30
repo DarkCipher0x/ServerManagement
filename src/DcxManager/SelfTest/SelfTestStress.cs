@@ -294,11 +294,53 @@ internal static class StressTests
             b => { var t = Encoding.UTF8.GetString(b); Ai.AiAgent.ParseTextCalls(t, aiTools); Ai.AiAgent.SalvageTextCalls(t, aiTools); Ai.AiAgent.MentionsToolUse(t, aiTools); return Task.CompletedTask; }, quick, noThrow: true);
         await f.RunAsync("pdf-extract", Math.Max(10, Few / 2), i => f.Mutate(pdfSeed),
             async b => { var r = await Documents.PdfText.ExtractAsync(b); _ = r.Label; }, TimeSpan.FromSeconds(5), noThrow: true);
+
+        // 0.6.30 sweep (docs/SECURITY-REPORT.md §4g): the parsers new in 0.6.23–0.6.30.
+        await f.RunAsync("shell-place", N, From("\u001b]7;file://web01/srv/app%20x\u0007ops@web01:/srv/app$ \r\nPS C:\\Users\\ops> \r\n[detached (from session main)]\r\n>> "), b =>
+        {
+            var s = T(b);
+            var p = Sessions.ShellPlace.FromOutput(s, "posix");
+            var w = Sessions.ShellPlace.FromOutput(s, "powershell");
+            Sessions.ShellPlace.ChangeDirLine(p, "posix"); Sessions.ShellPlace.ChangeDirLine(w, "powershell"); Sessions.ShellPlace.ChangeDirLine(s, "powershell");
+            Sessions.ShellPlace.LooksLikePrompt(Sessions.ShellPlace.LastLine(s)); Sessions.ShellPlace.LeftTmux(s);
+            return Task.CompletedTask;
+        }, quick, noThrow: true);
+        var snipHost = new HostEntry { Name = "web 01", Address = "192.0.2.51", Username = "ops", Port = 2222, Group = "Fuzz/Web", Tags = "nginx, edge", Environment = "TEST" };
+        await f.RunAsync("snippet-variables", N, From("tail -n {ask:Lines=50} {pick:Log|ls /var/log} {{x}} {host} {user}@{address}:{port} {ask:lines}"), b =>
+        {
+            var s = T(b);
+            SnippetVariables.Questions(s); SnippetVariables.HasVariables(s); SnippetVariables.Choices(s); SnippetVariables.CheckScope(s);
+            foreach (var shell in new[] { "posix", "powershell", "" })
+            {
+                var c = new SnippetVariables.Context(snipHost, shell, "TEST", shell == "");
+                SnippetVariables.InScope(new Snippet { Name = "f", Command = "x", Scope = s }, c);
+                SnippetVariables.Quote(s, shell);
+                try { SnippetVariables.Expand(s, c, q => q.Label + s); } catch (SnippetVariables.UnquotableException) when (shell == "") { }
+            }
+            return Task.CompletedTask;
+        }, quick, noThrow: true);
+        await f.RunAsync("highlighting", Few, From("(error|fail(ed)?)\\b 192.0.2.10:2222 https://example.com/a?b=1 /var/log/x"), b =>
+        {
+            var s = T(b);
+            Sessions.Highlighting.Check(s.Length > 600 ? s[..600] : s);
+            foreach (var word in s.Split(' ').Take(20)) Sessions.Highlighting.Classify(word);
+            Sessions.Highlighting.Classify(s);
+            return Task.CompletedTask;
+        }, TimeSpan.FromSeconds(2), noThrow: true);
+        var palette = Enumerable.Range(0, 300).Select(i => new PaletteSearch.Item("host:" + i, i % 3 == 0 ? "Host" : "Action", "web-" + i + " Contoso", "SSH · ops@192.0.2." + (i % 250), () => { })).ToList();
+        await f.RunAsync("palette-search", N, From("web 1 cont >ssh"), b => { PaletteSearch.Search(palette, T(b), new[] { "host:3", "host:x" }); return Task.CompletedTask; }, quick, noThrow: true);
+        var keySeed = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAEAAAAz\n-----END OPENSSH PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nPuTTY-User-Key-File-3: ssh-ed25519\nEncryption: aes256-cbc\n";   // secret-scan: example (headers only, no key)
+        await f.RunAsync("local-key-header", N, From(keySeed), b => { var s = T(b); Ssh.LocalKeys.IsEncrypted(s); Ssh.LocalKeys.KdfRounds(s); return Task.CompletedTask; }, quick, noThrow: true);
+        await f.RunAsync("ai-refused-sampling", N, From("Anthropic API: `temperature` is deprecated for this model; top_p too"), b =>
+        {
+            Ai.AiClient.RefusedSampling(T(b), new JsonObject { ["temperature"] = 0.2, ["top_p"] = 1, ["top_k"] = 5, ["model"] = "m" });
+            return Task.CompletedTask;
+        }, quick, noThrow: true);
         try { Directory.Delete(tmp, true); } catch { }
 
         if (f.Bugs.Count > 0) throw new Exception($"{f.Bugs.Count} problem(s) in {f.Calls:N0} fuzzed calls:\n  " + string.Join("\n  ", f.Bugs));
         var slow = f.Slowest.OrderByDescending(kv => kv.Value).Take(3).Select(kv => $"{kv.Key} {kv.Value:N0} ms");
-        return $"parser fuzzing (seed {seed}): {f.Calls:N0} calls over {f.Slowest.Count} parsers (server output, terminal/paste text, secrets masking, quick connect, note queries, Docker/Proxmox/Unraid JSON, update manifests, local API HTTP, store files, snapshots, add-on zips, PDFs) — no crash, no hang; {f.Rejected:N0} inputs rejected as designed; slowest: {string.Join(", ", slow)}";
+        return $"parser fuzzing (seed {seed}): {f.Calls:N0} calls over {f.Slowest.Count} parsers (server output, terminal/paste text, secrets masking, quick connect, note queries, Docker/Proxmox/Unraid JSON, update manifests, local API HTTP, store files, snapshots, add-on zips, PDFs; 0.6.30: shell places / OSC 7, snippet variables and scopes, highlight rules and Ctrl+click words, palette search, local SSH key headers, AI sampling retries) — no crash, no hang; {f.Rejected:N0} inputs rejected as designed; slowest: {string.Join(", ", slow)}";
     }
 
     private static JsonNode? TryJson(byte[] b) { try { return JsonNode.Parse(b); } catch (JsonException) { return null; } catch (ArgumentException) { return null; } }

@@ -294,11 +294,16 @@ public sealed class SftpFs : IFileSystem
         var list = new List<FsItem>();
         await foreach (var f in c.ListDirectoryAsync(path, ct))
         {
-            if (f.Name is "." or "..") continue;
+            if (!RemoteNameOk(f.Name)) continue;
             list.Add(Item(f));
         }
         return list;
     }
+
+    /// <summary>A name a POSIX file system can really have in a listing: not "." or "..", no "/" and no NUL (0.6.30 sweep:
+    /// a hostile server listing "../../x" made a host-to-host copy or sync write outside the target folder on the other
+    /// host; local targets were already safe through <see cref="LocalFs.SafeChild"/>).</summary>
+    public static bool RemoteNameOk(string? name) => name is { Length: > 0 } && name is not ("." or "..") && name.IndexOf('/') < 0 && name.IndexOf('\0') < 0;
 
     private static FsItem Item(ISftpFile f) => new()
     {

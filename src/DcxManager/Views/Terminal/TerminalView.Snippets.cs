@@ -124,7 +124,7 @@ public sealed partial class TerminalView
         foreach (var s in list)
         {
             var b = new Button { Content = s.Name.Length > 0 ? s.Name : s.Command, ToolTip = Tip(s), Style = (Style)Application.Current.Resources["SmallButton"], Margin = new Thickness(0, 0, 4, 0) };
-            b.Click += async (_, _) => await SendSnippetAsync(s, new[] { this });
+            b.Click += async (_, _) => { try { await SendSnippetAsync(s, new[] { this }); } catch (Exception ex) { App.Log("Snippet button", ex); SetStatus($"{_target.Endpoint} · snippet failed: {ex.Message}"); } };   // async void: never let a fault end the app
             Menus.Attach(b, () => SendToItems(s));
             _snipBar.Children.Add(b);
         }
@@ -163,7 +163,14 @@ public sealed partial class TerminalView
         var sends = new List<(TerminalView View, string Text)>();
         foreach (var v in live)
         {
-            var text = SnippetVariables.Expand(s.Command, v.SnippetContext(), q => answers.GetValueOrDefault(q.Label, ""));
+            string? text;
+            try { text = SnippetVariables.Expand(s.Command, v.SnippetContext(), q => answers.GetValueOrDefault(q.Label, "")); }
+            catch (SnippetVariables.UnquotableException ex)
+            {
+                SetStatus($"{_target.Endpoint} · snippet not sent");
+                Dialogs.Error("Snippet not sent", $"{v._target.Title}: {ex.Message}\n\nNothing was sent to any terminal.");
+                return 0;
+            }
             if (text == null) return 0;
             bool sudo = s.Sudo && v._target.Has(SessionCaps.Sudo) && v._target.Host?.Username != "root";
             sends.Add((v, (sudo ? "sudo " : "") + text));

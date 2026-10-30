@@ -83,6 +83,22 @@ public sealed class HostEntry
     [JsonIgnore] public string? SharedFrom { get; set; }
     [JsonIgnore] public bool IsShared => SharedFrom != null;
     [JsonIgnore] public string Display => (SharedFrom != null ? "⇄ " : "") + (string.IsNullOrWhiteSpace(Name) ? $"{Username}@{Address}" : Name);
+
+    /// <summary>
+    /// The SSH host a tunnel (VNC or Remote Desktop through SSH) may go through (0.6.30 sweep): <paramref name="chosenId"/>,
+    /// else a saved SSH host with the same address. A shared library host only ever uses an SSH host of its own library:
+    /// one of this PC's hosts would sign in with this user's credentials and forward to a target a library member chose.
+    /// </summary>
+    public HostEntry? TunnelHost(string? chosenId, Func<string?, HostEntry?> find, IEnumerable<HostEntry> own)
+    {
+        if (find(chosenId) is { IsSsh: true } chosen && chosen.Id != Id && (!IsShared || SameLibrary(chosen))) return chosen;
+        if (IsShared) return null;
+        return own.FirstOrDefault(x => x.IsSsh && !x.IsAdHoc && !x.IsShared && x.Id != Id && x.Address.Equals(Address, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Both are items of the same shared library ("lib_&lt;library&gt;_&lt;32-character item&gt;").</summary>
+    public bool SameLibrary(HostEntry other) =>
+        IsShared && other.IsShared && Id.Length > 32 && other.Id.Length == Id.Length && string.CompareOrdinal(Id, 0, other.Id, 0, Id.Length - 32) == 0;
     [JsonIgnore] public string Endpoint => Port == 22 ? $"{Username}@{Address}" : $"{Username}@{Address}:{Port}";
     public HostEntry Clone() { var c = (HostEntry)MemberwiseClone(); c.Rdp = Rdp.Clone(); c.Vnc = Vnc.Clone(); c.Inherits = new(Inherits ?? new()); return c; }
 }

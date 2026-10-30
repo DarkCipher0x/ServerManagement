@@ -44,7 +44,7 @@ public static class ShellPlace
         return Usable(found) ? found : null;
     }
 
-    private static bool Usable(string? p) => p is { Length: > 0 and <= 1024 } && !p.Any(char.IsControl);
+    private static bool Usable(string? p) => p is { Length: > 0 and <= 1024 } && !p.Any(ch => char.IsControl(ch) || char.GetUnicodeCategory(ch) == System.Globalization.UnicodeCategory.Format);
 
     // A line the cursor sits on that reads like a shell prompt: "user@host:~$ ", "[root@db ~]# ", "PS C:\> ", "% ", "❯ "…
     private static readonly Regex PromptEnd = new(@"[$#%>❯»]\s?$", RegexOptions.Compiled);
@@ -56,6 +56,7 @@ public static class ShellPlace
         if (string.IsNullOrWhiteSpace(line)) return false;
         var l = Ansi.Replace(line, "").TrimEnd();
         if (l.Length is 0 or > 300) return false;
+        if (l is ">" or ">>" or "?") return false;   // a shell still waiting for the rest of a line (bash's PS2 "> ", pwsh's ">> ", csh's "? ")
         return PromptEnd.IsMatch(l);
     }
 
@@ -77,7 +78,9 @@ public static class ShellPlace
     public static string? ChangeDirLine(string? path, string shell)
     {
         if (!Usable(path)) return null;
-        if (shell == "powershell") return $"Set-Location -LiteralPath '{path!.Replace("'", "''")}'";
+        // 0.6.30 sweep: every PowerShell single quote (' ‘ ’ ‚ ‛) doubled: a path the output showed with a curly quote in
+        // it would otherwise end the string and type the rest into the shell as a command.
+        if (shell == "powershell") return "Set-Location -LiteralPath " + Services.SnippetVariables.PowerShellQuoted(path!);
         if (shell != "posix") return null;
         static string Q(string s) => "'" + s.Replace("'", "'\\''") + "'";
         if (path == "~") return " cd ~";

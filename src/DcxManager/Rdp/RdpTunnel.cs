@@ -14,10 +14,9 @@ public static class RdpTunnel
 
     public static bool Wanted(HostEntry h) => h.Protocol == "rdp" && h.Rdp.Through == "ssh";
 
-    /// <summary>The SSH host chosen, else a saved SSH host with the same address.</summary>
-    public static HostEntry? SshHostFor(HostEntry h) =>
-        AppData.Current.FindHost(h.Rdp.SshHostId) is { IsSsh: true } chosen ? chosen
-            : AppData.Current.Hosts.FirstOrDefault(x => x.IsSsh && !x.IsAdHoc && x.Id != h.Id && x.Address.Equals(h.Address, StringComparison.OrdinalIgnoreCase));
+    /// <summary>The SSH host chosen, else a saved SSH host with the same address; a shared library host only one of its own
+    /// library (<see cref="HostEntry.TunnelHost"/>).</summary>
+    public static HostEntry? SshHostFor(HostEntry h) => h.TunnelHost(h.Rdp.SshHostId, AppData.Current.FindHost, AppData.Current.Hosts);
 
     /// <summary>The Remote Desktop server as the SSH host reaches it.</summary>
     public static string TargetFor(HostEntry h) => h.Rdp.TunnelTarget.Trim() is { Length: > 0 } t ? t : h.Address;

@@ -56,6 +56,9 @@ public sealed class ScpFs : IFileSystem
     {
         var p = line.Split('|', 7);
         if (p.Length < 7 || !long.TryParse(p[1], out var size) || !long.TryParse(p[2], out var epoch)) return null;
+        // 0.6.30 sweep: a time outside what a date can hold made FromUnixTimeSeconds throw, failing the whole listing.
+        if (epoch is < -62_135_596_800 or > 253_402_300_799) epoch = 0;
+        if (size < 0) size = 0;
         var name = p[6];
         if (name.Length == 0) return null;
         bool isDir = p[0] == "directory", isLink = p[0] == "symbolic link";
@@ -83,7 +86,10 @@ public sealed class ScpFs : IFileSystem
     {
         if (path.Length == 0) path = await HomeAsync(ct);
         var r = await Must($"cd {Q(path)} && for f in .[!.]* ..?* *; do {{ [ -e \"$f\" ] || [ -L \"$f\" ]; }} || continue; stat -c '%F|%s|%Y|%a|%u|%g|%n' -- \"$f\"; done", ct);
-        return r.Output.Split('\n').Select(l => ParseStat(l.TrimEnd('\r'), path)).OfType<FsItem>().ToList();
+        // 0.6.30 sweep: only plain names directly in the folder (a hostile shell printing "..", "/etc/x" or "a/../../x" is
+        // dropped, as in SftpFs).
+        return r.Output.Split('\n').Select(l => ParseStat(l.TrimEnd('\r'), path)).OfType<FsItem>()
+            .Where(i => SftpFs.RemoteNameOk(i.Name) && i.FullPath == Join(path, i.Name)).ToList();
     }
 
     public async Task<FsItem?> StatAsync(string path, CancellationToken ct = default)

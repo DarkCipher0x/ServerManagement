@@ -31,10 +31,9 @@ public static class VncConnector
 {
     public const int DefaultPort = 5900;
 
-    /// <summary>The SSH host a tunnelled session goes through: the one chosen, else a saved SSH host with the same address.</summary>
-    public static HostEntry? SshHostFor(HostEntry h) =>
-        AppData.Current.FindHost(h.Vnc.SshHostId) is { IsSsh: true } chosen ? chosen
-            : AppData.Current.Hosts.FirstOrDefault(x => x.IsSsh && !x.IsAdHoc && x.Address.Equals(h.Address, StringComparison.OrdinalIgnoreCase));
+    /// <summary>The SSH host a tunnelled session goes through: the one chosen, else a saved SSH host with the same address;
+    /// a shared library host only one of its own library (<see cref="HostEntry.TunnelHost"/>, 0.6.30 sweep).</summary>
+    public static HostEntry? SshHostFor(HostEntry h) => h.TunnelHost(h.Vnc.SshHostId, AppData.Current.FindHost, AppData.Current.Hosts);
 
     /// <summary>Opens the session. <paramref name="trustCertificate"/> is asked (fingerprint, subject) when a VeNCrypt server
     /// shows a certificate Windows doesn't trust and none is pinned; a yes is pinned on the host.</summary>

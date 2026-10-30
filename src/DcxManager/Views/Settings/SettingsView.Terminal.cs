@@ -57,6 +57,8 @@ public sealed partial class SettingsView
             Labeled("SESSION LOGS (new terminal tabs)", slog),
             Check("Confirm multi-line and risky pastes (shows the lines first; hidden control characters are always removed)", _s.TerminalConfirmPaste, v => _s.TerminalConfirmPaste = v),
             Check("Reconnect terminals automatically after an unexpected drop", _s.TerminalAutoReconnect, v => _s.TerminalAutoReconnect = v),
+            // 0.6.30 (ADR-107): this PC's own keys.
+            Check("Pick up new SSH keys from ~/.ssh at start: copied into the encrypted store, the files only read (a key with a passphrase is imported from Credentials → ⇩ From ~/.ssh; a key you remove isn't brought back)", _s.LocalSshKeysAutoImport, v => _s.LocalSshKeysAutoImport = v),
             Check("Switch to an open tab of the same host instead of opening another (Shift-click, or right-click → New connection, still opens another)", _s.ReuseOpenTabs, v => _s.ReuseOpenTabs = v),
             Check("Keep hosts in step with their cloud servers: a changed IP address, or a server rebuilt under the same name, updates the saved host; removed servers are offered for removal", _s.CloudSyncHosts, v => _s.CloudSyncHosts = v),
             TelnetCheck(),

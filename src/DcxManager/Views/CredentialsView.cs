@@ -34,6 +34,7 @@ public sealed class CredentialsView : UserControl, IDisposable
         Button B(string t, RoutedEventHandler h, string? style = null) { var b = new Button { Content = t, Margin = new Thickness(0, 0, 6, 4) }; if (style != null) b.Style = (Style)FindResource(style); b.Click += h; bar.Children.Add(b); return b; }
         B("＋ Add", OnAdd, "PrimaryButton");
         B("🔑 New SSH key…", (_, _) => SshKeyWindow.Show(Window.GetWindow(this)));
+        B("⇩ From ~/.ssh…", (_, _) => LocalKeysPanel.ShowDialog(Window.GetWindow(this)));   // 0.6.30 (ADR-107): this PC's own keys
         // 0.6.19: add a Bitwarden item, Secrets Manager secret or Password Safe account by searching for it.
         B("⛓ From Bitwarden / Password Safe…", (_, _) =>
             {

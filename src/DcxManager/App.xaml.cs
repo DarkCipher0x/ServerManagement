@@ -46,8 +46,19 @@ public partial class App : Application
         });
     }
 
-    /// <summary>A deferred save still waiting (written now: at exit, before a backup or a profile switch).</summary>
+    /// <summary>A deferred save still waiting (written now, at exit).</summary>
     internal static void FlushSaveLater() { if (_saveLaterWork is { } w) { _saveLater?.Stop(); _saveLaterWork = null; w(); } }
+
+    /// <summary>The store was just saved in full (any thread): a deferred save still waiting has nothing left to write, so
+    /// it is dropped instead of writing the store again and reloading every screen 2 s later.</summary>
+    private static void CancelSaveLater()
+    {
+        if (_saveLaterWork == null) return;
+        var d = Current?.Dispatcher;
+        if (d == null) return;
+        if (d.CheckAccess()) { _saveLater?.Stop(); _saveLaterWork = null; }
+        else d.BeginInvoke(() => { _saveLater?.Stop(); _saveLaterWork = null; });
+    }
 
     private static void WireLayers()
     {
@@ -55,6 +66,7 @@ public partial class App : Application
         AppData.SharedHost = Library.SharedLibraries.FindHost;
         AppData.SharedCredential = Library.SharedLibraries.FindCredential;
         AppData.SaveLater = SaveLater;   // 0.6.29: last-connected bookkeeping saves once, a moment later, on the UI thread
+        AppData.Changed += CancelSaveLater;   // a full save in the meantime makes the deferred one redundant
         CredentialSources.Install();   // 0.6.17 (ADR-096): vault credentials kept in Bitwarden or Password Safe
         SafeMetadata.CloudLink = h => Cloud.CloudProviders.ForHost(h) is { } c ? c.Provider.Title : null;
         StorageGuard.OpenDataLocation = () => SettingsView.Current?.PickNewDataLocation();
@@ -355,6 +367,7 @@ public partial class App : Application
         AppLock.Start();
         LockGate.Install();   // 0.5.1 (ADR-067): locks close on time, and when Windows locks or the PC sleeps
         StartupFlow.MaybeRunSetup(main);   // 0.3.0 §19: a new store gets the guided, all-optional setup
+        LocalKeyImport.AtStart(main.Status);   // 0.6.30 (ADR-107): new keys in ~/.ssh, when Settings → Terminal & connections says so
         // Modules' background start-up tasks (0.2.0 phase 3): the AI module applies its default engine (ADR-023), sets up
         // Foundry Local hands-off (ADR-026) and starts the memory guard (ADR-034). Never in the self-test (above).
         AppModules.StartBackgroundTasks();

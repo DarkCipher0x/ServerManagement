@@ -20,6 +20,12 @@ public sealed class AppSettings
     public bool PqSshRequired { get; set; }
     /// <summary>Key tried first for quick connect (user@host) when no saved host matches.</summary>
     public string? DefaultKeyCredentialId { get; set; }
+    /// <summary>At start, copy SSH keys that are new in the Windows account's .ssh folder into the encrypted store (0.6.30,
+    /// ADR-107). Off by default; only keys without a passphrase are copied by themselves, and a key removed from the store is
+    /// never brought back (<see cref="LocalSshKeysSeen"/>). The files are only read.</summary>
+    public bool LocalSshKeysAutoImport { get; set; }
+    /// <summary>The .ssh keys already offered or imported, by fingerprint (state, 0.6.30): each is picked up once.</summary>
+    public List<string> LocalSshKeysSeen { get; set; } = new();
 
     // Resilience (Phase 1 stabilisation)
     /// <summary>Re-establish a terminal automatically after an unexpected drop (network loss, server restart).</summary>

@@ -33,7 +33,11 @@ public sealed partial class TerminalView
             {
                 Interlocked.Exchange(ref _quietKick, 0);
                 if (_disposed) return;
-                _quiet ??= new DispatcherTimer(TimeSpan.FromMilliseconds(900), DispatcherPriority.Background, async (_, _) => await OnQuietAsync(), Dispatcher);
+                // An async timer tick is async void: a fault here would end the app, so it is caught and logged.
+                _quiet ??= new DispatcherTimer(TimeSpan.FromMilliseconds(900), DispatcherPriority.Background, async (_, _) =>
+                {
+                    try { await OnQuietAsync(); } catch (Exception ex) { App.Log("Command-finished alert", ex); }
+                }, Dispatcher);
                 _quiet.Stop(); _quiet.Start();
             });
         }

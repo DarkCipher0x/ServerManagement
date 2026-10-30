@@ -199,12 +199,12 @@ public static class ProfileTests
         {
             var w = new SetupWindow { WindowStartupLocation = System.Windows.WindowStartupLocation.Manual, Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
             // 0.5.1 #15: Quick Start covers everything; every page builds with the live settings, nothing is contacted.
-            var want = new[] { "Welcome", "Protect the app", "Lock what matters", "Personal settings", "AI features", "Organisation sign-in", "BeyondTrust", "Cloud accounts", "Infrastructure", "Import connections", "Teams & Pingdom", "Log sinks", "Backup", "Your team", "Done" };
+            var want = new[] { "Welcome", "Protect the app", "Lock what matters", "Personal settings", "AI features", "Organisation sign-in", "BeyondTrust", "Cloud accounts", "Infrastructure", "Your SSH keys", "Import connections", "Teams & Pingdom", "Log sinks", "Backup", "Your team", "Done" };
             if (!w.PageTitlesForTest.SequenceEqual(want) || w.Page != 0) throw new Exception("pages: " + string.Join(", ", w.PageTitlesForTest));
             for (int i = 0; i < w.PageCount; i++) w.ShowForTest(i);
             if (w.ProtectedForTest.Count != 0) throw new Exception("pages asked for protected changes by being shown");
             w.Close();
-            ok("Quick Start: fifteen optional pages (welcome, protect, category locks, personal, AI with one-click Foundry, organisation sign-in, BeyondTrust tested before kept, cloud, infrastructure, import, Teams & Pingdom, log sinks, backup, team, done) build with the live settings; protected values wait for one approval at Finish");
+            ok("Quick Start: sixteen optional pages (welcome, protect, category locks, personal, AI with one-click Foundry, organisation sign-in, BeyondTrust tested before kept, cloud, infrastructure, this PC's SSH keys, import, Teams & Pingdom, log sinks, backup, team, done) build with the live settings; protected values wait for one approval at Finish");
         }
         catch (Exception ex) { fail("setup window", ex); }
     }

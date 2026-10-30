@@ -12,7 +12,7 @@ namespace DcxManager.Views;
 /// First-run setup, "Quick Start" (0.3.0 §19; 0.5.1 #15: it covers everything). Short pages with Skip on every one:
 /// protection, category locks, personal settings, AI (with the one-click Foundry Local set-up), organisation sign-in
 /// (Active Directory, LDAPS, Entra ID), BeyondTrust (each part tested before it is kept), cloud accounts, infrastructure,
-/// importing from other managers, Teams and Pingdom, log sinks, backup and the team library. Pages apply their choices
+/// this PC's own SSH keys (0.6.30), importing from other managers, Teams and Pingdom, log sinks, backup and the team library. Pages apply their choices
 /// through the same code the Settings screen uses. Admin-protected values are collected and asked for once, as one UAC
 /// prompt, at Finish; a step Group Policy already set says so and changes nothing. "Take me there when I finish" opens
 /// the matching Settings page or screen afterwards.
@@ -83,6 +83,7 @@ public sealed class SetupWindow : Window
         _pages.Add(("Infrastructure", () => Pointer("Infrastructure",
             "Docker, Proxmox VE, Unraid, VMware vCenter, Hyper-V, Synology and Red Hat Satellite: inventory and health, read-only until you allow changes on each provider. ＋ Add on the Infrastructure screen; nothing is contacted until you add one.",
             "infra", () => MainWindow.Instance?.Navigate("infra"), null, "AllowInfraAdd")));
+        _pages.Add(("Your SSH keys", SshKeysPage));
         _pages.Add(("Import connections", ImportPage));
         _pages.Add(("Teams & Pingdom", () => Pointer("Microsoft Teams and Pingdom",
             "Share screenshots, terminal text, incidents and reports to a Teams channel or chat (your Entra app registration, signed in as you), and see your Pingdom checks on the dashboard (the token stays encrypted here). Both are off until you set them up.",
@@ -279,6 +280,21 @@ public sealed class SetupWindow : Window
         }));
         p.Children.Add(result);
         p.Children.Add(Hint("A self-signed appliance certificate is refused until you trust it: Settings → Integrations → BeyondTrust → TLS shows its fingerprint."));
+        return p;
+    }
+
+    // ---- 0.6.30 (ADR-107): this PC's own SSH keys ------------------------------------------------------------------------
+
+    /// <summary>Self-test: the key list on the "Your SSH keys" page, once it has been shown.</summary>
+    internal LocalKeysPanel? SshKeysForTest { get; private set; }
+
+    private FrameworkElement SshKeysPage()
+    {
+        var p = new StackPanel();
+        p.Children.Add(H("Your SSH keys (optional)"));
+        p.Children.Add(P("Keys already on this PC, in your Windows account's .ssh folder. Copied into the encrypted store, hosts and quick connect can use them. Your default keys are ticked."));
+        if (Managed("AllowCredentialAdd") is { } why) { p.Children.Add(Hint(why)); return p; }
+        p.Children.Add(SshKeysForTest = new LocalKeysPanel(autoOption: true));
         return p;
     }
 

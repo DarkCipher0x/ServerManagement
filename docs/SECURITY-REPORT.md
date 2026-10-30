@@ -1,9 +1,9 @@
-# Security report — ServerManagement 0.6.22 – DarkCipher Systems
+# Security report — ServerManagement 0.6.30 – DarkCipher Systems
 
-**Date:** 2026-10-24. **Version under test:** 0.6.22, the first public beta (the build this report ships with), on
-.NET 10 (LTS, security fixes until November 2028; ADR-092). The
-0.6.x surfaces and the pre-launch audit are in §4b and in "Live attacks"; the probe-by-probe pentest list (§3) is
-unchanged since 0.5.1 because the 0.6.x features are covered by their own suites. **Prepared by:** the maintainers,
+**Date:** 2026-10-30. **Version under test:** 0.6.30 (the build this report ships with), on .NET 10 (LTS, security
+fixes until November 2028; ADR-092). The first public beta was 0.6.22 (2026-10-24). The 0.6.30 sweep of everything
+added since then is in §4g; the earlier 0.6.x surfaces and the pre-launch audit are in §4b–§4f and in "Live attacks".
+The probe-by-probe list (§3) covers 0.4.0–0.5.1; later probes are described with their sweeps. **Prepared by:** the maintainers,
 from the automated suites that run on every build. **Scope:** the Windows application, its data store, every input it
 takes from outside (servers, files, policies, add-ons, web and API answers) and every connection it makes.
 
@@ -26,6 +26,7 @@ systems (a domain controller, an Elasticsearch cluster, an Azure tenant…) are 
 | UniFi (0.6.16) | the Network Integration API and Site Manager with Ubiquiti's API keys: https only, the key only in its header, self-signed consoles pinned, ids checked, changes verified and only with "Allow changes"; Site Manager read-only (§4d) |
 | Vault credentials from Bitwarden / Password Safe (0.6.17) | a vault credential can point at a Bitwarden item or secret or a Password Safe account (ids and a label only); every use reads it into memory, unattended checks never prompt, shared libraries never carry or follow such links (§4e) |
 | A remembered Bitwarden master password (0.6.20) | opt-in at the unlock prompt; encrypted with the app's other secrets, bound to its server, forgotten when refused, on sign-out or by policy (`BitwardenAllowRemember`); start-up unlocks in the background without a prompt (§4f) |
+| The 0.6.30 sweep (2026-10-30) | 248 attack probes, all stopped (49 new in section K for the 0.6.23–0.6.30 surfaces); 48 parsers fuzzed, 16,300 calls, no crash or hang; full suite 544 `ok` lines, 0 failures; 7 findings fixed (three Medium, four Low), see §4g |
 | Findings fixed while building 0.5.1 | 5 — see §4a (one Medium, four Low) |
 | Findings fixed while building 0.5.0 | 5 — see §4 (all Low; one found by a new pentest probe) |
 | Findings fixed in 0.4.0 (second sweep) | 3 — see §5 |
@@ -197,6 +198,35 @@ gates were re-checked. No finding; nothing needed fixing.
 | Theme packs (0.6.9) | colours only; environment labels (a safety signal, ADR-017) can't change; every pack meets the contrast rules in both modes | as designed |
 | Docs (0.6.12, ADR-091) | each document its own sealed file (AES-256-GCM, file name as AAD), folder paths cleaned of `..`, pins validated; the preview is our own renderer: no HTML engine, no network (images never fetched), only https / mailto links, opened after a confirmation and through offline mode; a damaged file is set aside, never overwritten | as designed |
 | Bitwarden (0.6.14, ADR-093) | only a CLI signed by Bitwarden (Authenticode with revocation) or an admin-approved SHA-256 starts, held open against writers until it runs; a copy of cmd.exe standing in for bw was refused until approved and again after one changed byte; secrets only as environment variables of that process (the self-test saw an inherited `BW_SESSION`, `NODE_OPTIONS` and `NODE_TLS_REJECT_UNAUTHORIZED` removed); no secret on any command line (checked on every scripted call); lists keep no password, key or value; option-shaped ids and searches refused before the CLI starts; the session key in memory only, dropped on idle, app lock and exit; offline mode governs sign-in, sync and Secrets Manager |
+
+## 4g. The 0.6.30 sweep of the new surfaces (0.6.23–0.6.30, 2026-10-30, ADR-108)
+
+DarkCipher0x asked for "a full pentest and debugging sweep". Every surface added since the 0.6.22 report was reviewed by
+hand, probed (pentest section K, 49 new probes) and fuzzed (7 new parsers). Dependencies: no known-vulnerable package in
+any of the 11 projects, transitive ones included. Secret scan: clean.
+
+| Surface | What is in place | Checked by |
+|---|---|---|
+| Restored shell places (0.6.28–0.6.29) | the folder comes only from OSC 7 or a prompt line; a folder with a control or Unicode format character, or over 1,024 characters, is never restored; the `cd` line is one quoted word, POSIX lines start with a space to stay out of history; cmd and network gear get no `cd` | probes (curly quotes, line breaks, escapes, bidi, zero-width, `$(…)`, backticks); fuzzing (`shell-place`) |
+| Snippets and the button bar (0.6.29, ADR-104) | host values and answers quoted per shell; control and format characters dropped; values that can't be quoted for cmd or network gear refused before anything is sent; risky commands and PRODUCTION targets confirmed | probes (PowerShell quotes, `@`, `,`, leading `-`, unquotable answers and host names); fuzzing (`snippet-variables`) |
+| RDP / VNC through SSH (shared libraries) | a shared host tunnels only through an SSH host of its own library; your own hosts never fall back to a shared one | probes (by id, by address, another library, a look-alike library id) |
+| Host-to-host copy and folder sync (0.6.26–0.6.27) | listings keep only plain names; SCP lines must name a file directly in the folder; local targets were already safe through `LocalFs.SafeChild` | probes (`..`, `/`, NUL, out-of-folder lines, impossible times); fuzzing (`scp-stat`) |
+| This PC's SSH keys (0.6.30, ADR-107) | read-only; at most 64 KB read through the handle; names and comments shown without control or format characters; over 1,000 bcrypt rounds listed, never tried; the self-test never reads the real `.ssh` | probes (4 billion rounds, 70 KB under a default name, bidi names, lying headers); fuzzing (`local-key-header`); `LocalKeysTests` |
+| Ctrl+click words and highlighting (0.6.29) | only http / https URLs, IPv4 addresses and absolute paths are offered, nothing runs without a click; highlight rules are checked for empty matches, inline options and backtracking (150 ms timeout) | probes; fuzzing (`highlighting`) |
+| Palette search, AI sampling retry (0.6.29) | search is bounded by the item list; a refused sampling setting is removed and the call retried once, never in a loop | fuzzing (`palette-search`, `ai-refused-sampling`); review |
+| Fill sign-in in frames (0.6.22) | same-origin frames only (`contentDocument`), the origin checked again before filling | review, no finding |
+
+**Findings, all fixed in this release:**
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| F1 | Medium | PowerShell ends a single-quoted string at any of ' ‘ ’ ‚ ‛, but only the ASCII quote was doubled. A server could print a PowerShell prompt into a local pwsh tab naming a folder with a curly quote; a restored saved session would then type the rest as a command. Snippet values had the same flaw. | `SnippetVariables.PowerShellQuoted` doubles all five, used by the restored `cd` line and by snippet values. |
+| F2 | Medium | A shared library's RDP or VNC host could tunnel through one of your own SSH hosts: by the same address, or because the rebuild didn't remap `SshHostId`. A library owner could reach your bastion's network with your credentials. | `HostEntry.TunnelHost`: same library only, no fallback for shared hosts; the rebuild remaps the ids. |
+| F3 | Medium | A hostile SFTP or SCP server could list names with `/` or `..`. In a host-to-host copy or sync, the name was joined onto the target folder on the other host, writing outside it. | `SftpFs.RemoteNameOk` filters SFTP and SCP listings; SCP lines must also name a file in the folder. |
+| F4 | Low | A `{pick:}` answer listed by one host went unquoted into a cmd or network device terminal the same snippet was sent to, where it could add a command. | `Expand` refuses a value that isn't safe unquoted there; nothing is sent to any terminal. |
+| F5 | Low | `.ssh` key import: a symlinked file's size check could be bypassed, bidi characters could disguise a name, and a key asking for billions of bcrypt rounds would freeze the app on a passphrase check. | Bounded read, cleaned names and comments, a 1,000-round cap. |
+| F6 | Low | PowerShell plain words included `@` (splatting) and `,` (an array), and a value starting with `-` became a parameter name. | Those are now quoted. |
+| F7 | Low | An SCP `stat` time outside the date range threw and failed the whole listing (found while writing the probes). | The time is treated as unknown. |
 
 ## 4f. Bitwarden speed, a remembered master password, sign-in in steps and TOTP (0.6.20, ADR-100)
 
