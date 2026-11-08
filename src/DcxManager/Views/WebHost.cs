@@ -36,6 +36,12 @@ public static class WebHost
         return await CoreWebView2Environment.CreateAsync(null, folder);
     }
 
+    /// <summary>What a portal tab says while the browser starts (0.6.35: it was a blank page, and ↻ there raised an
+    /// error). The first start after updating to 0.6.34 encrypts the existing profile before the browser can run.</summary>
+    public static string StartingText(string folder) => PrivateFolders.Prepared(folder)
+        ? "Starting the portal browser…"
+        : "Starting the portal browser. This first time Windows encrypts its existing profile (cookies, cache) first, which can take a minute…";
+
     /// <summary>After the browser process died, the next view creates a new environment — once: only the view whose
     /// environment is still the current one resets it; the others then reuse the new one.</summary>
     public static void ResetEnvironment(CoreWebView2Environment? failed)

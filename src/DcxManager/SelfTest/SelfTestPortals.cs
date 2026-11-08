@@ -366,6 +366,44 @@ public static class PortalTests
             catch (Exception ex) { fail("portal tab (local HTTP)", ex); }
             finally { Dialogs.ConfirmForTests = confirmWas; }
 
+            // ---- 4b. restored portal tabs (0.6.35, DarkCipher0x's screenshot: a restored portal tab stayed blank and ↻ raised
+            // WebView2's "requires its CoreWebView2 prior to the CoreWebView2 being initialized") ----------------------------
+            var restoredTabs = new List<System.Windows.Controls.TabItem>();
+            try
+            {
+                var rs = Enumerable.Range(1, 3).Select(i => new PortalBookmark { Title = $"Restored {i} (self-test)", Url = $"http://127.0.0.1:{http!.Port}/", Environment = Envs.Lab }).ToList();
+                foreach (var rb in rs) { Portals.Upsert(rb); addedBookmarks.Add(rb); }
+                // Before its browser has started, ↻ / F5 / Enter do nothing (WebView2's own Reload would throw).
+                var cold = new BrowserView(rs[0], null);
+                try { cold.Reload(); cold.ReloadOrStop(); }
+                finally { cold.Dispose(); }
+                var before = main.Panes.AllTabs.ToHashSet();
+                main.RestoreTabs(rs.Select((rb, i) => new Workspace.Entry("portal", rb.Id) { Group = "restore-test", GroupStacked = true, Active = i == 1 }).ToList(), connect: true);
+                restoredTabs = main.Panes.AllTabs.Where(t => !before.Contains(t)).ToList();
+                var views = restoredTabs.Select(t => t.Content).OfType<BrowserView>().ToList();
+                if (views.Count != 3) throw new Exception($"{views.Count} of 3 portal tabs reopened");
+                // Untouched for a moment (as after a start), then each tab is shown in turn: every one starts and loads.
+                await Settle(1500);
+                var stuck = new List<string>();
+                foreach (var v in views)
+                {
+                    main.Panes.Select(v.Tab!);
+                    if (!await Until(() => v.Core != null || v.InitError != null, 20000)) { stuck.Add(v.Bookmark.Title + ": browser never started"); continue; }
+                    if (v.InitError != null) { stuck.Add(v.Bookmark.Title + ": " + v.InitError); continue; }
+                    if (!await Until(() => v.Core!.DocumentTitle == "DCX portal test", 15000)) stuck.Add(v.Bookmark.Title + ": page not loaded (" + v.Core!.Source + ")");
+                    if (v.BannerText.Contains("Starting the portal browser")) stuck.Add(v.Bookmark.Title + ": still says it is starting");
+                    v.Reload(); v.ReloadOrStop();
+                }
+                if (stuck.Count > 0) throw new Exception(string.Join("; ", stuck));
+                // While the browser starts the tab says so; the first start after 0.6.34 also says the profile is being encrypted.
+                var freshDir = Directory.CreateDirectory(Path.Combine(work, "fresh-profile")).FullName;
+                if (!PrivateFolders.Prepared(WebHost.UserDataFolder) || WebHost.StartingText(WebHost.UserDataFolder) != "Starting the portal browser…"
+                    || !WebHost.StartingText(freshDir).Contains("encrypts its existing profile")) throw new Exception("starting text: " + WebHost.StartingText(freshDir));
+                ok("restored portal tabs (0.6.35): a tab says the browser is starting (the first time: that Windows is encrypting its profile) instead of a blank page; ↻ / F5 / Enter before a tab's browser has started do nothing; three portal tabs reopened into a stacked group each start and load their page when shown");
+            }
+            catch (Exception ex) { fail("restored portal tabs", ex); }
+            finally { foreach (var t in restoredTabs) { try { main.CloseTab(t); } catch { } } }
+
             // ---- 5. live: self-signed HTTPS — refuse, trust (pin), change → refuse, forget → ask again ------------------
             try
             {

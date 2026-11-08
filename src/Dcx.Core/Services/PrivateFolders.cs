@@ -77,6 +77,10 @@ public static class PrivateFolders
 
     private const string Marker = ".dcx-encrypted";
 
+    /// <summary>True once <see cref="Prepare"/> has finished its first pass on <paramref name="dir"/> (the first one
+    /// encrypts every file an earlier version left there, which can take a while on a large profile).</summary>
+    public static bool Prepared(string dir) => File.Exists(Path.Combine(dir, Marker));
+
     /// <summary>The browser engine's component updater downloads public data (certificate revocation lists, origin
     /// trials, protocol lists, …) elsewhere and MOVES it into the profile, and a moved file keeps its attributes, so these
     /// arrive unencrypted while the browser runs. They hold no user data (the same files for everyone); <see

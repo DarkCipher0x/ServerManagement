@@ -90,7 +90,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         }
         _back = B("←", "Back (Alt+←)", () => { if (_web.CanGoBack) _web.GoBack(); });
         _fwd = B("→", "Forward (Alt+→)", () => { if (_web.CanGoForward) _web.GoForward(); });
-        _reload = B("↻", "Reload (F5) / stop", () => { if (_loading) Core?.Stop(); else _web.Reload(); });
+        _reload = B("↻", "Reload (F5) / stop", ReloadOrStop);
         var home = B("⌂", "Back to the bookmark's address", () => Go(Bookmark.Url));
         _chip.Style = (Style)FindResource("SmallButton");
         _chip.Click += (_, _) => ShowCertificate();
@@ -114,7 +114,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         _addr.SetResourceReference(StyleProperty, "Field");
         _addr.KeyDown += (_, e) =>
         {
-            if (e.Key == Key.Enter) { if (_addr.Text != _shown) Go(Portals.Normalize(_addr.Text)); else _web.Reload(); e.Handled = true; }
+            if (e.Key == Key.Enter) { if (_addr.Text != _shown) Go(Portals.Normalize(_addr.Text)); else Reload(); e.Handled = true; }
             else if (e.Key == Key.Escape) { _addr.Text = _shown; e.Handled = true; }
         };
         Menus.ForText(_addr);
@@ -159,7 +159,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         UpdateFill();
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.F5) { _web.Reload(); e.Handled = true; }
+            if (e.Key == Key.F5) { Reload(); e.Handled = true; }
             else if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { _addr.Focus(); _addr.SelectAll(); e.Handled = true; }
             else if (e.SystemKey == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt) { if (_web.CanGoBack) _web.GoBack(); e.Handled = true; }
             else if (e.SystemKey == Key.Right && Keyboard.Modifiers == ModifierKeys.Alt) { if (_web.CanGoForward) _web.GoForward(); e.Handled = true; }
@@ -175,12 +175,16 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         try
         {
             WebHost.Paint(_web, "Bg");
-            var env = await WebHost.EnvironmentAsync();
+            var envTask = WebHost.EnvironmentAsync();
+            bool starting = !envTask.IsCompleted;
+            if (starting) Banner("⏳ " + WebHost.StartingText(WebHost.UserDataFolder), "Muted");
+            var env = await envTask;
             var opts = env.CreateCoreWebView2ControllerOptions();
             opts.ProfileName = ProfileName;
             opts.IsInPrivateModeEnabled = false;
             await _web.EnsureCoreWebView2Async(env, opts);
             if (_disposed) return;
+            if (starting) HideBanner();
             var core = _web.CoreWebView2;
             var s = core.Settings;
             // No password saving or form autofill: sign-in comes from the vault on request ("Fill sign-in"), never the browser.
@@ -233,6 +237,13 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
     }
 
     // ---- navigation ------------------------------------------------------------------------------------------------
+
+    /// <summary>↻ / F5 / Enter on the shown address. Nothing until the page's browser has started: WebView2's own Reload
+    /// throws before then (0.6.35, DarkCipher0x's screenshot of a restored portal tab).</summary>
+    internal void Reload() => Core?.Reload();
+
+    /// <summary>The ↻ button: stops a loading page, otherwise reloads it.</summary>
+    internal void ReloadOrStop() { if (_loading) Core?.Stop(); else Reload(); }
 
     /// <summary>Opens an address in this tab (checked: http(s) only, offline mode).</summary>
     public void Go(string url)
@@ -661,7 +672,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
             if (Core == null || !Dialogs.Confirm("Clear profile", $"Sign out of every portal in the “{Portals.ProfileLabel(ProfileName)}” profile (cookies, storage, cache)?", "Clear", danger: true)) return;
             await Core.Profile.ClearBrowsingDataAsync();
             AuditLog.Write("you", "browser", "browser profile cleared", ProfileName);
-            _web.Reload();
+            Reload();
         });
         if (Tab != null)
         {
