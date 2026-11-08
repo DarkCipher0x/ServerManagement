@@ -36,6 +36,7 @@ public static class AgentTests
         var saved = (s.AiEnabled, s.AiEngine, s.OllamaUrl, s.OllamaModel, s.OllamaTunnelHostId, s.OpenAiUrl, s.OpenAiModel, s.OpenAiKey, s.AnthropicUrl, s.AnthropicModel, s.AnthropicKey,
             s.FoundryUrl, s.FoundryModel, s.AiContext, s.AiStream, s.AiMaxSteps, s.AiKeepWarmMinutes, s.AiResourceGuard, s.AiUnloadIdleFoundry, s.AiAutoRunReadOnlyTarget,
             s.AiAutoApproveReadOnly, s.AiFeatureOperator, s.AiFeatureHelper, s.AiTerminalBridge, s.AiShareCommandOutput, s.AiAllowNotes, s.AiCommandTimeoutMinutes);
+        var savedApi = (s.OpenAiApiUrl, s.OpenAiApiModel, s.OpenAiApiKey, s.OpenAiApiReasoning);
         var memWas = AiResourceGuard.Memory;
         var spillWas = AiResourceGuard.OllamaSpill;
         var foundryWas = AiResourceGuard.Foundry;
@@ -48,6 +49,7 @@ public static class AgentTests
             s.AiEnabled = true; s.AiEngine = e; s.AiStream = true; s.AiFeatureOperator = true; s.AiFeatureHelper = true;
             s.OllamaUrl = Base(); s.OllamaModel = "fake"; s.OllamaTunnelHostId = null;
             s.OpenAiUrl = Base() + "/v1"; s.OpenAiModel = "fake"; s.OpenAiKey = "";
+            s.OpenAiApiUrl = Base() + "/v1"; s.OpenAiApiModel = "fake"; s.OpenAiApiKey = ""; s.OpenAiApiReasoning = "";
             s.AnthropicUrl = Base(); s.AnthropicModel = "fake"; s.AnthropicKey = "";
             s.FoundryUrl = Base(); s.FoundryModel = "fake";
             AiClient.ForgetFoundry(); AiClient.ForgetToolSupport();
@@ -67,7 +69,7 @@ public static class AgentTests
             try
             {
                 var done = new List<string>();
-                foreach (var e in new[] { "ollama-gpu", "openai", "anthropic", "npu" })
+                foreach (var e in new[] { "ollama-gpu", "openai", "openai-api", "anthropic", "npu" })
                 {
                     Engine(e);
                     fake.Enqueue(new FakeAi.Reply("Checking the two things you asked about now, one moment please.", ("list_hosts", new JsonObject()), ("read_logs", new JsonObject { ["host"] = "web-01", ["lines"] = 50 })));
@@ -84,7 +86,7 @@ public static class AgentTests
                     if (AiClient.LastTiming is not { Streamed: true } t || t.FirstToken >= t.Total) throw new Exception(e + ": timing " + AiClient.LastTiming);
                     done.Add($"{e} ({deltas.Count} pieces)");
                 }
-                ok("AI streaming: Ollama NDJSON, OpenAI-compatible SSE, Anthropic SSE and Foundry Local's /v1 stream the answer piece by piece (the pieces add up to the answer), tool calls put together from streamed fragments (arguments split across chunks), Ollama asked with keep_alive — " + string.Join(", ", done));
+                ok("AI streaming: Ollama NDJSON, OpenAI-compatible SSE, OpenAI Responses API SSE, Anthropic SSE and Foundry Local's /v1 stream the answer piece by piece (the pieces add up to the answer), tool calls put together from streamed fragments (arguments split across chunks), Ollama asked with keep_alive — " + string.Join(", ", done));
             }
             catch (Exception ex) { fail("AI streaming on every engine", ex); }
 
@@ -94,7 +96,7 @@ public static class AgentTests
             {
                 var done = new List<string>();
                 fake.RefuseTemperature = true;
-                foreach (var e in new[] { "ollama-gpu", "openai", "anthropic", "npu" })
+                foreach (var e in new[] { "ollama-gpu", "openai", "openai-api", "anthropic", "npu" })
                     foreach (var streamed in new[] { true, false })
                     {
                         Engine(e);
@@ -115,6 +117,91 @@ public static class AgentTests
             }
             catch (Exception ex) { fail("AI sampling settings refused", ex); }
             finally { fake.RefuseTemperature = false; s.AiStream = true; }
+
+            // 1c. 0.6.33 (ADR-111): the OpenAI API engine speaks the Responses API: tools flattened and not strict, tool calls
+            // sent back by call_id with their outputs, nothing stored at OpenAI, no temperature, reasoning effort, JSON
+            // schema output, the model list without non-chat models, image support by model family.
+            try
+            {
+                Engine("openai-api");
+                s.OpenAiApiReasoning = "low";
+                fake.Enqueue(new FakeAi.Reply("", ("read_logs", new JsonObject { ["host"] = "web-01" })));
+                fake.Enqueue(new FakeAi.Reply("web-01 logs look clean."));
+                var ran = new List<string>();
+                var (answer, run) = await AiAgent.RunAsync(Q("check web-01"), ToolDefs("read_logs"), new AgentHooks { RunTool = (n, a, _) => { ran.Add(n + ":" + a["host"]); return Task.FromResult("no errors in the last 50 lines"); } }, 4, CancellationToken.None);
+                var first = fake.Chats[^2]; var second = fake.Chats[^1];
+                if (answer != "web-01 logs look clean." || ran.SingleOrDefault() != "read_logs:web-01" || !run.NativeTools) throw new Exception($"agent: [{answer}] ran [{string.Join(",", ran)}] native {run.NativeTools}");
+                if (first["store"]?.GetValue<bool>() != false || first.ContainsKey("temperature") || first.ContainsKey("messages") || first["reasoning"]?["effort"]?.GetValue<string>() != "low")
+                    throw new Exception("request: " + first.ToJsonString());
+                var tool = first["tools"]?[0] as JsonObject;
+                if (tool?["name"]?.GetValue<string>() != "read_logs" || tool["strict"]?.GetValue<bool>() != false || tool.ContainsKey("function") || tool["parameters"]?["type"]?.GetValue<string>() != "object")
+                    throw new Exception("tool: " + tool?.ToJsonString());
+                var items = second["input"]!.AsArray().OfType<JsonObject>().ToList();
+                var call = items.FirstOrDefault(i => i["type"]?.GetValue<string>() == "function_call");
+                var output = items.FirstOrDefault(i => i["type"]?.GetValue<string>() == "function_call_output");
+                if (call?["call_id"]?.GetValue<string>() != "call_0" || call.ContainsKey("id") || JsonNode.Parse(call["arguments"]!.GetValue<string>())?["host"]?.GetValue<string>() != "web-01"
+                    || output?["call_id"]?.GetValue<string>() != "call_0" || output["output"]?.GetValue<string>()?.Contains("no errors") != true || items[0]["role"]?.GetValue<string>() != "system")
+                    throw new Exception("follow-up input: " + second["input"]!.ToJsonString());
+
+                // Structured output: text.format json_schema (not strict), answered whole.
+                fake.Enqueue(new FakeAi.Reply("{\"ok\":true}"));
+                var js = await AiClient.ChatAsync(Q("json"), null, new JsonObject { ["type"] = "object", ["properties"] = new JsonObject { ["ok"] = new JsonObject { ["type"] = "boolean" } } }, CancellationToken.None);
+                var fmt = fake.LastChat?["text"]?["format"];
+                if (js["content"]?.GetValue<string>() != "{\"ok\":true}" || fmt?["type"]?.GetValue<string>() != "json_schema" || fmt["strict"]?.GetValue<bool>() != false || fake.LastChat!.ContainsKey("stream"))
+                    throw new Exception("schema: " + fake.LastChat?.ToJsonString());
+
+                // An images message goes as input_image parts to a model known to read them; a text-only id is refused before sending.
+                s.OpenAiApiModel = "gpt-6-sol";
+                fake.Enqueue(new FakeAi.Reply("A dashboard."));
+                var img = new JsonArray { new JsonObject { ["role"] = "user", ["content"] = "what is this", ["images"] = new JsonArray("iVBORw0KGgo=") } };
+                await AiClient.ChatAsync(img, null, null, CancellationToken.None);
+                var parts = fake.LastChat?["input"]?[0]?["content"] as JsonArray;
+                if (parts?.Count != 2 || parts[1]?["type"]?.GetValue<string>() != "input_image" || parts[1]?["image_url"]?.GetValue<string>()?.StartsWith("data:image/png;base64,") != true)
+                    throw new Exception("image parts: " + fake.LastChat?["input"]?.ToJsonString());
+                s.OpenAiApiModel = "gpt-3.5-turbo";
+                int sent = fake.Chats.Count;
+                try { await AiClient.ChatAsync(img, null, null, CancellationToken.None); throw new Exception("an image went to a text-only model"); }
+                catch (InvalidOperationException e) when (e.Message.StartsWith("Not sent")) { }
+                if (fake.Chats.Count != sent) throw new Exception("the refused image request reached the server");
+                s.OpenAiApiModel = "fake";
+
+                var models = await AiClient.ModelsAsync();
+                if (!models.SequenceEqual(new[] { "gpt-6-sol", "gpt-6-luna" })) throw new Exception("models: " + string.Join(", ", models));
+                if (AiClient.OpenAiApiHeaders("https://api.openai.com/v1") != null) throw new Exception("headers without a key");
+                s.OpenAiApiKey = "sk-proj-test";
+                if (AiClient.OpenAiApiHeaders("https://api.openai.com/v1")?["Authorization"] != "Bearer sk-proj-test" || AiClient.OpenAiApiHeaders("https://x.openai.azure.com/openai/v1")?["api-key"] != "sk-proj-test")
+                    throw new Exception("auth headers");
+                s.OpenAiApiKey = "";
+                try
+                {
+                    AiClient.FromOpenAiResponse(new JsonObject { ["status"] = "incomplete", ["incomplete_details"] = new JsonObject { ["reason"] = "max_output_tokens" }, ["output"] = new JsonArray() });
+                    throw new Exception("an empty incomplete response was accepted");
+                }
+                catch (InvalidOperationException e) when (e.Message.Contains("max_output_tokens")) { }
+                // Fuzz: an answer is untrusted input. Wrong types, missing fields and junk arguments never throw out of the
+                // parser (only the defined "stopped early" / server error), and a call without a name is dropped.
+                var rnd = new Random(6033);
+                JsonNode? Junk(int depth) => rnd.Next(9) switch
+                {
+                    0 => null, 1 => JsonValue.Create(rnd.Next()), 2 => JsonValue.Create("x" + rnd.Next(99)), 3 => JsonValue.Create(rnd.Next(2) == 0),
+                    4 or 5 when depth < 3 => new JsonArray(Enumerable.Range(0, rnd.Next(4)).Select(_ => Junk(depth + 1)).ToArray()),
+                    6 or 7 when depth < 3 => new JsonObject(new[] { "type", "content", "text", "arguments", "name", "call_id", "output", "status", "message" }.OrderBy(_ => rnd.Next()).Take(rnd.Next(5)).Select(k => KeyValuePair.Create(k, Junk(depth + 1)))),
+                    _ => JsonValue.Create(new[] { "message", "function_call", "output_text", "refusal", "incomplete", "{\"a\":", "{}" }[rnd.Next(7)]),
+                };
+                int fuzzed = 0;
+                for (int i = 0; i < 3000; i++)
+                {
+                    var resp = new JsonObject { ["output"] = Junk(0), ["status"] = Junk(2) };
+                    if (rnd.Next(5) == 0) resp["error"] = Junk(1);
+                    try { var m = AiClient.FromOpenAiResponse(resp); if (m["tool_calls"] is JsonArray tcs && tcs.Any(t => t?["function"]?["name"] is null)) throw new Exception("a call without a name: " + resp.ToJsonString()); fuzzed++; }
+                    catch (InvalidOperationException e) when (e.Message.StartsWith("OpenAI API")) { fuzzed++; }
+                    catch (Exception e) when (e.Message.StartsWith("a call without")) { throw; }
+                    catch (Exception e) { throw new Exception($"parser threw {e.GetType().Name} ({e.Message}) for {resp.ToJsonString()}"); }
+                }
+                ok("OpenAI API engine (Responses API): a tool call and its output go back by call_id (no item id, store off, no temperature, reasoning effort low), tools flattened with strict off, JSON schema output, images as input_image only to models that read them (a text-only model is refused before sending), the model list without embedding/image/realtime models, bearer or Azure api-key headers, an empty incomplete answer reported with its reason; " + fuzzed + " fuzzed answers (wrong types, missing fields, junk arguments) parsed without an unexpected exception");
+            }
+            catch (Exception ex) { fail("OpenAI API engine (Responses API)", ex); }
+            finally { s.OpenAiApiReasoning = ""; s.OpenAiApiKey = ""; s.OpenAiApiModel = "fake"; }
 
             // 2. Before / after: whole answers vs streaming; connections reused.
             try
@@ -500,7 +587,7 @@ public static class AgentTests
                 if (lives < 4) throw new Exception("streamed updates: " + lives);
                 if (sys1 != sys2) throw new Exception("system prompt changed between questions (no prefix reuse)");
                 if (c.History.Count != 4) throw new Exception("history " + c.History.Count);
-                var first = fake.Chats.First(b => b["messages"]!.ToJsonString().Contains("What am I looking at?"));
+                var first = fake.Chats.First(b => b["messages"]?.ToJsonString().Contains("What am I looking at?") == true);
                 if (first["tools"] is not JsonArray { Count: > 30 }) throw new Exception("AI Engineer offered no tools");
                 if (panel != null && panel.StepLinesForTest == 0) throw new Exception("no step lines in the panel");
                 snap(main, Path.Combine(shots, "ai-engineer-agent.png"));
@@ -561,6 +648,7 @@ public static class AgentTests
             (s.AiEnabled, s.AiEngine, s.OllamaUrl, s.OllamaModel, s.OllamaTunnelHostId, s.OpenAiUrl, s.OpenAiModel, s.OpenAiKey, s.AnthropicUrl, s.AnthropicModel, s.AnthropicKey,
              s.FoundryUrl, s.FoundryModel, s.AiContext, s.AiStream, s.AiMaxSteps, s.AiKeepWarmMinutes, s.AiResourceGuard, s.AiUnloadIdleFoundry, s.AiAutoRunReadOnlyTarget,
              s.AiAutoApproveReadOnly, s.AiFeatureOperator, s.AiFeatureHelper, s.AiTerminalBridge, s.AiShareCommandOutput, s.AiAllowNotes, s.AiCommandTimeoutMinutes) = saved;
+            (s.OpenAiApiUrl, s.OpenAiApiModel, s.OpenAiApiKey, s.OpenAiApiReasoning) = savedApi;
             AiResourceGuard.Memory = memWas; AiResourceGuard.OllamaSpill = spillWas; AiResourceGuard.Foundry = foundryWas;
             TerminalBridge.Confirm = confirmWas;
             AiClient.ForgetFoundry(); AiClient.ForgetToolSupport();
@@ -829,9 +917,9 @@ internal sealed class FakeAi : IDisposable
             case "/api/generate": Interlocked.Increment(ref _generates); await Whole(s, 200, "{\"done\":true}"); return;
             case "/api/tags": await Whole(s, 200, "{\"models\":[{\"name\":\"fake:latest\"},{\"name\":\"other-model:latest\"}]}"); return;
             case "/api/ps": await Whole(s, 200, "{\"models\":[]}"); return;
-            case "/v1/models": await Whole(s, 200, "{\"data\":[{\"id\":\"fake\"},{\"id\":\"other-model\"}]}"); return;
+            case "/v1/models": await Whole(s, 200, "{\"data\":[{\"id\":\"fake\"},{\"id\":\"other-model\"},{\"id\":\"gpt-6-sol\"},{\"id\":\"gpt-6-luna\"},{\"id\":\"text-embedding-3-small\"},{\"id\":\"gpt-image-2\"},{\"id\":\"gpt-realtime-2.1\"}]}"); return;
             case "/foundry/list": await Whole(s, 200, "[]"); return;
-            case "/api/chat" or "/v1/chat/completions" or "/v1/messages": break;
+            case "/api/chat" or "/v1/chat/completions" or "/v1/messages" or "/v1/responses": break;
             default: await Whole(s, 404, "{\"error\":\"not found\"}"); return;
         }
         lock (_chats) _chats.Add((JsonObject)body.DeepClone());
@@ -847,6 +935,7 @@ internal sealed class FakeAi : IDisposable
             await Whole(s, 200, path switch
             {
                 "/api/chat" => new JsonObject { ["message"] = new JsonObject { ["role"] = "assistant", ["content"] = r.Text, ["tool_calls"] = r.Calls.Length == 0 ? null : new JsonArray(r.Calls.Select(c => (JsonNode)new JsonObject { ["function"] = new JsonObject { ["name"] = c.Name, ["arguments"] = c.Args.DeepClone() } }).ToArray()) }, ["done"] = true }.ToJsonString(),
+                "/v1/responses" => ResponsesObject(r).ToJsonString(),
                 "/v1/chat/completions" => new JsonObject { ["choices"] = new JsonArray(new JsonObject { ["message"] = new JsonObject { ["role"] = "assistant", ["content"] = r.Text, ["tool_calls"] = r.Calls.Length == 0 ? null : new JsonArray(r.Calls.Select((c, i) => (JsonNode)new JsonObject { ["id"] = "c" + i, ["type"] = "function", ["function"] = new JsonObject { ["name"] = c.Name, ["arguments"] = c.Args.ToJsonString() } }).ToArray()) } }) }.ToJsonString(),
                 _ => new JsonObject { ["content"] = new JsonArray(new[] { (JsonNode)new JsonObject { ["type"] = "text", ["text"] = r.Text } }.Concat(r.Calls.Select((c, i) => (JsonNode)new JsonObject { ["type"] = "tool_use", ["id"] = "tu" + i, ["name"] = c.Name, ["input"] = c.Args.DeepClone() })).ToArray()) }.ToJsonString(),
             });
@@ -873,6 +962,28 @@ internal sealed class FakeAi : IDisposable
                 }
                 await ch.Send("data: [DONE]\n\n");
                 break;
+            case "/v1/responses":
+            {
+                // OpenAI's Responses API events: text deltas, then each output item, then the whole response.
+                await ch.Start("text/event-stream");
+                await ch.Send("event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"object\":\"response\",\"status\":\"in_progress\",\"output\":[]}}\n\n");
+                foreach (var t in Tokens(r.Text)) { await ch.Send("event: response.output_text.delta\ndata: " + new JsonObject { ["type"] = "response.output_text.delta", ["output_index"] = 0, ["delta"] = t }.ToJsonString() + "\n\n"); await Task.Delay(TokenMs); }
+                var whole = ResponsesObject(r);
+                int oi = 0;
+                foreach (var item in whole["output"]!.AsArray())
+                {
+                    if (item!["type"]!.GetValue<string>() == "function_call")
+                    {
+                        var args = item["arguments"]!.GetValue<string>();
+                        int half = args.Length / 2;
+                        await ch.Send("event: response.function_call_arguments.delta\ndata: " + new JsonObject { ["type"] = "response.function_call_arguments.delta", ["output_index"] = oi, ["delta"] = args[..half] }.ToJsonString() + "\n\n");
+                        await ch.Send("event: response.function_call_arguments.delta\ndata: " + new JsonObject { ["type"] = "response.function_call_arguments.delta", ["output_index"] = oi, ["delta"] = args[half..] }.ToJsonString() + "\n\n");
+                    }
+                    await ch.Send("event: response.output_item.done\ndata: " + new JsonObject { ["type"] = "response.output_item.done", ["output_index"] = oi++, ["item"] = item.DeepClone() }.ToJsonString() + "\n\n");
+                }
+                await ch.Send("event: response.completed\ndata: " + new JsonObject { ["type"] = "response.completed", ["response"] = whole }.ToJsonString() + "\n\n");
+                break;
+            }
             default:
                 await ch.Start("text/event-stream");
                 await ch.Send("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"role\":\"assistant\"}}\n\n");
@@ -890,6 +1001,17 @@ internal sealed class FakeAi : IDisposable
                 break;
         }
         await ch.End();
+    }
+
+    /// <summary>A Responses API "response" object: a reasoning item, the message, then one function_call per call.</summary>
+    private static JsonObject ResponsesObject(Reply r)
+    {
+        var output = new JsonArray(new JsonObject { ["type"] = "reasoning", ["id"] = "rs_0", ["summary"] = new JsonArray() });
+        if (r.Text.Length > 0)
+            output.Add(new JsonObject { ["type"] = "message", ["id"] = "msg_0", ["role"] = "assistant", ["status"] = "completed", ["content"] = new JsonArray(new JsonObject { ["type"] = "output_text", ["text"] = r.Text, ["annotations"] = new JsonArray() }) });
+        for (int i = 0; i < r.Calls.Length; i++)
+            output.Add(new JsonObject { ["type"] = "function_call", ["id"] = "fc_" + i, ["call_id"] = "call_" + i, ["name"] = r.Calls[i].Name, ["arguments"] = r.Calls[i].Args.ToJsonString(), ["status"] = "completed" });
+        return new JsonObject { ["id"] = "resp_0", ["object"] = "response", ["status"] = "completed", ["output"] = output };
     }
 
     public void Dispose() { _cts.Cancel(); try { _l.Stop(); } catch { } }

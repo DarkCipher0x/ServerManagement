@@ -38,8 +38,7 @@ public static class ExternalSsh
             {
                 Ui.Dialogs.Info("External terminal", "This key has a passphrase or is a PuTTY .ppk; OpenSSH will prompt for it or can't read it. Load it into ssh-agent instead, or use the built-in terminal.");
             }
-            var dir = Path.Combine(AppInfo.CacheDir, "tmp");
-            Directory.CreateDirectory(dir);
+            var dir = PrivateFolders.Ensure(Path.Combine(AppInfo.CacheDir, "tmp"));   // 0.6.33: the key file is encrypted by Windows too
             tempKey = Path.Combine(dir, "k" + Guid.NewGuid().ToString("N"));
             KeyTools.ExportPrivateKey(key, tempKey);
             args.AddRange(new[] { "-i", tempKey, "-o", "IdentitiesOnly=yes" });

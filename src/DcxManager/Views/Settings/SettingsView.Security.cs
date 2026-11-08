@@ -66,7 +66,9 @@ public sealed partial class SettingsView
     /// <summary>0.3.0 §19: walks the store and the logs and says whether every file is sealed (the self-test does the same).</summary>
     private void VerifyEncryption()
     {
-        var r = EncryptionAudit.Run(SecureStore.DataDir, Log.Dir);
+        // 0.6.33: also the browser profile and caches (encrypted by Windows) — anything an earlier version left there is done first.
+        try { PrivateFolders.ProtectExisting(); } catch (Exception ex) { App.Log("Encrypt cache folders", ex); }
+        var r = EncryptionAudit.Run(SecureStore.DataDir, Log.Dir, PrivateFolders.All);
         _encryptionStatus.Text = r.Summary;
         AuditLog.Write("you", "store", "encryption verified", r.Summary);
         if (r.Plain.Any()) Dialogs.Info("Encryption check", string.Join("\n", r.Plain.Select(p => $"{p.Path}\n   {p.Note}")));

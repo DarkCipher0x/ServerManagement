@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using DcxManager.Browser;
 using DcxManager.Services;
 
 namespace DcxManager.Views;
@@ -81,7 +82,7 @@ public partial class HostsView
         {
             bool Show(TreeViewItem n)
             {
-                bool any = n.Tag is HostEntry;
+                bool any = n.Tag is HostEntry or PortalBookmark;
                 foreach (var c in n.Items.OfType<TreeViewItem>().ToList()) any |= Show(c);
                 n.Visibility = any || n == root || n == favs ? Visibility.Visible : Visibility.Collapsed;
                 if (any) n.IsExpanded = true;
@@ -137,9 +138,67 @@ public partial class HostsView
         MainWindow.Instance?.OpenTerminal(h);   // RDP, VNC and Telnet hosts open the right session by themselves
     }
 
-    /// <summary>The right-click menu of the tree: a host's full menu (the list's), or the folder's.</summary>
+    // ---- pinned portals (0.6.33; DarkCipher0x: "being able to pin portal tabs to the "hosts" bar would be handy") --------
+
+    /// <summary>The tree key of the 🌐 Portals node (not a folder: no hosts, no drag, no new folder inside).</summary>
+    internal const string PortalsKey = "portals:";
+
+    /// <summary>Redraws the tree only (a portal was pinned or unpinned).</summary>
+    internal void RebuildTree() => BuildTree();
+
+    /// <summary>The 🌐 Portals node with the pinned portals (double-click opens one), or null when none is pinned or the
+    /// browser add-on is off. The tree's filter narrows them by title and address.</summary>
+    private TreeViewItem? PortalsNode()
+    {
+        if (!PortalBrowser.Enabled) return null;
+        var pinned = Portals.All.Where(b => b.PinnedToHosts).OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase).ToList();
+        if (pinned.Count == 0) return null;
+        var q = TreeFilter.Text.Trim();
+        var node = Node("Portals", PortalsKey, pinned.Count, "🌐");
+        node.IsExpanded = _expanded.Contains(PortalsKey) || q.Length > 0;
+        foreach (var b in pinned.Where(b => q.Length == 0 || $"{b.Title} {b.Url}".Contains(q, StringComparison.OrdinalIgnoreCase)))
+            node.Items.Add(PortalLeaf(b));
+        return node;
+    }
+
+    private TreeViewItem PortalLeaf(PortalBookmark b)
+    {
+        var line = new StackPanel { Orientation = Orientation.Horizontal };
+        line.Children.Add(new TextBlock { Text = LockUi.Decorate("portal:" + b.Id, b.Title) });
+        var env = Portals.EnvironmentOf(b);
+        var where = new TextBlock { Text = "  " + (env.Length > 0 ? env : Portals.Display(b.Url)), VerticalAlignment = VerticalAlignment.Center }.Fs(FontStep.Small);
+        where.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        line.Children.Add(where);
+        var item = new TreeViewItem
+        {
+            Header = line, Tag = b, Padding = new Thickness(2, 1, 2, 1),
+            ToolTip = b.Title + "\n" + (Locks.Hidden("portal:" + b.Id) ? "🔒 locked" : Portals.Display(b.Url)) + "\nDouble-click or Enter to open · right-click for more",
+        };
+        item.MouseDoubleClick += (_, e) => { if (item.IsSelected) { e.Handled = true; OpenPinned(b); } };
+        item.KeyDown += (_, e) => { if (e.Key == Key.Enter && item.IsSelected) { e.Handled = true; OpenPinned(b); } };
+        return item;
+    }
+
+    private void OpenPinned(PortalBookmark b, bool? window = null)
+    {
+        if (PaneInWindow) MainWindow.Instance?.Panes.ActivateMain();
+        PortalUi.Open(b, window);
+    }
+
+    private IEnumerable<object?> PortalMenu(PortalBookmark b)
+    {
+        yield return Menus.Item("Open", () => OpenPinned(b), "Enter");
+        yield return Menus.Item("Open in a new window", () => OpenPinned(b, window: true));
+        yield return Menus.Item("Edit…", () => PortalUi.Edit(b));
+        yield return Menus.Item("Copy address", () => Menus.Clip(b.Url));
+        yield return Menus.Sep();
+        yield return Menus.Item("📌 Unpin from the hosts panel", () => PortalUi.SetPinned(b, false));
+    }
+
+    /// <summary>The right-click menu of the tree: a host's full menu (the list's), a pinned portal's, or the folder's.</summary>
     private IEnumerable<object?> TreeMenu()
     {
+        if ((Folders.SelectedItem as TreeViewItem)?.Tag is PortalBookmark pb) return PortalMenu(pb);
         if (TreeHost is not { } h) return FolderMenu(_folder);
         SelectInList(h);
         return HostMenu();

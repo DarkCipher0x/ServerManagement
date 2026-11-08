@@ -25,12 +25,19 @@ public static partial class SelfTest
     /// <summary>The start-up timing line both suites report (measured when the self-test begins).</summary>
     internal static string StartupLine { get; private set; } = "";
 
+    /// <summary>Appends one result line to &lt;report&gt;.progress at once (the report itself is written at the end).</summary>
+    internal static void Progress(string reportPath, string line)
+    {
+        try { File.AppendAllText(reportPath + ".progress", $"{DateTime.Now:HH:mm:ss} {line}\n"); } catch { }
+    }
+
     public static async Task RunAsync(MainWindow main, string reportPath)
     {
         Running = true;
-        // Start-up cost (0.2.0 audit, for phase 7's budgets): process start → main window shown and this test running.
+        // Start-up cost (0.2.0 audit, for phase 7's budgets): process start → main window shown, first frame rendered and idle
+        // (0.6.32: the suite starts at ApplicationIdle after ContentRendered; before, right after Show).
         using (var me = System.Diagnostics.Process.GetCurrentProcess())
-            StartupLine = $"start-up: {(DateTime.Now - me.StartTime).TotalMilliseconds:N0} ms from process start to the main window, {me.PrivateMemorySize64 >> 20:N0} MB private, {me.HandleCount:N0} handles, {me.Threads.Count} threads (AI {(AiFeatures.Current.On ? "on" : "off")})";
+            StartupLine = $"start-up: {(DateTime.Now - me.StartTime).TotalMilliseconds:N0} ms from process start to the main window's first frame (idle), {me.PrivateMemorySize64 >> 20:N0} MB private, {me.HandleCount:N0} handles, {me.Threads.Count} threads (AI {(AiFeatures.Current.On ? "on" : "off")})";
         // 0.5.1 #8: the audit log is locked by default and both suites open every screen. Each run starts with that lock off
         // (as an administrator could set it); Release051Tests checks the default, the lock and its prompt on their own.
         AppSettings.Current.LockAuditLog = false;
@@ -83,8 +90,9 @@ public static partial class SelfTest
         Ai.FoundryManager.EndDaemon = _ => false;
         var log = new StringBuilder();
         int failures = 0;
-        void Ok(string s) => log.AppendLine("ok    " + s);
-        void Fail(string s, Exception? ex) { failures++; log.AppendLine("FAIL  " + s + " :: " + ex); }
+        // 0.6.32: every line also goes to <report>.progress as it happens, so a run that never ends still says where it was (ADR-025).
+        void Ok(string s) { log.AppendLine("ok    " + s); Progress(reportPath, "ok    " + s); }
+        void Fail(string s, Exception? ex) { failures++; log.AppendLine("FAIL  " + s + " :: " + ex); Progress(reportPath, "FAIL  " + s); }
         // The freeze test's deliberately failing screen (FreezeTests) is the one expected exception.
         Application.Current.DispatcherUnhandledException += (_, e) => { if (!e.Exception.Message.Contains("s37 freeze probe")) Fail("unhandled UI exception", e.Exception); e.Handled = true; };
 
@@ -268,6 +276,9 @@ public static partial class SelfTest
         // ADR-094 (0.6.16): UniFi Network (Integration API) and Site Manager against fakes.
         try { await UniFiTests.RunAsync(Ok, Fail); }
         catch (Exception ex) { Fail("unifi", ex); }
+        // 0.6.33: Redfish BMCs, HPE GreenLake and Sophos Central against fakes.
+        try { await InfraApiTests.RunAsync(Ok, Fail); }
+        catch (Exception ex) { Fail("Redfish / GreenLake / Sophos Central", ex); }
         // 0.6.17: the AI deploys a Vultr server (fake Vultr).
         try { await VultrDeployTests.RunAsync(Ok, Fail); }
         catch (Exception ex) { Fail("Vultr deploy", ex); }

@@ -126,17 +126,26 @@ public sealed class InfraView : UserControl, IDisposable
         ? new object?[] { Menus.Item("Adding providers is turned off by policy", () => { }, enabled: false, tip: Restrictions.Why("infra.add")) }
         : new object?[]
     {
-        Menus.Item("Docker on a saved host (SSH)…", () => Edit(new ProviderConfig { Kind = "docker-ssh", Name = "Docker" }, true)),
-        Menus.Item("Docker on this PC (Docker Desktop)…", () => Edit(new ProviderConfig { Kind = "docker-local", Name = "Docker Desktop", Endpoint = "docker_engine", Environment = "LOCAL" }, true)),
-        Menus.Item("Proxmox VE (API token)…", () => Edit(new ProviderConfig { Kind = "proxmox", Name = "Proxmox", Endpoint = "https://pve.lan:8006" }, true)),
-        Menus.Item("Unraid (API key)…", () => Edit(new ProviderConfig { Kind = "unraid", Name = "Unraid", Endpoint = "https://tower.lan" }, true)),
-        Menus.Item("VMware vCenter (user + password)…", () => Edit(new ProviderConfig { Kind = "vsphere", Name = "vCenter", Endpoint = "https://vcenter.lan" }, true)),
-        Menus.Item("Hyper-V host (PowerShell / WinRM)…", () => Edit(new ProviderConfig { Kind = "hyperv", Name = "Hyper-V", Endpoint = "" }, true)),
-        Menus.Item("Synology DSM (Web API)…", () => Edit(new ProviderConfig { Kind = "synology", Name = "Synology", Endpoint = "https://nas.lan:5001" }, true)),
-        Menus.Item("Red Hat Satellite / Foreman + Katello…", () => Edit(new ProviderConfig { Kind = "satellite", Name = "Satellite", Endpoint = "https://satellite.lan" }, true)),
+        // 0.6.33: grouped — past Menus.GroupThreshold rows each group becomes a submenu (a group of one stays inline).
+        Menus.Group("Containers",
+            Menus.Item("Docker on a saved host (SSH)…", () => Edit(new ProviderConfig { Kind = "docker-ssh", Name = "Docker" }, true)),
+            Menus.Item("Docker on this PC (Docker Desktop)…", () => Edit(new ProviderConfig { Kind = "docker-local", Name = "Docker Desktop", Endpoint = "docker_engine", Environment = "LOCAL" }, true))),
+        Menus.Group("Hypervisors",
+            Menus.Item("Proxmox VE (API token)…", () => Edit(new ProviderConfig { Kind = "proxmox", Name = "Proxmox", Endpoint = "https://pve.lan:8006" }, true)),
+            Menus.Item("Unraid (API key)…", () => Edit(new ProviderConfig { Kind = "unraid", Name = "Unraid", Endpoint = "https://tower.lan" }, true)),
+            Menus.Item("VMware vCenter (user + password)…", () => Edit(new ProviderConfig { Kind = "vsphere", Name = "vCenter", Endpoint = "https://vcenter.lan" }, true)),
+            Menus.Item("Hyper-V host (PowerShell / WinRM)…", () => Edit(new ProviderConfig { Kind = "hyperv", Name = "Hyper-V", Endpoint = "" }, true))),
+        Menus.Group("Storage & lifecycle",
+            Menus.Item("Synology DSM (Web API)…", () => Edit(new ProviderConfig { Kind = "synology", Name = "Synology", Endpoint = "https://nas.lan:5001" }, true)),
+            Menus.Item("Red Hat Satellite / Foreman + Katello…", () => Edit(new ProviderConfig { Kind = "satellite", Name = "Satellite", Endpoint = "https://satellite.lan" }, true))),
         // 0.6.16 (ADR-094): UniFi with Ubiquiti's API keys.
-        Menus.Item("UniFi Network (API key)…", () => Edit(new ProviderConfig { Kind = "unifi", Name = "UniFi", Endpoint = "https://192.168.1.1" }, true)),
-        Menus.Item("UniFi Site Manager — all consoles (api.ui.com)…", () => Edit(new ProviderConfig { Kind = "unifi-cloud", Name = "UniFi Site Manager", Endpoint = UniFiProvider.CloudBase }, true)),
+        Menus.Group("Network",
+            Menus.Item("UniFi Network (API key)…", () => Edit(new ProviderConfig { Kind = "unifi", Name = "UniFi", Endpoint = "https://192.168.1.1" }, true)),
+            Menus.Item("UniFi Site Manager — all consoles (api.ui.com)…", () => Edit(new ProviderConfig { Kind = "unifi-cloud", Name = "UniFi Site Manager", Endpoint = UniFiProvider.CloudBase }, true))),
+        // 0.6.33: kinds that describe themselves (Redfish BMCs, HPE GreenLake, Sophos Central), grouped by their MenuGroup.
+        ProviderKinds.All.GroupBy(k => k.MenuGroup)
+            .Select(g => (object?)Menus.Group(g.Key, g.Select(k => (object?)Menus.Item(k.MenuLabel, () => Edit(k.New(), true))).ToArray())),
+        Menus.Sep(),
         Menus.Item("DCX-CTL (dcx-ctl/1 over SSH)…", () => Edit(new ProviderConfig { Kind = "dcx-portal", Name = "DCX-CTL", Environment = "PRODUCTION" }, true)),
     };
 
@@ -175,7 +184,7 @@ public sealed class InfraView : UserControl, IDisposable
             web ? Menus.Item("🌐 Open web UI", () => PortalUi.OpenAddress(c.Endpoint, c.Environment), enabled: Browser.PortalBrowser.Enabled, tip: Browser.PortalBrowser.Enabled ? c.Endpoint : "The portal browser is off (Settings → Integrations)") : null,
             c.Endpoint.Length > 0 ? Menus.Item("Copy address", () => Menus.Clip(c.Endpoint)) : null,
             Menus.Item("✎ Edit connection…", () => { Select(); Edit(c, false); }),
-            Menus.Item("⧉ Duplicate…", () => Edit(new ProviderConfig { Kind = c.Kind, Name = c.Name + " (copy)", Endpoint = c.Endpoint, Environment = c.Environment, CredentialId = c.CredentialId }, true),
+            Menus.Item("⧉ Duplicate…", () => Edit(new ProviderConfig { Kind = c.Kind, Name = c.Name + " (copy)", Endpoint = c.Endpoint, Environment = c.Environment, CredentialId = c.CredentialId, Region = c.Region, WorkspaceId = c.WorkspaceId }, true),
                 tip: "A new provider with the same address and credential (not allowed to change anything, nothing pinned)"),
             Menus.AssistItem("✦ Explain this provider with AI", _ => { Select(); return ExplainProviderAsync(c); }),
             Menus.Item($"📄 Docs ({Docs.DocStore.PinnedTo("infra:" + c.Id).Count})", () => MainWindow.Instance.OpenDocs("infra:" + c.Id, c.Name), tip: "Markdown documents pinned to this provider (runbooks for the cluster, hypervisor or Docker host)"),
@@ -277,7 +286,7 @@ public sealed class InfraView : UserControl, IDisposable
         _allow.IsChecked = c.AllowChanges;
         _badge.Content = s.P.NetworkClass is { } cls ? NetUi.Badge(cls, s.P.Where) : null;
         _refresh.SelectedIndex = c.RefreshSeconds switch { 30 => 1, 60 => 2, 300 => 3, _ => 0 };
-        var kinds = c.Kind switch
+        var kinds = ProviderKinds.Find(c.Kind)?.ObjectKinds ?? c.Kind switch
         {
             "proxmox" => new[] { "All", "vm", "lxc", "node", "storage" },
             "unraid" => new[] { "All", "container", "vm", "disk", "array", "server" },
@@ -512,6 +521,7 @@ public sealed class InfraView : UserControl, IDisposable
             (c.Kind == "proxmox" ? "Compare it with the fingerprint on the Proxmox host (shell: pvenode cert info, or the node's Certificates page)."
              : c.Kind == "vsphere" ? "Compare it with vCenter's machine certificate (vSphere Client → Administration → Certificates → Certificate Management, or your browser's certificate details for the vCenter address)."
              : c.Kind == "unifi" ? "Compare it with the console's certificate (your browser's certificate details for the console's address, or UniFi OS → Settings → Control Plane → certificate)."
+             : c.Kind == "redfish" ? "Compare it with the BMC's certificate (iLO: Security → SSL Certificate; iDRAC: iDRAC Settings → Services → SSL; Supermicro: Configuration → SSL Certificates; XCC: Security → SSL)."
              : "Compare it with the certificate on the server (Unraid: Settings → Management Access → certificate, or openssl x509 -fingerprint -sha256 on the server).") + " Trust it only if they match.\n\n" +
             (changed ? "⚠ This is NOT the certificate you trusted before. That happens after a certificate renewal — or an interception. Be sure before continuing." : "It will be pinned: a different certificate later is refused."),
             changed ? "Trust the NEW certificate" : "Trust", danger: true, typeToConfirm: changed ? "TRUST" : null)) return;
@@ -544,7 +554,38 @@ public sealed class InfraView : UserControl, IDisposable
         p.Children.Add(L("NAME")); p.Children.Add(name);
         p.Children.Add(L("ENVIRONMENT (shown in every confirmation; PRODUCTION asks you to type the target's name)")); p.Children.Add(env);
         ComboBox? host = null, cred = null, mode = null; TextBox? endpoint = null, consoleId = null; PasswordBox? enrol = null;
-        if (c.Kind == "dcx-portal")
+        var kind = ProviderKinds.Find(c.Kind);
+        var extra = new List<(ProviderField Field, Func<string> Value)>();
+        if (kind != null)
+        {
+            // 0.6.33: the form a self-describing kind asks for (its file says what; nothing kind-specific here).
+            if (kind.EndpointLabel != null)
+            {
+                endpoint = new TextBox { Text = c.Endpoint, Padding = new Thickness(5, 4, 5, 4) }.Mono();
+                p.Children.Add(L(kind.EndpointLabel)); p.Children.Add(endpoint); p.Children.Add(NetUi.LiveBadge(endpoint));
+            }
+            cred = new ComboBox { ItemsSource = AppData.Current.Credentials.Where(x => x.Kind == CredentialKind.Password).OrderBy(x => x.Name).ToList(), DisplayMemberPath = "Display", SelectedItem = AppData.Current.FindCredential(c.CredentialId) };
+            p.Children.Add(L(kind.CredentialLabel)); p.Children.Add(CredRow(cred));
+            foreach (var f in kind.Fields)
+            {
+                p.Children.Add(L(f.Label));
+                if (f.Options is { } options)
+                {
+                    var labels = options.Select(o => o.Length == 0 ? "(none)" : o).ToList();
+                    var box = new ComboBox { ItemsSource = labels, SelectedIndex = Math.Max(0, Array.IndexOf(options, f.Get(c))), Width = 260, HorizontalAlignment = HorizontalAlignment.Left };
+                    p.Children.Add(box);
+                    extra.Add((f, () => box.SelectedIndex >= 0 ? options[box.SelectedIndex] : ""));
+                }
+                else
+                {
+                    var box = new TextBox { Text = f.Get(c), Padding = new Thickness(5, 4, 5, 4) }.Mono();
+                    p.Children.Add(box);
+                    extra.Add((f, () => box.Text));
+                }
+            }
+            p.Children.Add(new TextBlock { Text = kind.Hint, Style = (Style)FindResource("Hint"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0) });
+        }
+        else if (c.Kind == "dcx-portal")
         {
             // 0.3.0 §9: the portal server's saved host (user dcx-ctl + its Ed25519 key), the enrolment string (sealed in the
             // vault) and the host key fingerprint dcx-admin printed (pinned in Known hosts).
@@ -653,6 +694,11 @@ public sealed class InfraView : UserControl, IDisposable
         ok.Click += (_, _) =>
         {
             if (host != null && host.SelectedItem is not HostEntry) { Dialogs.Error("Provider", "Choose the host."); return; }
+            if (kind != null)
+            {
+                if (ProviderKinds.Validate(kind, endpoint?.Text ?? "", extra.Select(e => e.Value()).ToList()) is { } badKind) { Dialogs.Error("Provider", badKind); return; }
+                if (kind.NeedsUser ? NoUserSecret(cred!.SelectedItem) : NoSecret(cred!.SelectedItem)) { Dialogs.Error("Provider", "Choose the " + kind.CredentialLabel.Split(" (")[0].ToLowerInvariant() + ": a vault credential with " + (kind.NeedsUser ? "a user name and a password." : "a password.")); return; }
+            }
             if (c.Kind == "proxmox")
             {
                 if (ProxmoxProvider.ValidateEndpoint(endpoint!.Text) is { } bad) { Dialogs.Error("Provider", bad); return; }
@@ -704,7 +750,8 @@ public sealed class InfraView : UserControl, IDisposable
         if (host?.SelectedItem is HostEntry he) c.HostId = he.Id;
         if (endpoint != null) c.Endpoint = endpoint.Text.Trim();
         if (cred?.SelectedItem is Credential cr) c.CredentialId = cr == WindowsSignIn ? null : cr.Id;   // Hyper-V: "use my Windows sign-in"
-        if (endpointChanged && c.Kind is "proxmox" or "unraid" or "vsphere" or "synology" or "satellite" or "unifi") c.TlsSha256 = "";
+        foreach (var (f, value) in extra) f.Set(c, value().Trim());
+        if (endpointChanged && (c.Kind is "proxmox" or "unraid" or "vsphere" or "synology" or "satellite" or "unifi" || kind?.PinsTls == true)) c.TlsSha256 = "";
         if (c.Kind == "dcx-portal") SavePortalSecrets(c, enrol!.Password);   // a different server is never trusted by an old pin
         if (isNew) AppData.Current.InfraProviders.Add(c);
         AppData.Save();

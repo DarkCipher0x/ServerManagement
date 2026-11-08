@@ -123,8 +123,7 @@ public sealed class ScpFs : IFileSystem
 
     private static string TempFile()
     {
-        var dir = Path.Combine(AppInfo.CacheDir, "transfer-tmp");
-        Directory.CreateDirectory(dir);
+        var dir = PrivateFolders.Ensure(Path.Combine(AppInfo.CacheDir, "transfer-tmp"));   // 0.6.33: buffers encrypted by Windows
         return Path.Combine(dir, Guid.NewGuid().ToString("N"));
     }
 

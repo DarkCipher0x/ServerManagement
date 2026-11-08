@@ -36,6 +36,7 @@ public static class PolicySettings
         [nameof(AppSettings.ActiveAzureAccountId)] = "points at one of the user's own accounts",
         [nameof(AppSettings.ActiveGcpAccountId)] = "points at one of the user's own accounts",
         [nameof(AppSettings.OpenAiKey)] = "an API key (a secret)",
+        [nameof(AppSettings.OpenAiApiKey)] = "an API key (a secret)",
         [nameof(AppSettings.SmtpPassword)] = "the SMTP password (a secret)",
         [nameof(AppSettings.UpdateGitHubToken)] = "a GitHub access token for updates from a private repository (a secret)",
         [nameof(AppSettings.EditorVimProfiles)] = "the user's own editor profiles (structured text, edited in Settings)",
@@ -84,7 +85,7 @@ public static class PolicySettings
     private static readonly (string Category, string[] Names, string[] Prefixes)[] Categories =
     {
         ("Security and sign-in", new[] { nameof(AppSettings.AutoLockMinutes), nameof(AppSettings.LockOnWindowsLock), nameof(AppSettings.SandboxMode), nameof(AppSettings.HelloUnlock), nameof(AppSettings.HelloConfirm), nameof(AppSettings.ConfirmDestructive), nameof(AppSettings.TeamFeatures) }, Array.Empty<string>()),
-        ("Network and offline mode", new[] { nameof(AppSettings.TelnetEnabled), nameof(AppSettings.PortalBrowserBuiltIn), nameof(AppSettings.PortalOpenIn), nameof(AppSettings.PortalDownloadFolder) }, new[] { "Offline", "LocalApi" }),
+        ("Network and offline mode", new[] { nameof(AppSettings.TelnetEnabled), nameof(AppSettings.PortalBrowserBuiltIn), nameof(AppSettings.PortalOpenIn), nameof(AppSettings.PortalDownloadFolder), nameof(AppSettings.PortalBlockPopups) }, new[] { "Offline", "LocalApi" }),
         ("AI", Array.Empty<string>(), new[] { "Ai", "Ollama", "Foundry", "OpenAi", "Anthropic", "ClaudeCode" }),
         ("Terminals and connections", new[] { nameof(AppSettings.Scrollback), nameof(AppSettings.DefaultUsername), nameof(AppSettings.LocalSshKeysAutoImport), nameof(AppSettings.ConnectTimeoutSeconds), nameof(AppSettings.AutoReconnectMaxSeconds), nameof(AppSettings.RestoreWorkspace), nameof(AppSettings.SessionsOnExit), nameof(AppSettings.RestoreReconnect), nameof(AppSettings.RdpEmbedded), nameof(AppSettings.ReuseOpenTabs), nameof(AppSettings.CloudSyncHosts), nameof(AppSettings.EditorVimMode), nameof(AppSettings.EditorVimProfile), nameof(AppSettings.EditorLineNumbers), nameof(AppSettings.EditorSyntaxColours), nameof(AppSettings.SessionLogs) }, new[] { "Terminal", "Tmux" }),
         ("Appearance", new[] { nameof(AppSettings.Theme), nameof(AppSettings.AccentColor), nameof(AppSettings.ThemePreset), nameof(AppSettings.StatusIntensity), nameof(AppSettings.FollowWindowsHighContrast), nameof(AppSettings.Corners), nameof(AppSettings.Motion), nameof(AppSettings.Density), nameof(AppSettings.MonoAccents), nameof(AppSettings.ThemeAddon) }, new[] { "Ui", "MonoFont", "EditorFont", "Branding" }),

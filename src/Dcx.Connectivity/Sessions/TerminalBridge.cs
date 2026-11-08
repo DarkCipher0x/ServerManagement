@@ -49,7 +49,7 @@ public sealed record BridgeResult(bool Sent, bool Finished, int? ExitCode, strin
 /// </list>
 /// A chat answer never runs anything by itself: every run starts from a click.
 /// </summary>
-public static class TerminalBridge
+public static partial class TerminalBridge
 {
     public const int MaxCapture = 256 * 1024;
     public const int MaxForAi = 8000;
@@ -333,14 +333,23 @@ public static class TerminalBridge
     /// <summary>Sessions (by connect count) that already have the PowerShell helper.</summary>
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ITerminal, System.Runtime.CompilerServices.StrongBox<int>> _helper = new();
     internal static bool HasHelper(ITerminal v) => _helper.TryGetValue(v, out var b) && b.Value == v.Epoch;
-    private static readonly Regex HelperMissing = new(@"term '__dcx' is not recogni[sz]ed", RegexOptions.Compiled);
+    // 0.6.32: generated at build time (ADR-110) instead of IL emitted when the first terminal opens.
+    private static readonly Regex HelperMissing = HelperMissingRx();
+    [GeneratedRegex(@"term '__dcx' is not recogni[sz]ed")]
+    private static partial Regex HelperMissingRx();
 
-    private static readonly Regex Ansi = new(@"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\x1b[=>]|\r", RegexOptions.Compiled);
+    private static readonly Regex Ansi = AnsiRx();
+    [GeneratedRegex(@"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\x1b[=>]|\r")]
+    private static partial Regex AnsiRx();
     /// <summary>Cursor moves to another row (CUP "H"/"f", next-line "E", vertical "d"): ConPTY draws new lines this way instead
     /// of CR LF, so they count as line breaks (found by the self-test with a real PowerShell session).</summary>
-    private static readonly Regex RowMove = new(@"\x1b\[[0-9;]*[HfEd]", RegexOptions.Compiled);
+    private static readonly Regex RowMove = RowMoveRx();
+    [GeneratedRegex(@"\x1b\[[0-9;]*[HfEd]")]
+    private static partial Regex RowMoveRx();
     /// <summary>"Cursor forward n" stands for n spaces in ConPTY output.</summary>
-    private static readonly Regex Forward = new(@"\x1b\[(\d{0,3})C", RegexOptions.Compiled);
+    private static readonly Regex Forward = ForwardRx();
+    [GeneratedRegex(@"\x1b\[(\d{0,3})C")]
+    private static partial Regex ForwardRx();
     public static string Plain(string s) =>
         Ansi.Replace(Forward.Replace(RowMove.Replace(s, "\n"), m => new string(' ', Math.Clamp(int.TryParse(m.Groups[1].Value, out var n) ? n : 1, 1, 200))), "");
 

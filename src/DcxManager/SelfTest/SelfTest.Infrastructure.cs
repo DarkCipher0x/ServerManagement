@@ -173,9 +173,17 @@ public static partial class SelfTest
                 addBtn.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 string[]? addMenu; lock (Menus.ShownForTests) addMenu = Menus.ShownForTests.Count == shown + 1 ? Menus.ShownForTests[^1] : null;
                 var heads = addMenu?.ToList() ?? new();
-                if (heads.Count != 11 || !heads[0].StartsWith("Docker on a saved host") || !heads[2].StartsWith("Proxmox") || !heads[3].StartsWith("Unraid") || !heads[4].StartsWith("VMware vCenter") || !heads[5].StartsWith("Hyper-V") || !heads[6].StartsWith("Synology") || !heads[7].StartsWith("Red Hat Satellite")
-                    || !heads[8].StartsWith("UniFi Network") || !heads[9].StartsWith("UniFi Site Manager") || !heads[10].StartsWith("DCX-CTL"))   // 0.6.16: UniFi
+                // 0.6.33: 14 kinds, so the groups fold into submenus (a group of one, Sophos Central, stays inline).
+                string[] expect = ["Containers", "Hypervisors", "Storage & lifecycle", "Network", "Server hardware", "Sophos Central", "DCX-CTL"];
+                if (heads.Count != expect.Length || heads.Zip(expect).Any(p => !p.First.StartsWith(p.Second)))
                     throw new Exception("Add ▾ menu on click: " + string.Join(" | ", heads));
+                // Inside the folded groups: every kind once, in order (built the way the click builds it, never shown).
+                var built = new System.Windows.Controls.ContextMenu();
+                Menus.Fill(built.Items, iv.AddItems());
+                var leaves = built.Items.OfType<System.Windows.Controls.MenuItem>().SelectMany(m => m.Items.Count > 0 ? m.Items.OfType<System.Windows.Controls.MenuItem>() : [m]).Select(m => m.Header?.ToString() ?? "").ToList();
+                string[] kinds = ["Docker on a saved host", "Docker on this PC", "Proxmox", "Unraid", "VMware vCenter", "Hyper-V", "Synology", "Red Hat Satellite", "UniFi Network", "UniFi Site Manager", "Server BMC — Redfish", "HPE GreenLake", "Sophos Central", "DCX-CTL"];
+                if (leaves.Count != kinds.Length || leaves.Zip(kinds).Any(p => !p.First.StartsWith(p.Second)))
+                    throw new Exception("Add ▾ menu items: " + string.Join(" | ", leaves));
             }
             iv.InjectForTest(pcfg, new Infra.ProxmoxProvider(pcfg, fake));
             await Settle(400);

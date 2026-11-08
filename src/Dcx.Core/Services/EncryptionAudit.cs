@@ -18,9 +18,19 @@ public static class EncryptionAudit
         public IEnumerable<Entry> Plain => Entries.Where(e => e.State == "PLAIN");
         public int Sealed => Entries.Count(e => e.State == "sealed");
         public int ByDesign => Entries.Count(e => e.State == "plain by design");
+        public int ByWindows => Entries.Count(e => e.State == WindowsEncrypted);
+        public int OwnerOnly => Entries.Count(e => e.State == "owner only");
+        public int Components => Entries.Count(e => e.State == BrowserComponent);
         public string Summary => Plain.Any() ? $"✕ {Plain.Count()} file(s) NOT encrypted: {string.Join(", ", Plain.Take(5).Select(p => System.IO.Path.GetFileName(p.Path)))}"
-            : $"✓ {Sealed} encrypted file(s) checked, {ByDesign} plain by design (key ring, pointers, program files), nothing readable without the key";
+            : $"✓ {Sealed} encrypted file(s) checked, {ByDesign} plain by design (key ring, pointers, program files), nothing readable without the key"
+              + (ByWindows + OwnerOnly == 0 ? "" : OwnerOnly == 0
+                  ? $"; {ByWindows} browser, cache and hand-off file(s) encrypted by Windows for this account"
+                  : $"; {OwnerOnly} browser and cache file(s) readable only by this account (Windows file encryption isn't available: {PrivateFolders.Unavailable ?? "not for that drive"})")
+              + (Components == 0 ? "" : $"; {Components} public browser component file(s) downloaded this run (no user data), encrypted at the next start");
     }
+
+    public const string WindowsEncrypted = "encrypted by Windows";
+    public const string BrowserComponent = "browser component";
 
     private static readonly byte[] Magic = "DCX1"u8.ToArray();
 
@@ -39,10 +49,22 @@ public static class EncryptionAudit
         ("*.dcxstaged", "a snapshot restore staged for the next start (already sealed)"),
     ];
 
-    /// <summary>Walks <paramref name="dataDir"/> and, when given, the logs folder.</summary>
-    public static Report Run(string dataDir, string? logsDir = null)
+    /// <summary>Walks <paramref name="dataDir"/> and, when given, the logs folder and the folders other programs read
+    /// (<see cref="PrivateFolders"/>: the browser profile and caches — each file there must carry Windows' encryption).</summary>
+    public static Report Run(string dataDir, string? logsDir = null, IEnumerable<string>? privateFolders = null)
     {
         var o = new List<Entry>();
+        foreach (var dir in privateFolders ?? [])
+        {
+            if (!Directory.Exists(dir)) continue;
+            bool marked = PrivateFolders.IsEncrypted(dir);   // not marked: Windows file encryption isn't available for it
+            var opts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
+            foreach (var f in new DirectoryInfo(dir).EnumerateFiles("*", opts).Where(f => f.Length > 0))   // empty files (the browser's LOCK files) hold nothing
+                o.Add((f.Attributes & FileAttributes.Encrypted) != 0 ? new Entry(f.FullName, WindowsEncrypted, "EFS, this Windows account's key")
+                    : !marked ? new Entry(f.FullName, "owner only", "Windows file encryption isn't available for this folder")
+                    : PrivateFolders.IsBrowserComponent(dir, f.FullName) ? new Entry(f.FullName, BrowserComponent, "public data the browser downloaded and moved in this run (no user data); encrypted at the next start")
+                    : new Entry(f.FullName, "PLAIN", "not encrypted (written before its folder was marked, or open when the app tried — done at the next start)"));
+        }
         if (Directory.Exists(dataDir))
             foreach (var f in Directory.EnumerateFiles(dataDir, "*", SearchOption.AllDirectories))
                 o.Add(Classify(f, Path.GetRelativePath(dataDir, f).Replace('\\', '/')));

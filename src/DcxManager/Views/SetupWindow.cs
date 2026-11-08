@@ -397,7 +397,7 @@ public sealed class SetupWindow : Window
         var p = new StackPanel();
         p.Children.Add(H("All set"));
         p.Children.Add(P(SecuritySetupUi.ProtectionText()));
-        var rep = EncryptionAudit.Run(SecureStore.DataDir, Log.Dir);
+        var rep = EncryptionAudit.Run(SecureStore.DataDir, Log.Dir, PrivateFolders.All);
         p.Children.Add(P("Encryption check: " + rep.Summary));
         if (_protected.Count > 0) p.Children.Add(P($"🛡 Finish asks for admin approval once, for: {string.Join(", ", _protected.Keys.Select(k => ProtectedSettings.Find(k)?.Title ?? k))}."));
         if (_after.Count > 0) p.Children.Add(P("After Finish: " + string.Join(", ", _after.Keys) + " open."));

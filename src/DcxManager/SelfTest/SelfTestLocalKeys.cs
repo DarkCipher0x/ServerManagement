@@ -23,6 +23,7 @@ public static class LocalKeysTests
         var dir = Path.Combine(scratch, "local-ssh-keys-demo");
         try
         {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);   // a reused scratch folder starts clean
             Directory.CreateDirectory(dir);
             LocalKeys.DirForTest = dir;
             s.DefaultKeyCredentialId = null;

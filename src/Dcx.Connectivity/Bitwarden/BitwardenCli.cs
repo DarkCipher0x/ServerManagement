@@ -141,7 +141,7 @@ public static class BitwardenCli
         var all = tool == Tool.Bw ? args.Append("--nointeraction").ToList() : args.ToList();
         if (Fake is { } fake) return await fake(new Call(tool, all, env), ct);
         var exe = Find(tool) ?? throw new InvalidOperationException(NotInstalled(tool));
-        Directory.CreateDirectory(DataDir);
+        PrivateFolders.Ensure(DataDir);   // 0.6.33: the CLI's data file is encrypted by Windows for this account
         Process p;
         // Writers (and renames) are locked out from the check until the process has started from the checked file.
         using (var hold = new FileStream(exe, FileMode.Open, FileAccess.Read, FileShare.Read))

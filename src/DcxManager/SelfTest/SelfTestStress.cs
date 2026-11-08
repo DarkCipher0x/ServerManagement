@@ -289,6 +289,42 @@ internal static class StressTests
             var p = new Infra.UniFiCloudProvider(new Infra.ProviderConfig { Kind = "unifi-cloud", Name = "fuzz" }, new FakeHttp(_ => text)) { ListCap = 30 };
             await p.InventoryAsync(CancellationToken.None);
         }, TimeSpan.FromSeconds(2), noThrow: true, allowed: UniFiOk);
+        // 0.6.33: a hostile BMC, GreenLake and Sophos Central — every request gets the same mutated answer (each seed holds
+        // the fields of every list and item in one object); only a parse error or the provider's own refusal may escape.
+        var fuzzCred = new Credential { Name = "fuzz-api", Kind = CredentialKind.Password, Username = "fuzz-client", Secret = "fuzz-secret" };
+        AppData.Current.Credentials.Add(fuzzCred);
+        try
+        {
+            bool ApiOk(Exception e) => e is JsonException || e.GetType().Name is "RedfishException" or "GreenLakeException" or "SophosException"
+                || e is InvalidOperationException io2 && io2.Message.Contains("answer", StringComparison.Ordinal);
+            const string Tok = "{\"access_token\":\"FUZZ-ACCESS-TOKEN\",\"expires_in\":3600}";
+            var rfSeed = "{\"RedfishVersion\":\"1.17.0\",\"Vendor\":\"HPE\",\"Systems\":{\"@odata.id\":\"/redfish/v1/Systems\"},\"Chassis\":{\"@odata.id\":\"/redfish/v1/Chassis\"},\"Managers\":{\"@odata.id\":\"/redfish/v1/Managers\"},\"UpdateService\":{\"@odata.id\":\"/redfish/v1/UpdateService\"},\"FirmwareInventory\":{\"@odata.id\":\"/redfish/v1/UpdateService/FirmwareInventory\"}," +
+                "\"Members\":[{\"@odata.id\":\"/redfish/v1/Systems/1\"},{\"@odata.id\":\"/redfish/v1/Managers/1/LogServices/IEL\"}],\"@odata.id\":\"/redfish/v1/Systems/1\",\"PowerState\":\"On\",\"Status\":{\"Health\":\"OK\",\"State\":\"Enabled\"},\"LocationIndicatorActive\":false," +
+                "\"Actions\":{\"#ComputerSystem.Reset\":{\"target\":\"/redfish/v1/Systems/1/Actions/ComputerSystem.Reset\",\"" + Infra.RedfishProvider.AllowableResets + "\":[\"On\",\"ForceOff\"]}},\"Storage\":{\"@odata.id\":\"/redfish/v1/Systems/1/Storage\"},\"Drives\":[{\"@odata.id\":\"/redfish/v1/Systems/1/Storage/1/Drives/0\"}],\"CapacityBytes\":960197124096," +
+                "\"LogServices\":{\"@odata.id\":\"/redfish/v1/Managers/1/LogServices\"},\"Entries\":{\"@odata.id\":\"/redfish/v1/Managers/1/LogServices/IEL/Entries\"},\"Created\":\"2026-11-08T00:00:00Z\",\"Severity\":\"Warning\",\"Message\":\"m\"," +
+                "\"Power\":{\"@odata.id\":\"/redfish/v1/Chassis/1/Power\"},\"Thermal\":{\"@odata.id\":\"/redfish/v1/Chassis/1/Thermal\"},\"PowerControl\":[{\"PowerConsumedWatts\":200}],\"PowerSupplies\":[{\"MemberId\":\"0\",\"Name\":\"PSU 1\"}],\"Fans\":[{\"Name\":\"Fan 1\",\"Reading\":30}],\"Temperatures\":[{\"Name\":\"CPU\",\"ReadingCelsius\":55}]}";
+            await f.RunAsync("redfish-inventory", Few, From(rfSeed), async b =>
+            {
+                var text = Encoding.UTF8.GetString(b);
+                var p = new Infra.RedfishProvider(new Infra.ProviderConfig { Kind = "redfish", Name = "fuzz", Endpoint = "https://bmc.example.test", CredentialId = fuzzCred.Id }, new FuzzHttp(_ => text)) { MaxMembers = 4, MaxDrives = 4, MaxFirmware = 4, MaxLogEntries = 4 };
+                await p.InventoryAsync(CancellationToken.None);
+            }, TimeSpan.FromSeconds(2), noThrow: true, allowed: ApiOk);
+            var glSeed = "{\"items\":[{\"id\":\"d1\",\"serialNumber\":\"SN1\",\"model\":\"DL360\",\"deviceType\":\"COMPUTE\",\"assignedState\":\"ASSIGNED_TO_SERVICE\",\"subscription\":[{\"key\":\"K\"}],\"key\":\"K\",\"endTime\":\"2026-12-01T00:00:00Z\",\"quantity\":1,\"description\":\"d\",\"name\":\"srv\",\"hardware\":{\"powerState\":\"ON\",\"health\":{\"summary\":\"OK\"},\"bmc\":{\"ip\":\"192.0.2.9\"}},\"state\":{\"connected\":true}}],\"count\":1,\"total\":1,\"offset\":0}";
+            await f.RunAsync("greenlake-inventory", Few, From(glSeed), async b =>
+            {
+                var text = Encoding.UTF8.GetString(b);
+                var p = new Infra.GreenLakeProvider(new Infra.ProviderConfig { Kind = "greenlake", Name = "fuzz", CredentialId = fuzzCred.Id, Region = "eu-central" }, new FuzzHttp(r => r.RequestUri!.Host == "sso.common.cloud.hpe.com" ? Tok : text)) { ListCap = 30, AuditEntries = 3 };
+                await p.InventoryAsync(CancellationToken.None);
+            }, TimeSpan.FromSeconds(2), noThrow: true, allowed: ApiOk);
+            var soSeed = "{\"id\":\"11111111-2222-4333-8444-555555555555\",\"idType\":\"tenant\",\"apiHosts\":{\"global\":\"https://api.central.sophos.com\",\"dataRegion\":\"https://api-eu01.central.sophos.com\"},\"items\":[{\"id\":\"" + G + "\",\"name\":\"fw\",\"hostname\":\"pc\",\"type\":\"server\",\"status\":{\"connected\":true},\"health\":{\"overall\":\"good\"},\"isolation\":{\"status\":\"notIsolated\"},\"severity\":\"high\",\"description\":\"a\",\"allowedActions\":[\"acknowledge\"],\"externalIpv4Addresses\":[\"192.0.2.1\"],\"firewalls\":{\"total\":1}}],\"pages\":{\"current\":1,\"total\":1}}";
+            await f.RunAsync("sophos-inventory", Few, From(soSeed), async b =>
+            {
+                var text = Encoding.UTF8.GetString(b);
+                var p = new Infra.SophosCentralProvider(new Infra.ProviderConfig { Kind = "sophos-central", Name = "fuzz", CredentialId = fuzzCred.Id }, new FuzzHttp(r => r.RequestUri!.Host == "id.sophos.com" ? Tok : text)) { ListCap = 30, MaxTenants = 3, MaxAlerts = 5 };
+                await p.InventoryAsync(CancellationToken.None);
+            }, TimeSpan.FromSeconds(2), noThrow: true, allowed: ApiOk);
+        }
+        finally { AppData.Current.Credentials.Remove(fuzzCred); }
         var aiTools = new JsonArray(new JsonObject { ["type"] = "function", ["function"] = new JsonObject { ["name"] = "terminal_run", ["parameters"] = new JsonObject { ["properties"] = new JsonObject { ["command"] = new JsonObject(), ["purpose"] = new JsonObject() }, ["required"] = new JsonArray("command", "purpose") } } });
         await f.RunAsync("ai-tool-calls", N, From("Checking. <tool_call>{\"name\": \"terminal_run\", \"arguments\": {\"command\": \"awk '{print $1}' /proc/loadavg\", \"purpose\": \"load\"}}}> then ```json\n{\"name\":\"terminal_run\",\"arguments\":{\"command\":\"uptime\"}}\n``` terminal_run(\"df -h\", \"disk\")"),
             b => { var t = Encoding.UTF8.GetString(b); Ai.AiAgent.ParseTextCalls(t, aiTools); Ai.AiAgent.SalvageTextCalls(t, aiTools); Ai.AiAgent.MentionsToolUse(t, aiTools); return Task.CompletedTask; }, quick, noThrow: true);

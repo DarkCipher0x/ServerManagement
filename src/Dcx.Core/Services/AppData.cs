@@ -25,6 +25,10 @@ public sealed class AppData
     public List<Browser.PortalBookmark> Portals { get; set; } = new();
     /// <summary>Self-signed web certificates trusted per host:port in the in-app browser (TOFU, ADR-032).</summary>
     public List<Browser.WebCertPin> WebPins { get; set; } = new();
+    /// <summary>Sites (scheme://host:port) allowed to open pop-ups in the in-app browser, which blocks them by default (0.6.33).</summary>
+    public List<string> PortalPopupSites { get; set; } = new();
+    /// <summary>Sites (scheme://host:port) whose sound is always muted in the in-app browser (0.6.33).</summary>
+    public List<string> PortalMutedSites { get; set; } = new();
     /// <summary>Scheduled LAN re-scans (LAN discovery → Monitoring, 0.3.0 §7).</summary>
     public List<LanMonitor> LanMonitors { get; set; } = new();
     /// <summary>File commander directory hotlist (Ctrl+\, 0.3.0 §15).</summary>

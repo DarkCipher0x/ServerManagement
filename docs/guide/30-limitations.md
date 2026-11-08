@@ -18,7 +18,7 @@ Everything below passes the self-test against fakes, loopback servers or real lo
   cover the protocol, the leases and the unattended rules);
 - Fill sign-in (0.6.20) on real sign-in pages: tested on loopback pages (one step, steps with a code, a shadow root, no
   form); a sign-in inside a frame from another site can't be reached (copy the user name, password or TOTP code instead);
-- real AI and vision model calls (Ollama, NPU, OpenAI-compatible, Anthropic);
+- real AI and vision model calls (Ollama, NPU, OpenAI-compatible, the OpenAI API, Anthropic);
 - OBS as a broadcast consumer;
 - SFTP resume and SCP on a real server;
 - WSL and PowerShell 7 shells (not installed on the build PC), serial hardware;

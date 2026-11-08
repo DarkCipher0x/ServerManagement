@@ -71,7 +71,7 @@ public static class Infra
     /// <summary>The app-wide environment vocabulary (Services/Environments.cs, ADR-017).</summary>
     public static string[] Environments => Envs.All;
 
-    public static IInfraProvider Create(ProviderConfig c) => c.Kind switch
+    public static IInfraProvider Create(ProviderConfig c) => ProviderKinds.Find(c.Kind) is { } k ? k.Create(c, null) : c.Kind switch
     {
         "proxmox" => new ProxmoxProvider(c),
         "unraid" => new UnraidProvider(c),
@@ -86,7 +86,7 @@ public static class Infra
         _ => new DockerProvider(c, DockerBackend.Ssh(c)),
     };
 
-    public static string KindTitle(string kind) => kind switch
+    public static string KindTitle(string kind) => ProviderKinds.Find(kind) is { } k ? k.Title : kind switch
     {
         "proxmox" => "Proxmox VE (API token)",
         "unraid" => "Unraid (API key)",

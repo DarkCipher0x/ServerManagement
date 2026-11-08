@@ -19,6 +19,7 @@ public static class AiEngines
         ("ollama-gpu", "Ollama · GPU", "Ollama on this PC, your LAN, or a GPU server through an SSH tunnel."),
         ("ollama-cpu", "Ollama · CPU only", "For laptops without a good GPU: forces CPU inference (num_gpu 0) and a smaller context. Use a 1.5–3B model."),
         ("openai", "OpenAI-compatible server", "LM Studio, llama.cpp server, vLLM, LocalAI, Jan — or OpenAI / Azure OpenAI / an internal gateway with a key."),
+        ("openai-api", "OpenAI API", "OpenAI's GPT models through the Responses API with your API key (platform.openai.com). Prompts leave your network: allow internet AI providers below first."),
         ("anthropic", "Anthropic Messages API", "Claude via the Anthropic API with your key — or point it at Ollama (http://localhost:11434), which speaks the same API."),
         ("off", "Off — offline features only", "No model is ever called. Log digests, rule-based reports and help search keep working."),
     };
@@ -34,13 +35,15 @@ public static class AiEngines
 public static partial class AiClient
 {
     /// <summary>One pooled client for every engine (ADR-034): connections stay open for 10 minutes between questions, so
-    /// a follow-up skips the TCP (and TLS) handshake.</summary>
-    internal static readonly HttpClient Http = new(Offline.Handler(new SocketsHttpHandler
+    /// a follow-up skips the TCP (and TLS) handshake. Made at the first call (0.6.32): the sidebar's labels read this class
+    /// at start-up, which used to build the client (and load System.Net.Http) before the first frame.</summary>
+    internal static HttpClient Http => _http.Value;
+    private static readonly Lazy<HttpClient> _http = new(() => new(Offline.Handler(new SocketsHttpHandler
     {
         PooledConnectionIdleTimeout = TimeSpan.FromMinutes(10),
         PooledConnectionLifetime = TimeSpan.FromMinutes(30),
         MaxConnectionsPerServer = 8,
-    })) { Timeout = TimeSpan.FromMinutes(15) };
+    })) { Timeout = TimeSpan.FromMinutes(15) }, LazyThreadSafetyMode.ExecutionAndPublication);
     private static string? _foundryBase;
 
     private static AppSettings S => AppSettings.Current;
@@ -66,6 +69,7 @@ public static partial class AiClient
     {
         "npu" => S.FoundryModel,
         "openai" => S.OpenAiModel,
+        "openai-api" => S.OpenAiApiModel,
         "anthropic" => S.AnthropicModel,
         _ => S.OllamaModel,
     };
@@ -98,6 +102,7 @@ public static partial class AiClient
     {
         "npu" => S.FoundryUrl.Trim().Length > 0 ? Offline.HostOf(S.FoundryUrl) : "localhost",
         "openai" => Offline.HostOf(S.OpenAiUrl),
+        "openai-api" => Offline.HostOf(S.OpenAiApiUrl),
         "anthropic" => Offline.HostOf(S.AnthropicUrl),
         _ => AppData.Current.FindHost(S.OllamaTunnelHostId) is { } th ? th.Address : Offline.HostOf(string.IsNullOrWhiteSpace(S.OllamaUrl) ? "http://localhost:11434" : S.OllamaUrl),
     };
@@ -109,7 +114,7 @@ public static partial class AiClient
     {
         "ollama-cpu" => 9_000,
         "npu" => 9_000,
-        "openai" or "anthropic" => 60_000,
+        "openai" or "openai-api" or "anthropic" => 60_000,
         _ => Math.Clamp(S.AiContext * 2, 8_000, 60_000),
     };
 
@@ -117,6 +122,7 @@ public static partial class AiClient
     {
         "npu" => await FoundryBaseAsync(ct) + "/v1",
         "openai" => S.OpenAiUrl.Trim().TrimEnd('/'),
+        "openai-api" => (S.OpenAiApiUrl.Trim().Length == 0 ? "https://api.openai.com/v1" : S.OpenAiApiUrl.Trim()).TrimEnd('/'),
         "anthropic" => S.AnthropicUrl.Trim().TrimEnd('/'),
         _ => await OllamaClient.BaseUrlAsync(),
     };
@@ -216,6 +222,7 @@ public static partial class AiClient
             return Engine switch
             {
                 "openai" or "npu" => await OpenAiAsync(url, msgs, tools, schema, ct, delta),
+                "openai-api" => await OpenAiResponsesAsync(url, msgs, tools, schema, ct, delta),
                 "anthropic" => await AnthropicAsync(url, msgs, tools, schema, ct, delta),
                 _ => await OllamaAsync(url, msgs, tools, schema, ct, delta),
             };

@@ -255,7 +255,7 @@ public sealed class SharedLibraryView : UserControl, IDisposable
         if (s.SmtpHost.Trim().Length == 0 || s.SmtpFrom.Trim().Length == 0) { Dialogs.Info("Invite by e-mail", "Set up an SMTP server first: Settings → Integrations → E-mail notifications (the server and the From address)."); return; }
         if (Dialogs.Prompt("Invite by e-mail", $"Who should join “{c.State.Name}”? Their e-mail address:") is not { Length: > 0 } to) return;
         try { Notify.SmtpSender.Recipients(to); } catch (FormatException ex) { Dialogs.Error("Invite by e-mail", ex.Message, explain: false); return; }
-        var dir = System.IO.Path.Combine(AppInfo.CacheDir, "tmp", "invite-" + Guid.NewGuid().ToString("N"));
+        var dir = System.IO.Path.Combine(PrivateFolders.Ensure(System.IO.Path.Combine(AppInfo.CacheDir, "tmp")), "invite-" + Guid.NewGuid().ToString("N"));
         System.IO.Directory.CreateDirectory(dir);
         var pkg = System.IO.Path.Combine(dir, "shared-library-" + string.Concat(c.State.Name.Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '-')) + ".dcxaddon");
         try

@@ -84,8 +84,22 @@ public static class SecureStore
     /// <summary>True when only the master password can open the store (no DPAPI copy of the key).</summary>
     public static bool PasswordRequiredOnStart => _ring.Password != null && _ring.Dpapi == null;
 
+    private static Task<bool>? _opening;
+
+    /// <summary>Starts opening the key ring on a pool thread (0.6.32, ADR-110): the DPAPI unwrap is a round trip to the
+    /// Windows protection service (~25 ms) that otherwise sat on the UI thread; <see cref="Initialize"/> joins it. Called
+    /// once the single-instance guard holds the store, never before.</summary>
+    public static void BeginInitialize() => _opening ??= Task.Run(InitializeCore);
+
     /// <summary>Loads (or creates) the key ring. Returns true if the store is open; false means the master password is needed.</summary>
     public static bool Initialize()
+    {
+        var started = _opening;
+        _opening = null;
+        return started != null ? started.GetAwaiter().GetResult() : InitializeCore();
+    }
+
+    private static bool InitializeCore()
     {
         Directory.CreateDirectory(DataDir);
         if (!File.Exists(RingPath))
@@ -423,6 +437,18 @@ public static class SecureStore
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Converters = { new JsonStringEnumConverter() },
+        // 0.6.32 (ADR-110): the types every start reads have build-time metadata (StoreJsonContext); everything else is
+        // reflected as before. The self-test checks both give the same JSON for the demo store.
+        TypeInfoResolver = System.Text.Json.Serialization.Metadata.JsonTypeInfoResolver.Combine(StoreJsonContext.Default, new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()),
+    };
+
+    /// <summary>The same options with reflection only (the self-test compares its output with <see cref="Json"/>).</summary>
+    internal static JsonSerializerOptions ReflectionJsonForTest() => new()
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() },
+        TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver(),
     };
 
     private sealed class Keyring

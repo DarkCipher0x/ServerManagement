@@ -29,4 +29,10 @@ public sealed class ProviderConfig
     /// <summary>unifi (0.6.16): the console's id for the UniFi Cloud Connector (Endpoint = https://api.ui.com); empty = the
     /// console is reached directly on its own address.</summary>
     public string ConsoleId { get; set; } = "";
+    /// <summary>greenlake (0.6.33): the Compute Ops Management region (us-west, eu-central, ap-northeast; empty = don't
+    /// read COM). sophos-central: unused.</summary>
+    public string Region { get; set; } = "";
+    /// <summary>greenlake (0.6.33): the workspace id, for API clients that sign in at the workspace's own token address
+    /// (empty = HPE's common sign-in service).</summary>
+    public string WorkspaceId { get; set; } = "";
 }

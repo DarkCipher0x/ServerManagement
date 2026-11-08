@@ -89,9 +89,9 @@ public sealed partial class SettingsView
                 $"\n\nLogs, browser profile and caches: {App.CacheDir}" +
                 $"\n   Location: {Line(cache)} · {Fmt.Bytes(cBytes)} in {cFiles} file(s)" +
                 "\n   Error logs are encrypted once the store is unlocked (only a failure before unlocking can be written in clear)." +
-                "\n   Browser profile (Vultr portal sign-in): cookies are protected by Windows (DPAPI) by the browser engine." +
-                "\n   Temporary files (share sheet, Remote Desktop .rdp files, key generation) are deleted on exit and at the next start." +
-                $"\n\nScreenshots (plain PNG, only when you take one): {Screenshot.Dir}\n   Location: {Line(shots)}" +
+                "\n   Browser profile (portal sign-ins, site data, cache): " + (PrivateFolders.IsEncrypted(WebHost.UserDataFolder) ? "encrypted by Windows (EFS) for this account; cookies also by DPAPI." : "readable only by this account (Windows file encryption isn't available here); cookies protected by DPAPI.") +
+                "\n   Hand-off files (share sheet, Remote Desktop .rdp files, an external terminal's key, SCP buffers): encrypted by Windows (EFS) where available; deleted on exit and at the next start." +
+                $"\n\nScreenshots (PNG, only when you take one{(PrivateFolders.IsEncrypted(Screenshot.Dir) ? "; encrypted by Windows for this account" : "; plain")}): {Screenshot.Dir}\n   Location: {Line(shots)}" +
                 (relocated ? "\n\n⚠ Uninstall → \"delete my data\" removes the store files at the moved location too (only this app's files, not the folder)." : "");
             _syncStatus.Text = store.Kind is StorageKind.Synced or StorageKind.Network
                 ? string.Format(StorageGuard.SyncWarningText, store.Provider) + $"\nDetected by: {store.Evidence}." + (dismissed ? "\nYou chose to keep it here; the start-up warning is off for this folder." : "")

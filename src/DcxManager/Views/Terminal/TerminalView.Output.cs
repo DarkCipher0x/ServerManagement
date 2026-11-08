@@ -141,9 +141,16 @@ public sealed partial class TerminalView
     // clamped before the page sees them. A sequence split across two flushes is held back until it is complete.
 
     private string _csiCarry = "";
-    private static readonly System.Text.RegularExpressions.Regex Csi = new(@"(?:\x1b\[|\u009b)[0-9;:?>=!<]*[ -/]*[@-~]", System.Text.RegularExpressions.RegexOptions.Compiled);
-    private static readonly System.Text.RegularExpressions.Regex Big = new(@"\d{5,}", System.Text.RegularExpressions.RegexOptions.Compiled);
-    private static readonly System.Text.RegularExpressions.Regex OpenCsi = new(@"(?:\x1b\[?|\u009b)[0-9;:?>=!<]*[ -/]*\z", System.Text.RegularExpressions.RegexOptions.Compiled);
+    // 0.6.32: generated at build time (ADR-110) instead of IL emitted at the first terminal's first output.
+    private static readonly System.Text.RegularExpressions.Regex Csi = CsiRx();
+    private static readonly System.Text.RegularExpressions.Regex Big = BigRx();
+    private static readonly System.Text.RegularExpressions.Regex OpenCsi = OpenCsiRx();
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?:\x1b\[|\u009b)[0-9;:?>=!<]*[ -/]*[@-~]")]
+    private static partial System.Text.RegularExpressions.Regex CsiRx();
+    [System.Text.RegularExpressions.GeneratedRegex(@"\d{5,}")]
+    private static partial System.Text.RegularExpressions.Regex BigRx();
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?:\x1b\[?|\u009b)[0-9;:?>=!<]*[ -/]*\z")]
+    private static partial System.Text.RegularExpressions.Regex OpenCsiRx();
 
     internal static string ClampCsiDigits(string seq) => Big.Replace(seq, m => int.TryParse(m.Value, out var n) && n <= 9999 ? m.Value : "9999");
 

@@ -24,14 +24,16 @@ public static class ShareService
 
     private static readonly Guid DtmIid = new("a5caee9b-8708-49d1-8d36-67d25a8da00c");
 
-    public static string TempDir => AppInfo.ShareDir;
+    /// <summary>The share folder, created marked for Windows file encryption (0.6.33): another app reads its files as this
+    /// user, but they are encrypted on disk.</summary>
+    public static string TempDir => PrivateFolders.Ensure(AppInfo.ShareDir);
 
     public static bool Supported => Environment.OSVersion.Version >= new Version(10, 0, 17763);
 
     /// <summary>Removes files left from previous shares.</summary>
     public static void Cleanup()
     {
-        try { if (Directory.Exists(TempDir)) Directory.Delete(TempDir, true); } catch { }
+        try { if (Directory.Exists(AppInfo.ShareDir)) Directory.Delete(AppInfo.ShareDir, true); } catch { }
     }
 
     /// <summary>Shares a text snippet (and optionally the same content as a file, e.g. report.html or script.sh).</summary>

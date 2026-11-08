@@ -48,6 +48,13 @@ foreach ($pair in $specs) {
         $p = Start-Process $edge -ArgumentList '--headless=new', '--disable-gpu', '--no-first-run', "--user-data-dir=$work\edge",
             '--no-pdf-header-footer', '--generate-pdf-document-outline', "--print-to-pdf=$pdf", $uri -PassThru -WindowStyle Hidden
         if (-not $p.WaitForExit(180000)) { $p | Stop-Process -Force; throw 'Edge timed out' }
+        # Edge 157 (2026-11): the launcher process returns before the browser has written the file. Wait for the PDF to appear
+        # and stop growing (up to 3 minutes) instead of trusting the exit.
+        $deadline = (Get-Date).AddSeconds(180); $lastSize = -1L
+        while ((Get-Date) -lt $deadline) {
+            if (Test-Path $pdf) { $size = (Get-Item $pdf).Length; if ($size -gt 0 -and $size -eq $lastSize) { break }; $lastSize = $size }
+            Start-Sleep -Seconds 2
+        }
         if (-not (Test-Path $pdf)) { throw "no PDF was written for $($pair[0])" }
         Write-Host ("PDF: {0} ({1:N0} KB)" -f $pdf, ((Get-Item $pdf).Length / 1KB))
     }

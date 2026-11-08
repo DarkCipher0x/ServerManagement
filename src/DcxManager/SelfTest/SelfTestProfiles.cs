@@ -44,6 +44,64 @@ public static class ProfileTests
         }
         catch (Exception ex) { fail("whole-app encryption audit", ex); }
 
+        // ---- 0.6.33: the folders other programs read (browser profile, caches, hand-off files): Windows encryption ------
+        var pdir = Path.GetFullPath(SecureStore.DataDir).TrimEnd('\\') + "-private-test";
+        try
+        {
+            if (Directory.Exists(pdir)) Directory.Delete(pdir, true);
+            Directory.CreateDirectory(Path.Combine(pdir, "older"));
+            File.WriteAllText(Path.Combine(pdir, "older", "before.txt"), "written before the folder was marked");
+            PrivateFolders.Ensure(pdir);
+            if (!PrivateFolders.IsEncrypted(pdir))
+                ok($"private folders: Windows file encryption isn't available on this PC ({PrivateFolders.Unavailable}) — the browser profile and caches stay readable only by this account, and the audit says so");
+            else
+            {
+                File.WriteAllText(Path.Combine(pdir, "after.txt"), "written after");
+                Directory.CreateDirectory(Path.Combine(pdir, "new-sub"));
+                File.WriteAllText(Path.Combine(pdir, "new-sub", "deep.txt"), "in a new subfolder");
+                if (!PrivateFolders.IsEncrypted(Path.Combine(pdir, "after.txt")) || !PrivateFolders.IsEncrypted(Path.Combine(pdir, "new-sub", "deep.txt"))) throw new Exception("a new file in the marked folder isn't encrypted");
+                var a1 = EncryptionAudit.Run(Path.Combine(pdir, "no-store"), null, [pdir]);
+                if (a1.Plain.Count() != 1 || !a1.Plain.Single().Path.EndsWith("before.txt")) throw new Exception("the older plain file wasn't reported: " + a1.Summary);
+                PrivateFolders.Prepare(pdir);   // encrypts the older file once and leaves the marker
+                var a2 = EncryptionAudit.Run(Path.Combine(pdir, "no-store"), null, [pdir]);
+                if (a2.Plain.Any() || a2.ByWindows != 4 || File.ReadAllText(Path.Combine(pdir, "older", "before.txt")) != "written before the folder was marked") throw new Exception("after Prepare: " + a2.Summary);
+                // A file MOVED in keeps its attributes (the browser's component updater does this): a component folder
+                // is named by the audit, anything else is PLAIN; the next Prepare (every browser start) encrypts both.
+                var outside = pdir + "-outside";
+                if (Directory.Exists(outside)) Directory.Delete(outside, true);
+                Directory.CreateDirectory(outside);
+                File.WriteAllText(Path.Combine(outside, "crl"), "public list");
+                File.WriteAllText(Path.Combine(outside, "moved.txt"), "moved in");
+                File.WriteAllText(Path.Combine(outside, "manifest.json"), "{}");
+                File.WriteAllText(Path.Combine(outside, "model.bin"), "public model");
+                Directory.CreateDirectory(Path.Combine(pdir, "EBWebView", "CertificateRevocation", "9999"));
+                Directory.CreateDirectory(Path.Combine(pdir, "EBWebView", "Some New Component", "1.2.3.4"));
+                File.Move(Path.Combine(outside, "crl"), Path.Combine(pdir, "EBWebView", "CertificateRevocation", "9999", "crl"));
+                // a component the list doesn't name, recognised by the updater's layout (<name>\<version>\manifest.json)
+                File.Move(Path.Combine(outside, "manifest.json"), Path.Combine(pdir, "EBWebView", "Some New Component", "1.2.3.4", "manifest.json"));
+                File.Move(Path.Combine(outside, "model.bin"), Path.Combine(pdir, "EBWebView", "Some New Component", "1.2.3.4", "model.bin"));
+                File.Move(Path.Combine(outside, "moved.txt"), Path.Combine(pdir, "moved.txt"));
+                Directory.Delete(outside, true);
+                var a3 = EncryptionAudit.Run(Path.Combine(pdir, "no-store"), null, [pdir]);
+                if (a3.Components != 3 || a3.Plain.Count() != 1 || !a3.Plain.Single().Path.EndsWith("moved.txt")) throw new Exception("moved-in files: " + a3.Summary);
+                PrivateFolders.Prepare(pdir);
+                var a4 = EncryptionAudit.Run(Path.Combine(pdir, "no-store"), null, [pdir]);
+                if (a4.Plain.Any() || a4.Components != 0 || a4.ByWindows != 8) throw new Exception("after the next Prepare: " + a4.Summary);
+                // The real thing: this run's browser profile and the share folder.
+                var browser = WebHost.UserDataFolder;
+                if (Directory.Exists(browser))
+                {
+                    if (!PrivateFolders.IsEncrypted(browser)) throw new Exception("the browser profile folder isn't marked for encryption");
+                    var ab = EncryptionAudit.Run(Path.Combine(pdir, "no-store"), null, [browser]);
+                    if (ab.Plain.Any()) throw new Exception("browser profile files not encrypted: " + string.Join(", ", ab.Plain.Take(5).Select(p => Path.GetRelativePath(browser, p.Path))));
+                }
+                if (!PrivateFolders.IsEncrypted(ShareService.TempDir)) throw new Exception("the share folder isn't marked for encryption");
+                ok($"private folders: new files (and new subfolders) are encrypted by Windows for this account, an older plain file is reported and then encrypted in place (still readable as this user); files moved in (which keep their attributes) are encrypted by the next Prepare, a browser component folder named rather than reported as a leak; the browser profile{(Directory.Exists(browser) ? $" ({StorageGuard.Usage(browser).Files} files)" : " (not created yet)")} and the share folder are encrypted");
+            }
+        }
+        catch (Exception ex) { fail("private folders (Windows encryption)", ex); }
+        finally { try { if (Directory.Exists(pdir)) Directory.Delete(pdir, true); } catch { } }
+
         // ---- profiles -----------------------------------------------------------------------------------------------------
         try
         {

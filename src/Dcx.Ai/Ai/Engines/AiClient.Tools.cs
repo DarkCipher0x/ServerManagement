@@ -18,7 +18,7 @@ public static partial class AiClient
         Regex.IsMatch(message, @"does not support tools|tools? (are|is) not supported|not support(ed)? .*(tool|function)|tool[_ ]?(use|calling|choice).*(not|unsupported)|unsupported.*\btools?\b|unknown (field|parameter).*tools", RegexOptions.IgnoreCase);
 
     private static readonly Dictionary<string, bool> _tools = new();
-    private static string ToolKey => $"{Engine}|{Model}|{S.OllamaUrl}|{S.OpenAiUrl}|{S.AnthropicUrl}";
+    private static string ToolKey => $"{Engine}|{Model}|{S.OllamaUrl}|{S.OpenAiUrl}|{S.OpenAiApiUrl}|{S.AnthropicUrl}";
 
     /// <summary>Whether the current engine + model takes native tool calls. Ollama says so itself (/api/show
     /// "capabilities"); other engines are assumed to until a call is refused (<see cref="MarkNoTools"/>). Cached.</summary>

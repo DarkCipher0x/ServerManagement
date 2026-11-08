@@ -138,6 +138,8 @@ public partial class MainWindow
                 Menus.Item("Copy address", () => Menus.Clip(h.Address)),
                 Menus.Item("Copy user@host", () => Menus.Clip($"{h.Username}@{h.Address}{(h.Port != 22 ? ":" + h.Port : "")}")));
         }
+        if (tab.Content is BrowserView { IsPopup: false } web)   // 0.6.33: a portal tab can be pinned to the hosts panel
+            yield return Menus.Group("Portal", web.SoundMenu().Prepend(PortalUi.PinMenu(web.Bookmark)).ToArray());
         // Modules' items for a tab (0.2.0 phase 3): the AI module adds "Ask AI about this screen…".
         yield return Menus.Group("Screenshot & help",
             ScreenshotMenu(tab),

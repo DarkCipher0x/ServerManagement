@@ -4,7 +4,7 @@ Generated from the app's policy catalog (`PolicySettings.Catalog`, ADR-040) by e
 
 Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer, wins) and `HKCU\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (user). Templates: `policy\DarkCipherServerManagement.admx` and `policy\en-US\DarkCipherServerManagement.adml` in each release folder. A managed setting can't be changed in the app; an invalid value is ignored and listed in Settings → Security & privacy → Managed by your organisation.
 
-264 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, HostsOpenIn, LastUpdateCheck, LocalSshKeysSeen, ObserveSecrets, OllamaTunnelHostId, OpenAiKey, PaletteRecent, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalHighlightRules, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
+268 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, HostsOpenIn, LastUpdateCheck, LocalSshKeysSeen, ObserveSecrets, OllamaTunnelHostId, OpenAiApiKey, OpenAiKey, PaletteRecent, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalHighlightRules, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
 
 ## Security and sign-in
 
@@ -28,6 +28,7 @@ Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer
 | `OfflineAllowed` | Approved destinations in offline mode | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `OfflineMode` | Offline mode | REG_DWORD | 1 = on, 0 = off | off |
 | `OfflineResolvePrivateNames` | Offline resolve private names | REG_DWORD | 1 = on, 0 = off | on |
+| `PortalBlockPopups` | Portal block popups | REG_DWORD | 1 = on, 0 = off | on |
 | `PortalBrowserBuiltIn` | Portal browser built in | REG_DWORD | 1 = on, 0 = off | on |
 | `PortalDownloadFolder` | Portal download folder | REG_SZ | a folder path (REG_EXPAND_SZ allowed) | empty |
 | `PortalOpenIn` | Portal open in | REG_SZ | `tab` / `window` | `tab` |
@@ -76,6 +77,9 @@ Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer
 | `OllamaModel` | Ollama model | REG_SZ | text (up to 2,048 characters) | `qwen2.5:7b` |
 | `OllamaUrl` | Ollama URL | REG_SZ | text (up to 2,048 characters) | `http://localhost:11434` |
 | `OpenAiAcceptsImages` | OpenAI accepts images | REG_DWORD | 1 = on, 0 = off | off |
+| `OpenAiApiModel` | OpenAI API model | REG_SZ | text (up to 2,048 characters) | `gpt-6-sol` |
+| `OpenAiApiReasoning` | OpenAI API reasoning | REG_SZ | text (up to 2,048 characters) | empty |
+| `OpenAiApiUrl` | OpenAI API URL | REG_SZ | text (up to 2,048 characters) | `https://api.openai.com/v1` |
 | `OpenAiModel` | OpenAI model | REG_SZ | text (up to 2,048 characters) | empty |
 | `OpenAiUrl` | OpenAI URL | REG_SZ | text (up to 2,048 characters) | `http://localhost:1234/v1` |
 

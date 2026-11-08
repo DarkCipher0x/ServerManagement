@@ -1,8 +1,8 @@
-# Security report — ServerManagement 0.6.31 – DarkCipher Systems
+# Security report — ServerManagement 0.6.34 – DarkCipher Systems
 
-**Date:** 2026-10-30. **Version under test:** 0.6.31 (the build this report ships with), on .NET 10 (LTS, security
+**Date:** 2026-11-08. **Version under test:** 0.6.34 (the build this report ships with), on .NET 10 (LTS, security
 fixes until November 2028; ADR-092). The first public beta was 0.6.22 (2026-10-24). The 0.6.30 sweep of everything
-added since then is in §4g (0.6.31 changes only the window layout and tab groups: no new inputs or connections); the earlier 0.6.x surfaces and the pre-launch audit are in §4b–§4f and in "Live attacks".
+added since then is in §4g (0.6.31 changes only the window layout and tab groups: no new inputs or connections); 0.6.32 (start-up pass) adds none either, and 0.6.34's new OpenAI API engine, pinned portals, pop-up blocking, encrypted cache folders and the Redfish, HPE GreenLake and Sophos Central providers are in §4h; the earlier 0.6.x surfaces and the pre-launch audit are in §4b–§4f and in "Live attacks".
 The probe-by-probe list (§3) covers 0.4.0–0.5.1; later probes are described with their sweeps. **Prepared by:** the maintainers,
 from the automated suites that run on every build. **Scope:** the Windows application, its data store, every input it
 takes from outside (servers, files, policies, add-ons, web and API answers) and every connection it makes.
@@ -198,6 +198,60 @@ gates were re-checked. No finding; nothing needed fixing.
 | Theme packs (0.6.9) | colours only; environment labels (a safety signal, ADR-017) can't change; every pack meets the contrast rules in both modes | as designed |
 | Docs (0.6.12, ADR-091) | each document its own sealed file (AES-256-GCM, file name as AAD), folder paths cleaned of `..`, pins validated; the preview is our own renderer: no HTML engine, no network (images never fetched), only https / mailto links, opened after a confirmation and through offline mode; a damaged file is set aside, never overwritten | as designed |
 | Bitwarden (0.6.14, ADR-093) | only a CLI signed by Bitwarden (Authenticode with revocation) or an admin-approved SHA-256 starts, held open against writers until it runs; a copy of cmd.exe standing in for bw was refused until approved and again after one changed byte; secrets only as environment variables of that process (the self-test saw an inherited `BW_SESSION`, `NODE_OPTIONS` and `NODE_TLS_REJECT_UNAUTHORIZED` removed); no secret on any command line (checked on every scripted call); lists keep no password, key or value; option-shaped ids and searches refused before the CLI starts; the session key in memory only, dropped on idle, app lock and exit; offline mode governs sign-in, sync and Secrets Manager |
+
+## 4h. 0.6.34: the OpenAI API engine, pinned portals, pop-ups and sound, encrypted cache folders, Redfish / GreenLake / Sophos Central (2026-11-08, ADR-111 – ADR-114)
+
+- **A new outbound connection, gated like the others.** The OpenAI API engine talks to the address in Settings (default
+  `https://api.openai.com/v1`). It is an internet provider: refused unless *Allow internet AI providers* is ticked,
+  refused in offline mode, listed in Privacy & network, and secrets are masked in what is sent (fails closed), as for
+  every engine. Requests carry `store: false`. Group Policy can pin the address, model and reasoning effort; the key is
+  excluded from policy (secrets never go in the registry) and from exports without secrets.
+- **The key** is kept in the encrypted settings (AES-256-GCM store), shown as a password box, sent only as a bearer
+  header (or `api-key` to an Azure address) to the configured endpoint.
+- **The answer is untrusted input.** The Responses parser reads every field type-checked (a number where a string
+  belongs is ignored, not thrown), drops a tool call without a name, treats unparsable arguments as empty, and reports
+  an empty incomplete answer with its reason. A fuzzer feeds it 3,000 generated answers per run (wrong types, missing
+  fields, junk arguments, error objects): no unexpected exception. Tool calls from the model go through the same
+  approval rules as every engine (read-only lookups may run automatically, anything that changes state asks first).
+- **Images** go only to model families known to read them; a text-only model is refused before anything is sent.
+- **Pinned portals** add a view flag to a saved portal (kept encrypted with it). Opening a pinned portal goes through
+  the same path as the Portals screen: padlocks, offline mode, address rules and certificate pins all apply.
+- **Not tested live:** no OpenAI account was used; the engine was tested against a loopback stand-in that speaks the
+  published Responses API (whole and streamed).
+- **Pop-ups (ADR-112)** are refused by default in `NewWindowRequested` before a browser view exists, so nothing of a
+  blocked window runs. Opening a blocked one is an explicit click; it goes through `Portals.ValidateUrl` (http(s) only)
+  and the normal navigation rules in a fresh tab without an opener. The per-site allow list and the mute list are keyed
+  by scheme://host:port (a different port or scheme is another site), kept in the encrypted store and audited.
+  Group Policy can set the default. Self-test: `window.open` returns null with no view created, the site key, allowing a
+  site, tab and site mute.
+- **Files other programs read (ADR-113).** The audit of every place the app writes found plain files outside the sealed
+  store, all read by another program as this user: the WebView2 profile and cache (cookies were DPAPI-protected by the
+  engine, cached pages and site storage were not), the Bitwarden CLI's data, a private key exported for an external
+  OpenSSH terminal (for 20 s), .rdp files, Share-sheet / Open-externally copies, SCP transfer buffers and the default
+  screenshot / Claude Code workspace folders. Their folders are now marked for Windows EFS before the first write
+  (`PrivateFolders.Ensure`), the browser profile before the browser process starts, and older files are encrypted once
+  in place. `EncryptionAudit` walks these folders too and reports any file without the EFS attribute as PLAIN (empty
+  files hold nothing and are skipped). Self-test: a new file and a file in a new subfolder are encrypted, an older plain
+  file is reported and then encrypted and still readable, this run's browser profile and the share folder are
+  encrypted. Left as they are, by design: exports and folders the user chose, the elevated helper's request file
+  (non-secret settings, read by an administrator account that may not be this user, deleted after use) and the VPN
+  configuration while a tunnel is up (read by the WireGuard / OpenVPN service as SYSTEM; owner-only ACL, deleted when
+  the tunnel goes down). On Windows Home (no EFS) the folders stay owner-only and the audit says so.
+- **Redfish BMCs (ADR-114):** https only with TOFU pinning; one Redfish session per refresh or action, deleted
+  afterwards, the token in memory and in the X-Auth-Token header only; the password only in the session request's body
+  (Basic only for a BMC without sessions, for that operation); every `@odata.id` must be a `/redfish/v1` path on the same
+  BMC (another host, `..`, `%2e`, `%2f`, `%5c`, backslashes refused); responses capped at 16 MB; members, drives,
+  firmware and log entries capped. Changes need "Allow changes" and the BMC role; only the reset types the system lists
+  are offered; power and the identify light are verified by re-reading.
+- **HPE GreenLake and Sophos Central (ADR-114):** OAuth client credentials from the vault (`OAuthClientCredentials`):
+  the secret only in the POST body to a fixed https token address, the token in memory, reused until a minute before
+  expiry, dropped on 401, and never reused for a changed credential. Every request must go to https under
+  greenlake.hpe.com or sophos.com; a Sophos data region from whoami or a tenant's apiHost outside sophos.com is refused,
+  so the token and tenant id can't be steered elsewhere; the tenant id travels only to its own data region. GreenLake is
+  read-only; Sophos changes need "Allow changes" and the credential's role; a firmware upgrade is refused unless Central
+  offers that version for that firewall; isolation is verified. Fuzzing: `redfish-inventory`, `greenlake-inventory`,
+  `sophos-inventory` (a hostile service answering every request with the same mutated object).
+- **Not tested live:** the three providers were tested against stand-ins that follow the vendors' published APIs.
 
 ## 4g. The 0.6.30 sweep of the new surfaces (0.6.23–0.6.30, 2026-10-30, ADR-108)
 

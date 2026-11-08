@@ -30,7 +30,7 @@ public sealed class AiAssistant : IAssistant
     public string EngineLine => $"{AiEngines.Title(AiClient.Engine)} · {AiClient.Model}";
     public string ModelName => AiClient.Model;
     public TimeSpan LastLatency => AiClient.LastLatency;
-    public string? InternetEndpoint => AiClient.Engine is "openai" or "anthropic" && NetworkPolicy.ClassifyHost(AiClient.EngineHost) == NetClass.External
+    public string? InternetEndpoint => AiClient.Engine is "openai" or "openai-api" or "anthropic" && NetworkPolicy.ClassifyHost(AiClient.EngineHost) == NetClass.External
         ? $"{AiClient.Engine} at {AiClient.EngineHost}" : null;
 
     public void AskOperator(string question)

@@ -151,9 +151,11 @@ public sealed partial class DashboardView : UserControl, ICloudView, IActivatabl
     {
         if (_disposed) return;
         Current = this;
+        StartupTrace.Mark("Dashboard: Loaded");
         Layout();
         Redraw();
         SetPoll();
+        StartupTrace.Mark("Dashboard: laid out and drawn");
         // "When the dashboard opens": each time it is shown, at most once a minute.
         if (DateTime.Now - _lastOpenCheck > TimeSpan.FromMinutes(1)) { _lastOpenCheck = DateTime.Now; await RunChecksAsync("open"); }
     }

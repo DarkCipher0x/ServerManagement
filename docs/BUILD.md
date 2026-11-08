@@ -181,6 +181,8 @@ back to inline packages and the report says "repo sample not found").
 | `DCX_FUZZ_ITER` | multiplies fuzz iterations (1–1000, default 1) |
 | `DCX_ENDURANCE` | multiplies the endurance loops (default 1) |
 | `DCX_HANDLE_DIAG` | `1` = handle census on every endurance line, and per-screen diagnostic loops |
+| `DCX_STARTUP_TRACE` | a file path: the start-up timeline (0.6.32, ADR-110) — one line per phase with the ms since the process started, the phase's own ms, the working set and the assemblies the phase loaded; written at the first frame and again when the window is idle (with the visual tree size, private memory, threads, handles and every loaded assembly). Works in a normal start too, not only in the self-test |
+| `DCX_STARTUP_TRACE_STACKS` | `1` = the trace also records the call stack behind every assembly load (slow; for finding what pulls a module in) |
 
 ---
 
@@ -199,9 +201,10 @@ error (`$ErrorActionPreference = 'Stop'`).
      up to 5 minutes). Both must pass.
    - Prints the report's first line. On a non-zero exit it prints the `FAIL` lines and stops: **nothing is packaged
      after a failing self-test**.
-   - **Budgets (0.2.0 phase 7):** `tools\check-budgets.ps1` reads both reports' start-up lines (time to the main window,
-     private memory) and stops the build when one is over `tools\budgets.json`. Raise a budget only with a reason in
-     its `why`.
+   - **Budgets (0.2.0 phase 7):** `tools\check-budgets.ps1` reads both reports' start-up lines (time from the process
+     start to the main window's first frame and idle — since 0.6.32 the suite starts at ApplicationIdle after
+     ContentRendered — and private memory) and stops the build when one is over `tools\budgets.json`. Raise a budget
+     only with a reason in its `why`. `DCX_STARTUP_TRACE` (below) says where the time goes.
    - Deletes the scratch folder, retrying 10 times 2 s apart (WebView2 helper processes can hold a lockfile for a moment;
      since s36 this never fails the build, it only warns).
 2. **Publish.**

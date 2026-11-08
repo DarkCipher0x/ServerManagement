@@ -89,6 +89,9 @@ public sealed class RdpAxHost : System.Windows.Forms.AxHost
     private static string? _clsid;
     private static bool _probed;
 
+    /// <summary>The first WinForms control in the process: WinForms' exception mode is set before it exists (0.6.32).</summary>
+    static RdpAxHost() => Services.WinFormsSetup.Ensure();
+
     /// <summary>The newest RDP control that can actually be CREATED on this PC (a registered CLSID isn't enough: some
     /// Windows builds register MsTscAx 13 without a class factory for it), or null. Probed once, on the UI thread.</summary>
     public static string? AvailableClsid()

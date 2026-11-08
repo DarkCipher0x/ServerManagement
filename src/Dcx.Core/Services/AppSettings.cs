@@ -142,6 +142,13 @@ public sealed class AppSettings
     public string OpenAiModel { get; set; } = "";
     /// <summary>The user states that the OpenAI-compatible model reads images (the app can't verify it on such servers).</summary>
     public bool OpenAiAcceptsImages { get; set; }
+    // OpenAI API (0.6.33, ADR-111): OpenAI's own Responses API (/v1/responses) — GPT-6 models call tools only there.
+    // A gateway that speaks the Responses API (an internal proxy) can be entered as the URL.
+    public string OpenAiApiUrl { get; set; } = "https://api.openai.com/v1";
+    public string OpenAiApiKey { get; set; } = "";
+    public string OpenAiApiModel { get; set; } = "gpt-6-sol";
+    /// <summary>Reasoning effort sent to OpenAI's reasoning models: "" = the model's default, or low / medium / high.</summary>
+    public string OpenAiApiReasoning { get; set; } = "";
     // Anthropic Messages API (Claude API, or Ollama's Anthropic-compatible endpoint)
     public string AnthropicUrl { get; set; } = "https://api.anthropic.com";
     public string AnthropicKey { get; set; } = "";
@@ -542,6 +549,10 @@ public sealed class AppSettings
     public bool PortalBrowserBuiltIn { get; set; } = true;
     /// <summary>Where portal downloads are saved (asked before each one); "" = ask for a folder at the first download.</summary>
     public string PortalDownloadFolder { get; set; } = "";
+    /// <summary>The portal browser blocks pop-ups (new windows a page opens) unless the site is allowed (0.6.33). A blocked
+    /// pop-up never gets a browser view: the page's window.open returns nothing, and a bar offers to open it once in a tab
+    /// or allow the site. Off = pop-ups open as tabs in the same profile (before 0.6.33). Group Policy can enforce it.</summary>
+    public bool PortalBlockPopups { get; set; } = true;
 
     /// <summary>The incident "Add to incident" goes to without asking (Incidents/IncidentStore.cs).</summary>
     public string? ActiveIncidentId { get; set; }

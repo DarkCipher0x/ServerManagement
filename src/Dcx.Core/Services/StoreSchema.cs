@@ -95,6 +95,16 @@ public static class StoreSchema
     }
 
     /// <summary>Checks that decrypted bytes are what the file claims to be. Throws on anything else.</summary>
+    /// <summary>Builds System.Text.Json's metadata for the store's types on a pool thread while the start goes on (0.6.32,
+    /// ADR-110): the first parse of settings, data and the workspace otherwise paid ~60 ms on the UI thread inside the
+    /// start-up check (reflection over a few hundred properties, accessors emitted as IL). Parsing empty documents builds
+    /// the same metadata; the objects are thrown away.</summary>
+    public static void WarmUp() => _ = Task.Run(() =>
+    {
+        foreach (var (name, json) in new[] { ("settings.dcx", "{}"u8.ToArray()), ("data.dcx", "{}"u8.ToArray()), (MetaFile, "{}"u8.ToArray()), ("workspace.dcx", "[]"u8.ToArray()) })
+            try { ParseCheck(name, json); } catch { }
+    });
+
     public static void ParseCheck(string name, byte[] plain)
     {
         var o = SecureStore.Json;
@@ -284,8 +294,11 @@ public static class StoreRecovery
             ask("Data store", "An interrupted restore or upgrade could not be completed: " + ex.Message + "\n\nNothing else was changed. The app will close; if this repeats, see Help → Snapshots.", new[] { "Close" });
             return false;
         }
+        StartupTrace.Mark("store recovery: pending commit finished");
 
-        foreach (var d in Check())
+        var damaged = Check();
+        StartupTrace.Mark("store recovery: every file read and parsed");
+        foreach (var d in damaged)
         {
             if (d.GoodCopy is { } g)
             {
@@ -310,7 +323,9 @@ public static class StoreRecovery
         }
 
         try { AppSettings.Load(); } catch (Exception ex) { Log.Write("Settings load (recovery)", ex); }
+        StartupTrace.Mark("store recovery: settings loaded");
         var r = StoreSchema.Migrate();
+        StartupTrace.Mark("store recovery: format checked");
         switch (r.Outcome)
         {
             case StoreSchema.Outcome.NewerStore:

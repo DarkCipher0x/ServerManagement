@@ -30,12 +30,15 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         Instance = this;
+        StartupTrace.Mark("MainWindow: fields (PaneHost)");
         InitializeComponent();
+        StartupTrace.Mark("MainWindow: InitializeComponent (window XAML)");
         _cursorBlink.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(1, System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.Zero)));
         _cursorBlink.KeyFrames.Add(new System.Windows.Media.Animation.DiscreteDoubleKeyFrame(0, System.Windows.Media.Animation.KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.55))));
         DocArea.Child = Panes;
         InitHostPane();   // 0.6.31: the hosts panel beside every tab (Shell/MainWindow.HostPane.cs)
         RightDock = AppModules.CreateRightDock(this, DockCol, DockSplitter, DockHost);
+        StartupTrace.Mark("MainWindow: pane host, host-pane strip, right dock");
         Panes.ActiveTabChanged += OnActiveTab;
         Activated += (_, _) => Panes.ActivateMain();   // 0.6.4: new tabs open in the window you're in
         Panes.TabMenu = TabMenu;
@@ -55,7 +58,9 @@ public partial class MainWindow : Window
         ThemeManager.TrackScale(this, Root);
         if (MigrateNavSettings(AppSettings.Current)) SaveSettings();
         if (AppSettings.Current.RememberNavExpansion) _navExpanded.UnionWith(AppSettings.Current.ExpandedNavSections);
+        StartupTrace.Mark("MainWindow: branding, theme box, sidebar width, nav migration");
         BuildNav();
+        StartupTrace.Mark("MainWindow: BuildNav");
         ApplyMotion();
         NavLayout.MotionChanged += ApplyMotion;
         // Group Policy (0.3.0 §10): a change to a managed setting is put back on save; say why it didn't stay.
@@ -64,8 +69,10 @@ public partial class MainWindow : Window
         // Settings → Navigation → Open on start (a sidebar screen; Dashboard by default or when the choice no longer exists).
         var landing = AppSettings.Current.LandingPage;
         Navigate(landing.Length > 0 && AllNavKeys.Contains(landing) ? landing : "dashboard");
+        StartupTrace.Mark("MainWindow: landing page opened");
         ContentRendered += (_, _) =>
         {
+            StartupTrace.Mark("first frame rendered (ContentRendered)");
             TunnelsView.AutoStartAll();
             RightDock?.RestoreDetached();
             TabGroups.Changed += SaveWorkspace;
@@ -94,6 +101,19 @@ public partial class MainWindow : Window
                 _ = BitwardenSessions.AutoUnlockAsync("the app started");   // 0.6.20: with a remembered master password only
                 StartSnapshotTimer();
                 StartSyncScheduler();
+            }
+            StartupTrace.Mark("ContentRendered handlers done");
+            if (StartupTrace.On)
+            {
+                StartupTrace.Flush();
+                Dispatcher.BeginInvoke(() =>
+                {
+                    StartupTrace.Mark("window idle");
+                    int n = 0;
+                    void Walk(DependencyObject d) { n++; int c = System.Windows.Media.VisualTreeHelper.GetChildrenCount(d); for (int i = 0; i < c; i++) Walk(System.Windows.Media.VisualTreeHelper.GetChild(d, i)); }
+                    Walk(this);
+                    StartupTrace.Flush($"visual tree: {n:N0} elements");
+                }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }
         };
     }

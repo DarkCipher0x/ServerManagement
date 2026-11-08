@@ -15,7 +15,7 @@ namespace DcxManager.Views;
 /// a clear address bar and security chip, TOFU pinning for self-signed certificates, downloads that ask first, pop-ups as
 /// tabs in the same profile, no password saving or autofill, and the offline-mode guard on every request.
 /// </summary>
-public sealed class BrowserView : UserControl, IDisposable, IHostView
+public sealed partial class BrowserView : UserControl, IDisposable, IHostView
 {
     /// <summary>Every open portal tab (forgetting a certificate clears their accepted-certificate cache; self-test).</summary>
     internal static readonly List<BrowserView> Live = new();
@@ -33,6 +33,13 @@ public sealed class BrowserView : UserControl, IDisposable, IHostView
     private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly string? _initialUrl;
     private readonly List<DateTime> _popups = new();
+    // 0.6.33: pop-ups blocked on this page (newest last, at most 10) and the button that offers them; sound.
+    private readonly List<string> _blockedPopups = new();
+    private Button _popupBtn = null!;
+    private Button _sound = null!;
+    /// <summary>The user's mute choice for this tab (null = follow the site's "always mute").</summary>
+    private bool? _muteChoice;
+    private string _title = "";
     private string _shown = "";
     /// <summary>The last top-level address asked for: shown while the page itself is still blank (a refused first page).</summary>
     private string? _attempted;
@@ -97,6 +104,12 @@ public sealed class BrowserView : UserControl, IDisposable, IHostView
         fillMore.ToolTip = "Fill, or copy the user name, password or TOTP code";
         var more = Menus.MoreButton(MoreMenu, "⋯", "SmallButton");
         more.MinWidth = 0; more.Margin = new Thickness(0);
+        // 0.6.33: shown only while the page plays sound or the tab is muted, and after a pop-up was blocked.
+        _sound = B("🔊", "Mute this tab", ToggleMute);
+        _sound.Visibility = Visibility.Collapsed;
+        _popupBtn = Menus.MoreButton(PopupMenu, "⛔ ⧉", "SmallButton");
+        _popupBtn.MinWidth = 0; _popupBtn.Margin = new Thickness(0, 0, 4, 0);
+        _popupBtn.Visibility = Visibility.Collapsed;
 
         _addr.SetResourceReference(StyleProperty, "Field");
         _addr.KeyDown += (_, e) =>
@@ -107,7 +120,7 @@ public sealed class BrowserView : UserControl, IDisposable, IHostView
         Menus.ForText(_addr);
         // A grid, not a dock panel: the address always keeps a usable width, however narrow the tab (AI sidebar open, split panes).
         var bar = _bar = new Grid { Margin = new Thickness(8, 6, 8, 6) };
-        var cells = new UIElement[] { _back, _fwd, _reload, home, _chip, _addr, _profilePill, _fill, fillMore, more };
+        var cells = new UIElement[] { _back, _fwd, _reload, home, _chip, _addr, _profilePill, _popupBtn, _sound, _fill, fillMore, more };
         for (int i = 0; i < cells.Length; i++)
         {
             bar.ColumnDefinitions.Add(cells[i] == _addr ? new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 120 } : new ColumnDefinition { Width = GridLength.Auto });
@@ -181,9 +194,13 @@ public sealed class BrowserView : UserControl, IDisposable, IHostView
             s.IsStatusBarEnabled = true;
             s.AreBrowserAcceleratorKeysEnabled = true;
             WebHost.GuardOffline(core);
-            core.SourceChanged += (_, _) => ShowAddress();
+            core.SourceChanged += (_, _) => { ShowAddress(); ApplyMute(); };
             core.HistoryChanged += (_, _) => { _back.IsEnabled = _web.CanGoBack; _fwd.IsEnabled = _web.CanGoForward; };
-            core.DocumentTitleChanged += (_, _) => { if (Tab != null) Tab.Header = "🌐 " + Short(core.DocumentTitle is { Length: > 0 } t ? t : Bookmark.Title, 36); };
+            core.DocumentTitleChanged += (_, _) => { _title = core.DocumentTitle; UpdateHeader(); };
+            // 0.6.33: sound — the tab shows 🔊 while the page plays audio and 🔇 while muted.
+            core.IsDocumentPlayingAudioChanged += (_, _) => Dispatcher.BeginInvoke(UpdateSound);
+            core.IsMutedChanged += (_, _) => Dispatcher.BeginInvoke(UpdateSound);
+            Portals.SitesChanged += OnSitesChanged;
             core.NavigationStarting += OnNavigationStarting;
             core.NavigationCompleted += OnNavigationCompleted;
             core.ServerCertificateErrorDetected += OnCertificateError;
@@ -230,6 +247,7 @@ public sealed class BrowserView : UserControl, IDisposable, IHostView
     private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
         if (!Portals.NavigationAllowed(e.Uri, out var why)) { e.Cancel = true; Blocked++; Banner("⛔ " + char.ToUpper(why[0]) + why[1..] + ".", "Warn"); return; }
+        if (_blockedPopups.Count > 0 && !e.IsRedirected) ClearBlockedPopups();   // a new page: its own pop-ups
         _loading = true; _reload.Content = "✕";
         _attempted = e.Uri;
         if (RefusedCert is { } rc && Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && Portals.HostPort(u) != rc.HostPort) { RefusedCert = null; HideBanner(); }
@@ -362,6 +380,17 @@ public sealed class BrowserView : UserControl, IDisposable, IHostView
     private void OnNewWindow(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
         e.Handled = true;
+        // 0.6.33 (DarkCipher0x: "block popups by default, with the option to allow if wanted"): unless this site is allowed,
+        // the pop-up is refused here — no browser view is made for it and the page's window.open gets nothing back. The
+        // ⛔ ⧉ button offers to open it once in a tab (only an http(s) address the browser would open anyway) or to allow
+        // the site from now on.
+        if (!Portals.PopupsAllowed(Portals.SiteOf(Core?.Source)))
+        {
+            Blocked++; PopupsBlocked++;
+            var target = e.Uri ?? "";
+            Dispatcher.BeginInvoke(() => PopupRefused(target));
+            return;
+        }
         _popups.RemoveAll(t => t < DateTime.Now.AddMinutes(-1));
         if (_popups.Count >= 20) { Blocked++; Dispatcher.BeginInvoke(() => Banner("⛔ This page opened 20 pop-ups in a minute; further ones are blocked.", "Warn")); return; }
         if (!Portals.NavigationAllowed(e.Uri, out _) && e.Uri != "about:blank" && e.Uri.Length > 0) { Blocked++; return; }
@@ -617,6 +646,8 @@ public sealed class BrowserView : UserControl, IDisposable, IHostView
         var src = CurrentUrl;
         var saved = Portals.Find(Bookmark.Id) != null;
         yield return Menus.Item(saved ? "✎ Edit this portal…" : "☆ Save as a portal…", () => PortalUi.Edit(saved ? Bookmark : new PortalBookmark { Title = Core?.DocumentTitle ?? "", Url = src, Environment = Bookmark.Environment, HostId = Bookmark.HostId }));
+        yield return PortalUi.PinMenu(Bookmark);
+        foreach (var item in SoundMenu()) yield return item;
         yield return Menus.Item("Copy address", () => Menus.Clip(_shown), tip: "As shown: token-like query values are masked");
         yield return Menus.Item("Open in your default browser…", () =>
         {
@@ -665,6 +696,7 @@ public sealed class BrowserView : UserControl, IDisposable, IHostView
         if (_disposed) return;
         _disposed = true;
         _fillWatch?.Cancel();
+        Portals.SitesChanged -= OnSitesChanged;
         Live.Remove(this);
         _ready.TrySetResult();
         try { _web.Dispose(); } catch (Exception ex) { App.Log("Portal browser close", ex); }

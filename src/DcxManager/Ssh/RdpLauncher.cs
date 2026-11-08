@@ -51,8 +51,7 @@ public static class RdpLauncher
     {
         try
         {
-            var dir = Path.Combine(AppInfo.CacheDir, "rdp");
-            Directory.CreateDirectory(dir);
+            var dir = PrivateFolders.Ensure(Path.Combine(AppInfo.CacheDir, "rdp"));   // 0.6.33: encrypted by Windows
             var file = Path.Combine(dir, $"{h.Id}.rdp");
             File.WriteAllText(file, RdpFile(h), new UnicodeEncoding(false, true));
 

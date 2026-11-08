@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using DcxManager.Browser;
 using DcxManager.Services;
 using DcxManager.Ssh;
 using DcxManager.Vnc;
@@ -208,6 +209,7 @@ public partial class HostsView : UserControl, IDisposable
     private static bool Matches(HostEntry h, string key)
     {
         if (key.Length == 0) return true;
+        if (key == PortalsKey) return false;   // 0.6.33: the pinned portals' node holds no hosts
         // Shared library hosts (ADR-033) appear under "All hosts" and their own Shared node only, never in local folders.
         if (key.StartsWith("lib:")) return h.IsShared && ("lib:" + h.SharedFrom == key || ("lib:" + h.SharedFrom).StartsWith(key + " / ", StringComparison.Ordinal));
         if (h.IsShared) return false;
@@ -219,7 +221,7 @@ public partial class HostsView : UserControl, IDisposable
         return AppData.InFolder(AppData.NormalizeFolder(h.Group), key);
     }
 
-    private static bool IsFolderKey(string key) => key.Length == 0 || key == "★" || !(key.StartsWith("p:") || key.StartsWith("proto:") || key.StartsWith("t:") || key.StartsWith("j:") || key.StartsWith("lib:"));
+    private static bool IsFolderKey(string key) => key.Length == 0 || key == "★" || !(key == PortalsKey || key.StartsWith("p:") || key.StartsWith("proto:") || key.StartsWith("t:") || key.StartsWith("j:") || key.StartsWith("lib:"));
 
     private static IEnumerable<string> TagsOf(HostEntry h) => h.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -248,7 +250,7 @@ public partial class HostsView : UserControl, IDisposable
             // Removed folders don't keep a remembered state (no stale entries accumulate).
             var folders = AppData.Current.AllFolders;   // worked out once per build (0.6.29 performance pass)
             var known = new HashSet<string>(folders, StringComparer.OrdinalIgnoreCase);
-            _expanded.RemoveWhere(p => p.Length > 0 && !known.Contains(p));
+            _expanded.RemoveWhere(p => p.Length > 0 && p != PortalsKey && !known.Contains(p));
             Folders.Items.Add(root);
             var map = new Dictionary<string, TreeViewItem>(StringComparer.OrdinalIgnoreCase) { [""] = root };
             void Cat(string label, string key, string glyph) { var n = Node(label, key, hosts.Count(h => Matches(h, key)), glyph); root.Items.Add(n); map[key] = n; }
@@ -286,6 +288,8 @@ public partial class HostsView : UserControl, IDisposable
             NewFolderBtn.Visibility = _view == "folders" ? Visibility.Visible : Visibility.Collapsed;
             var favs = Node("Favourites", "★", hosts.Count(h => h.Favorite), "★");
             Folders.Items.Add(favs);
+            var portals = PortalsNode();   // 0.6.33: pinned portals (HostsView.Tree.cs)
+            if (portals != null) { Folders.Items.Add(portals); map[PortalsKey] = portals; }
             // One node per shared library, a child per collection (ADR-033).
             foreach (var c in Library.SharedLibraries.Clients.OrderBy(c => c.State.Name))
             {
@@ -334,6 +338,7 @@ public partial class HostsView : UserControl, IDisposable
     private void OnFolderSelected(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (_building) return;
+        if (Folders.SelectedItem is TreeViewItem { Tag: PortalBookmark } or TreeViewItem { Tag: PortalsKey }) return;   // 0.6.33: a pinned portal opens on a double-click
         if (Folders.SelectedItem is TreeViewItem { Tag: HostEntry h } hi)   // 0.6.7: a host: its folder in the list, the host selected
         {
             var key = ParentKey(hi);
@@ -460,6 +465,12 @@ public partial class HostsView : UserControl, IDisposable
 
     private IEnumerable<object?> FolderMenu(string folder)
     {
+        if (folder == PortalsKey)   // 0.6.33: the pinned portals' node
+        {
+            yield return Menus.Item("🌐 Open Portals", () => MainWindow.Instance.Navigate("portals"));
+            yield return Menus.Item("Unpin all portals", () => { foreach (var b in Portals.All.Where(b => b.PinnedToHosts).ToList()) PortalUi.SetPinned(b, false); });
+            yield break;
+        }
         var hosts = HostsIn(folder);
         if (folder.StartsWith("lib:"))
         {

@@ -190,6 +190,38 @@ public static class PortalTests
             }
             catch (Exception ex) { fail("portal bookmarks encrypted", ex); }
 
+            // ---- 3b. 0.6.33: portals pinned to the hosts panel ------------------------------------------------------------
+            try
+            {
+                var pb = new PortalBookmark { Title = "Pinned PVE (self-test)", Url = "https://198.51.100.24:8006/", Folder = "Self-test" };
+                Portals.Upsert(pb); addedBookmarks.Add(pb);
+                var hostsFolderWas = main.HostsPage.FolderForTest;
+                System.Windows.Controls.TreeViewItem? PortalsTop() => main.HostsPage.FoldersForTest.Items.OfType<System.Windows.Controls.TreeViewItem>().FirstOrDefault(i => i.Tag as string == HostsView.PortalsKey);
+                if (!Portals.All.Any(b => b.PinnedToHosts) && PortalsTop() != null) throw new Exception("a Portals node without pinned portals");
+                var unsaved = PortalUi.PinMenu(new PortalBookmark { Title = "x", Url = "https://198.51.100.25/" });
+                if (unsaved.IsEnabled || PortalUi.PinMenu(pb).Header as string != "📌 Pin to the hosts panel") throw new Exception("pin menu before pinning");
+                PortalUi.SetPinned(pb, true);
+                await Settle(150);
+                var top = PortalsTop() ?? throw new Exception("no 🌐 Portals node in the hosts panel after pinning");
+                if (!top.Items.OfType<System.Windows.Controls.TreeViewItem>().Any(i => i.Tag is PortalBookmark x && x.Id == pb.Id)) throw new Exception("the pinned portal isn't under 🌐 Portals");
+                if (PortalUi.PinMenu(pb).Header as string != "📌 Unpin from the hosts panel") throw new Exception("pin menu after pinning");
+                top.IsSelected = true;   // the node is no folder: the Hosts list keeps what it showed
+                await Settle(100);
+                if (main.HostsPage.FolderForTest != hostsFolderWas) throw new Exception($"selecting 🌐 Portals changed the hosts folder to “{main.HostsPage.FolderForTest}”");
+                // Kept encrypted with the bookmark.
+                AppData.Load();
+                addedBookmarks = Portals.All.Where(x => addedBookmarks.Any(a => a.Id == x.Id)).ToList();
+                host = AppData.Current.FindHost(host?.Id) ?? host;
+                pb = Portals.Find(pb.Id) ?? throw new Exception("pinned portal not read back");
+                if (!pb.PinnedToHosts) throw new Exception("the pin wasn't saved");
+                main.PortalPinsChanged();
+                PortalUi.SetPinned(pb, false);
+                await Settle(150);
+                if (PortalsTop() is { } left && left.Items.OfType<System.Windows.Controls.TreeViewItem>().Any(i => i.Tag is PortalBookmark x && x.Id == pb.Id)) throw new Exception("still listed after unpinning");
+                ok("portals pinned to the hosts panel: 📌 Pin / Unpin in the portal's menus (refused until saved), a 🌐 Portals node beside Favourites listing it (selecting the node leaves the Hosts list alone), the pin kept encrypted in data.dcx, gone when unpinned");
+            }
+            catch (Exception ex) { fail("portals pinned to the hosts panel", ex); }
+
             // ---- 4. live: a local HTTP page in a tab ------------------------------------------------------------------
             http = TestWeb.Start(null);
             BrowserView? view = null;
@@ -226,8 +258,27 @@ public static class PortalTests
                 await Settle(800);
                 if ((view.Core.Source ?? "").StartsWith("file:")) throw new Exception("navigated to file:");
 
-                // Pop-up: a tab in the same profile, closed by the page.
+                // 0.6.33: pop-ups are blocked by default — window.open gets nothing, no browser view is made, the ⛔ ⧉ list has it.
                 int before = BrowserView.Live.Count;
+                var got = await view.Core.ExecuteScriptAsync("String(window.open('/popup', '_blank') === null)");
+                await Settle(400);
+                if (got != "\"true\"" || BrowserView.Live.Count != before || view.PopupsBlocked < 1 || view.BlockedPopupsForTest.LastOrDefault()?.EndsWith("/popup") != true)
+                    throw new Exception($"pop-up not blocked by default: window.open null {got}, live {BrowserView.Live.Count} (was {before}), blocked [{string.Join(", ", view.BlockedPopupsForTest)}]");
+                var site = Portals.SiteOf(view.Core.Source) ?? throw new Exception("no site for " + view.Core.Source);
+                if (site != $"http://127.0.0.1:{http.Port}") throw new Exception("site key " + site);
+
+                // 0.6.33: sound — the tab's mute, and a site muted for good (applied to the open tab at once).
+                view.ToggleMute();
+                if (!view.IsMuted || !(view.Tab!.Header as string ?? "").EndsWith("🔇")) throw new Exception("tab mute: " + view.Tab!.Header);
+                view.ToggleMute();
+                if (view.IsMuted) throw new Exception("tab unmute");
+                Portals.SetSiteMuted(site, true);
+                if (!await Until(() => view.IsMuted)) throw new Exception("site mute not applied to the open tab");
+                Portals.SetSiteMuted(site, false);
+                if (!await Until(() => !view.IsMuted)) throw new Exception("site unmute not applied");
+
+                // Allowed for the site: a tab in the same profile, closed by the page.
+                Portals.SetPopupsAllowed(site, true);
                 await view.Core.ExecuteScriptAsync("window.open('/popup', '_blank')");
                 BrowserView? pop = null;
                 if (!await Until(() => (pop = BrowserView.Live.FirstOrDefault(v => v.IsPopup && v.Core?.DocumentTitle == "DCX popup")) != null)) throw new Exception($"no pop-up tab (live {BrowserView.Live.Count}, was {before})");
@@ -310,7 +361,7 @@ public static class PortalTests
                 s.PortalOpenIn = "tab";
                 main.Panes.Select(view.Tab!); await Settle(300);
                 snap(main, Path.Combine(shots, "portal-tab.png"));
-                ok("portal tab (local HTTP page): profile “dcx-lab” per environment, password saving / autofill / SmartScreen off, “Not secure” chip, LAB tab label and page title; token masked in the address; file: refused; window.open → a tab in the same profile, closed by window.close(); download refused when declined (nothing written) and saved to the chosen folder when accepted; Fill sign-in fills user + a quote/script-laden password on its own origin after the plain-HTTP warning and refuses another origin; 0.6.20: a sign-in in steps gets the user name, then the password when its box appears, then the TOTP code; a form in a shadow root is filled; a page with no form offers ⧉ user name / password / TOTP code (no TOTP secret, none copied); window mode pops the tab out; rendered portal-tab.png");
+                ok("portal tab (local HTTP page): profile “dcx-lab” per environment, password saving / autofill / SmartScreen off, “Not secure” chip, LAB tab label and page title; token masked in the address; file: refused; 0.6.33: window.open blocked by default (nothing returned, no view made, listed under ⛔ ⧉), tab mute and a site muted for good applied to the open tab; with the site allowed, window.open → a tab in the same profile, closed by window.close(); download refused when declined (nothing written) and saved to the chosen folder when accepted; Fill sign-in fills user + a quote/script-laden password on its own origin after the plain-HTTP warning and refuses another origin; 0.6.20: a sign-in in steps gets the user name, then the password when its box appears, then the TOTP code; a form in a shadow root is filled; a page with no form offers ⧉ user name / password / TOTP code (no TOTP secret, none copied); window mode pops the tab out; rendered portal-tab.png");
             }
             catch (Exception ex) { fail("portal tab (local HTTP)", ex); }
             finally { Dialogs.ConfirmForTests = confirmWas; }
@@ -417,6 +468,8 @@ public static class PortalTests
             foreach (var b in addedBookmarks) Portals.All.RemoveAll(x => x.Id == b.Id);
             Portals.All.RemoveAll(x => x.Title.EndsWith("(self-test)"));
             AppData.Current.WebPins.RemoveAll(p => p.HostPort.StartsWith("127.0.0.1:"));
+            AppData.Current.PortalPopupSites.RemoveAll(p => p.Contains("://127.0.0.1:"));
+            AppData.Current.PortalMutedSites.RemoveAll(p => p.Contains("://127.0.0.1:"));
             if (host != null) AppData.Current.Hosts.RemoveAll(h => h.Id == host.Id);
             if (cred != null) AppData.Current.Credentials.RemoveAll(c => c.Id == cred.Id);
             AppData.Save();

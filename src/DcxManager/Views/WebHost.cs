@@ -24,7 +24,16 @@ public static class WebHost
 
     public static Task<CoreWebView2Environment> EnvironmentAsync()
     {
-        lock (EnvGate) return _env ??= CoreWebView2Environment.CreateAsync(null, UserDataFolder);
+        lock (EnvGate) return _env ??= CreateEnvironmentAsync(UserDataFolder);
+    }
+
+    /// <summary>0.6.33: the browser's profile, cache, cookies and crash dumps are written into a folder Windows encrypts
+    /// for this account (PrivateFolders) — marked before the browser process starts, so nothing new lands in it
+    /// unencrypted; what an earlier version left there is encrypted once, while nothing holds it open.</summary>
+    private static async Task<CoreWebView2Environment> CreateEnvironmentAsync(string folder)
+    {
+        await Task.Run(() => PrivateFolders.Prepare(folder));
+        return await CoreWebView2Environment.CreateAsync(null, folder);
     }
 
     /// <summary>After the browser process died, the next view creates a new environment — once: only the view whose
@@ -59,6 +68,13 @@ public static class WebHost
             if (File.Exists(target) && File.ReadAllBytes(target).AsSpan().SequenceEqual(bytes)) continue;
             File.WriteAllBytes(target, bytes);
         }
+        // 0.6.32: the pages unpacked by earlier versions go (each version has its own folder; ten of them had piled up).
+        try
+        {
+            foreach (var old in Directory.GetDirectories(App.CacheDir, "web-*"))
+                if (!string.Equals(old, dir, StringComparison.OrdinalIgnoreCase)) Directory.Delete(old, true);
+        }
+        catch (Exception ex) { App.Log("Old terminal pages", ex); }
         return _webDir = dir;
     }
 

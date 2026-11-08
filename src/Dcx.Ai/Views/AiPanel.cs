@@ -202,7 +202,16 @@ public sealed class AiPanel : UserControl
         _foundryBanner.SetResourceReference(Border.BorderBrushProperty, "Accent");
         _foundrySetup.SetResourceReference(StyleProperty, "PrimaryButton");
         _foundrySetup.Click += async (_, _) => await SetUpFoundryAsync();
-        Loaded += (_, _) => { FoundryManager.Progress += OnFoundryProgress; _ = CheckFoundryAsync(); };
+        // 0.6.32: the Foundry check starts a "foundry status" process (~60 ms on the UI thread): once the window is idle,
+        // not inside Loaded, where it sat between the main window's Show and its first frame. The check itself runs from a
+        // Normal-priority operation (an async method's continuations inherit the starting operation's priority, and
+        // ApplicationIdle continuations starve behind animations).
+        Loaded += (_, _) =>
+        {
+            FoundryManager.Progress += OnFoundryProgress;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+                () => Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, () => { if (IsLoaded) _ = CheckFoundryAsync(); }));
+        };
         Unloaded += (_, _) => FoundryManager.Progress -= OnFoundryProgress;
         var root = new DockPanel { Margin = new Thickness(10, 10, 10, 10) };
         DockPanel.SetDock(_foundryBanner, Dock.Top);

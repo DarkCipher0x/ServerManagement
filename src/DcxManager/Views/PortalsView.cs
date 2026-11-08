@@ -81,6 +81,24 @@ public static class PortalUi
         return null;
     }
 
+    /// <summary>Pins a saved portal under “🌐 Portals” in the hosts panel beside the tabs, or takes it off (0.6.33; DarkCipher0x:
+    /// "being able to pin portal tabs to the "hosts" bar would be handy"). A view setting: no lock or restriction needed.</summary>
+    public static void SetPinned(PortalBookmark b, bool pinned)
+    {
+        if (Portals.Find(b.Id) is not { } saved || saved.PinnedToHosts == pinned) return;
+        saved.PinnedToHosts = pinned;
+        Portals.Save();
+        MainWindow.Instance?.PortalPinsChanged();
+        MainWindow.Instance?.Status(pinned ? $"📌 “{saved.Title}” is in the hosts panel under 🌐 Portals" : $"“{saved.Title}” unpinned from the hosts panel");
+    }
+
+    /// <summary>The pin / unpin entry for a portal's menus (a portal not saved yet is saved first).</summary>
+    public static MenuItem PinMenu(PortalBookmark b) => Portals.Find(b.Id) is { } saved
+        ? saved.PinnedToHosts
+            ? Menus.Item("📌 Unpin from the hosts panel", () => SetPinned(saved, false))
+            : Menus.Item("📌 Pin to the hosts panel", () => SetPinned(saved, true), tip: "Listed under 🌐 Portals in the hosts panel beside the tabs: double-click to open")
+        : Menus.Item("📌 Pin to the hosts panel", () => { }, enabled: false, tip: "Save it as a portal first (⋯ → Save as a portal…)");
+
     /// <summary>The bookmark editor (new or existing). Returns true when saved.</summary>
     public static bool Edit(PortalBookmark original)
     {
@@ -245,6 +263,7 @@ public sealed class PortalsView : UserControl
         yield return Menus.Item("Open in a new window", () => { if (b != null) PortalUi.Open(b, window: true); }, enabled: b != null);
         yield return Menus.Item("Edit…", () => { if (b != null) PortalUi.Edit(b); }, enabled: b != null);
         yield return Menus.Item("Copy address", () => Menus.Clip(b?.Url), enabled: b != null);
+        if (b != null) yield return PortalUi.PinMenu(b);
         if (b != null) yield return LockUi.Menu("portal:" + b.Id, b.Title);
         yield return Menus.Sep();
         yield return Menus.Item("Delete…", DeleteSelected, "Del", b != null);
@@ -298,6 +317,24 @@ public sealed class PortalsView : UserControl
         _side.Children.Add(openIn);
         Text("Either way a tab can pop out or dock back (tab menu, Ctrl+Alt+O).", "Muted");
 
+        // 0.6.33: pop-ups blocked by default, allowed per site; sites always muted.
+        Label("POP-UPS & SOUND");
+        var block = new CheckBox { Content = "Block pop-ups (allow them per site from the tab's ⛔ ⧉ button)", IsChecked = AppSettings.Current.PortalBlockPopups, Margin = new Thickness(0, 0, 0, 4) };
+        SettingTag.Set(block, nameof(AppSettings.PortalBlockPopups));   // locked when Group Policy sets it
+        block.Click += (_, _) => { AppSettings.Current.PortalBlockPopups = block.IsChecked == true; AppSettings.Save(); AuditLog.Write("you", "browser", "pop-up blocking " + (block.IsChecked == true ? "on" : "off")); BuildSide(); };
+        _side.Children.Add(block);
+        void SiteList(string title, List<string> sites, Action<string> remove)
+        {
+            if (sites.Count == 0) return;
+            Text($"{title}: {string.Join(", ", sites.Select(s => s.Replace("https://", "").Replace("http://", "http: ")))}", "Muted");
+            var pick = Menus.MoreButton(() => sites.ToList().Select(s => (object?)Menus.Item("Remove " + s, () => { remove(s); BuildSide(); })).ToList(), "Remove ▾", "SmallButton");
+            pick.HorizontalAlignment = HorizontalAlignment.Left; pick.Margin = new Thickness(0, 2, 0, 4);
+            _side.Children.Add(pick);
+        }
+        SiteList("Pop-ups allowed on", AppData.Current.PortalPopupSites, s => Portals.SetPopupsAllowed(s, false));
+        SiteList("Always muted", AppData.Current.PortalMutedSites, s => Portals.SetSiteMuted(s, false));
+        Text("Mute a tab, or every tab of a site, from the tab's 🔊 button or its right-click menu.", "Muted");
+
         Label("DOWNLOADS");
         Text(Portals.DownloadFolder is { } df ? $"Saved to {df} — you're asked before every download." : "No folder yet: the first download asks for one. You're asked before every download.");
         Btn("Choose folder…", () => { if (PortalUi.PickDownloadFolder() != null) BuildSide(); });
@@ -332,7 +369,7 @@ public sealed class PortalsView : UserControl
 
         Label("BROWSER PROFILES");
         foreach (var prof in Portals.ProfilesInUse()) Text("● " + Portals.ProfileLabel(prof) + $"  ({prof})");
-        Text("Each profile has its own cookies and site storage, kept by the WebView2 runtime under this app's local data folder and protected by Windows (DPAPI) — not by the app's own store. Clear a profile from an open tab's ⋯ menu.", "Muted");
+        Text("Each profile has its own cookies and site storage, kept by the WebView2 runtime under this app's local data folder — not in the app's own store. The folder is encrypted by Windows (EFS) for your account, and cookies by DPAPI too. Clear a profile from an open tab's ⋯ menu.", "Muted");
     }
 
     /// <summary>Adds an add-on's starter bookmarks (skipping addresses already saved).</summary>

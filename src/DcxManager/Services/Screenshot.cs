@@ -125,11 +125,14 @@ public static class Screenshot
     /// <summary>Writes to the screenshots folder and returns the path.</summary>
     public static string Save(BitmapSource img, string subject)
     {
-        Directory.CreateDirectory(Dir);
+        // 0.6.33: the app's own default folder is encrypted by Windows for this account (a folder chosen in Settings is left as it is).
+        if (string.IsNullOrWhiteSpace(AppSettings.Current.ScreenshotDir)) PrivateFolders.Ensure(Dir); else Directory.CreateDirectory(Dir);
         var path = Path.Combine(Dir, FileName(subject));
         File.WriteAllBytes(path, Png(img));
         AuditLog.Write("you", subject, "saved screenshot", path);
-        Ui.Window.Status($"Screenshot saved (plain PNG, not encrypted) → {path}");
+        Ui.Window.Status(PrivateFolders.IsEncrypted(path)
+            ? $"Screenshot saved (PNG, encrypted by Windows for your account) → {path}"
+            : $"Screenshot saved (plain PNG, not encrypted) → {path}");
         return path;
     }
 

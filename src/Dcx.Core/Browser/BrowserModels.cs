@@ -20,6 +20,8 @@ public sealed class PortalBookmark
     public string? CredentialId { get; set; }
     public DateTime Created { get; set; } = DateTime.Now;
     public DateTime? LastOpened { get; set; }
+    /// <summary>Listed under “🌐 Portals” in the hosts panel beside the tabs (0.6.33), one double-click from opening.</summary>
+    public bool PinnedToHosts { get; set; }
 }
 
 /// <summary>A self-signed (or otherwise untrusted) certificate the user compared and trusted for one host:port (TOFU, like

@@ -167,8 +167,8 @@ internal static class AiOffTests
     {
         var log = new StringBuilder();
         int failures = 0;
-        void Ok(string s) => log.AppendLine("ok    " + s);
-        void Fail(string s, Exception? ex) { failures++; log.AppendLine("FAIL  " + s + " :: " + ex); }
+        void Ok(string s) { log.AppendLine("ok    " + s); SelfTest.Progress(reportPath, "ok    " + s); }
+        void Fail(string s, Exception? ex) { failures++; log.AppendLine("FAIL  " + s + " :: " + ex); SelfTest.Progress(reportPath, "FAIL  " + s); }
         var started = DateTime.Now;
         Application.Current.DispatcherUnhandledException += (_, e) => { Fail("unhandled UI exception", e.Exception); e.Handled = true; };
         async Task Settle(int ms = 500)
@@ -177,6 +177,11 @@ internal static class AiOffTests
             await Application.Current.Dispatcher.InvokeAsync(() => main.UpdateLayout(), DispatcherPriority.ApplicationIdle);
         }
         Ok(SelfTest.StartupLine);
+        // 0.6.32 (ADR-110): a start loads neither WinForms (the RDP host and the tray balloon load it when used) nor
+        // Reflection.Emit's IL generator on the UI thread's path (the start-up regexes are generated at build time).
+        var loadedAtStart = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).ToHashSet();
+        if (loadedAtStart.Contains("System.Windows.Forms") || loadedAtStart.Contains("System.Windows.Forms.Primitives")) Fail("start-up loaded WinForms (ADR-110)", null);
+        else Ok("start-up (ADR-110): WinForms is not loaded until the RDP host or the tray balloon needs it");
         await Settle(1500);
 
         // 1. Nothing of the AI module was registered.

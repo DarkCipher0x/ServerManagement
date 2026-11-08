@@ -25,7 +25,7 @@
     <!-- Version: numeric (assembly, Windows Installer, update checks); it must keep increasing.
          ReleaseLabel: what the release is called (file names, dist folder, shown in the app), e.g. 0.2.0-preview.1 while
          the numeric version is 0.1.21 (a preview has to sort below the final 0.2.0, which upgrades it). Empty = Version. -->
-    <Version>0.6.31</Version>
+    <Version>0.6.34</Version>
     <ReleaseLabel></ReleaseLabel>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
@@ -43,11 +43,25 @@
          Measured windowless start 452 → 288 ms; installed 81 → 195 MB, download (zipped) 75 → 78 MB. ReadyToRun was
          measured too (242 ms) but grows the download to ~114 MB, so it stays off. -->
     <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+    <!-- 0.6.32 (ADR-110): the app's own assemblies and the packages a session uses are compiled ahead of time (ReadyToRun), so
+         a start doesn't JIT them: first frame 800 → ~640 ms in the start-up trace. The big packages the start never touches
+         stay IL (below): with everything compiled the exe grew 204 → 290 MB, of which the Windows SDK projection alone was
+         +29 MB and BouncyCastle +7 MB; this set is about +16 MB. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <!-- Per assembly, never the single-file default of one composite image: that recompiles the whole framework into a
+         176 MB DcxServerManager.r2r.dll (the exclusions below don't apply to it) and the framework's own compiled code in the
+         runtime pack goes unused. -->
+    <PublishReadyToRunComposite>false</PublishReadyToRunComposite>
     <DebugType>none</DebugType>
     <!-- Keep local build paths (user name) out of compiled code -->
     <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Left as IL (ADR-110): loaded only by Windows Hello / sharing, PDF text extraction and the SSH key tools. -->
+    <PublishReadyToRunExclude Include="Microsoft.Windows.SDK.NET.dll;WinRT.Runtime.dll;BouncyCastle.Cryptography.dll;UglyToad.PdfPig.dll;UglyToad.PdfPig.Core.dll;UglyToad.PdfPig.Fonts.dll;UglyToad.PdfPig.Tokens.dll;UglyToad.PdfPig.Tokenization.dll;UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />
+  </ItemGroup>
 
   <ItemGroup>
     <Resource Include="Assets\app.ico" />

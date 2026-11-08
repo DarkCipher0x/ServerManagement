@@ -2912,3 +2912,206 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
   folding back, closing the Hosts tab keeps the panel, reopening reuses the one page, "tab" read as pinned. Stacking:
   one tab shows, the chip says 3 ▾, picking a hidden tab makes it the face, the face is kept when another tab is in
   front, a tab leaving the group shows again (2 ▾), spreading out shows all.
+
+### ADR-110 Start-up pass: a timeline, ahead-of-time code and nothing loaded before its time (2026-11-07, 0.6.32)
+- **Context:** "see if there are any optimizations that can be made to make it more efficient and lightweight, and
+  increase the launch speed". The self-test's start-up line (958 ms, budget 1,000) said how long, not where. A
+  windowless start (`--export-policy-templates`) took 276 ms warm, so ~680 ms was the window.
+- **Decision:**
+  - `Services/StartupTrace` (Dcx.Core): with `DCX_STARTUP_TRACE=<file>`, `Mark()` calls along the start record the ms
+    since the process started, the step's own ms, the working set and the assemblies the step loaded; the file is
+    written at the first frame and at idle (then with the visual tree size, private memory, threads, handles and every
+    loaded assembly). `DCX_STARTUP_TRACE_STACKS=1` records the call stack of every assembly load. Off, a mark is one
+    static null check. The marks stay in the product (App, OnStartup's phases, store recovery, PaneHost, MainWindow,
+    Dashboard, the AI dock) so the next pass starts from a timeline, not a stopwatch.
+  - What the timeline showed, and what changed (AI off, warm, an existing store; ms to the first frame):
+    - **Store recovery 63–77 ms on an existing store, 21 on a fresh one.** Not file volume (the real store is 50 KB): the
+      first `Deserialize<AppSettings>` / `<AppData>` built System.Text.Json's reflection metadata (hundreds of
+      properties, accessors emitted as IL). `StoreJsonContext` (source-generated: AppSettings, AppData, the format
+      record, the workspace entries) is chained before the reflection resolver in `SecureStore.Json`; every other
+      type is reflected as before. `StoreSchema.WarmUp()` (App's constructor) still parses empty documents on a pool
+      thread so the options' caches are warm. The self-test serialises the demo store with both resolvers and
+      compares the JSON.
+    - **The key ring (DPAPI, ~27 ms) sat on the UI thread.** `SecureStore.BeginInitialize()` runs it on a pool thread
+      once the single-instance guard holds the store (never before: two first starts on a fresh folder must not race
+      for the key ring); `Initialize()` joins it. Measured 0 ms on the UI thread.
+    - **WinForms loaded in every start** (System.Windows.Forms, .Primitives, System.Configuration, System.Private.Xml:
+      26 MB of images) for one call, `SetUnhandledExceptionMode`, in OnStartup — JIT-compiling OnStartup loaded the
+      assembly before the first line ran. `Services/WinFormsSetup.Ensure()` (never inlined) is called by the first
+      WinForms user: the RDP AxHost's static constructor and the tray balloon. The mode can be set any time before a
+      WinForms message loop runs, and a WPF app never runs one.
+    - **Compiled regexes at start-up.** `SessionLog`'s three `RegexOptions.Compiled` patterns were built (Reflection.Emit)
+      while the layers were wired, before any window; `ShellPlace`, `TerminalBridge` and `TerminalView.Output` built
+      theirs when the first terminal opened. All are `[GeneratedRegex]` now (the fields keep their names).
+    - **AI on: +450 ms before the first frame.** `AiClient`'s static HttpClient was built by the sidebar's labels
+      (lazy now), and the Foundry Local check started a `foundry status` process from the panel's Loaded handler
+      (~60 ms on the UI thread; it now starts at ApplicationIdle). Most of the rest was the self-test's own first
+      tests, which started right after `Show()` and shared the UI thread with the first frame: the suite now starts at
+      the first ApplicationIdle after ContentRendered, so its start-up line measures a real start (to the idle window).
+      It is *run* from a Normal-priority operation posted from there: WPF's `DispatcherSynchronizationContext` gives an
+      async method's continuations the priority of the operation that started it, and a suite whose every `await`
+      resumed at ApplicationIdle starved behind an animation in the Puppet screen test (the UI thread busy, `Settle`
+      never resumed; found with the new `<report>.progress` file, which every suite now writes line by line, and a
+      stall probe). The same hand-off is used for the AI panel's deferred Foundry check.
+    - **JIT.** With everything else done, ReadyToRun was measured again on the full window path (0.6.29 measured a
+      windowless start only): per assembly, the app's own assemblies and the session libraries, first frame 713–740 →
+      633–667 ms, exe 204 → 211 MB, private memory +2–3 MB. The single-file default is one *composite* image that
+      recompiles the whole framework (`DcxServerManager.r2r.dll`, 176 MB): first frame 553–594 ms, but exe 290 MB and
+      private memory +16 MB (R2R images in a single-file bundle are copied into private memory on Windows, not mapped),
+      so `PublishReadyToRunComposite` is off and the Windows SDK projection (+29 MB), BouncyCastle (+7 MB) and PdfPig
+      stay IL (`PublishReadyToRunExclude`).
+    - **Old terminal pages.** Every version unpacks xterm.js into `web-<version>`; eleven were in the cache. `WebHost.WebDir`
+      removes the others after unpacking the current one.
+  - Measured, same PC, warm, AI off: first frame ~800 → ~650 ms, idle ~840 → ~700 ms; AI on ~1,170 → ~680 ms. Private
+    memory at idle 102–104 → 107–110 MB (the self-test now measures at idle, after the deferred hosts page).
+- **Left as they are (measured, not worth it or not possible):** the 106–130 ms before the first managed line (host,
+  runtime, WPF assemblies); App.xaml + Themes/Controls.xaml ~60 ms; the first control's theme dictionary (Aero2) ~45 ms;
+  MainWindow's XAML ~75 ms; Show → the Dashboard's Loaded ~110 ms (HWND, layout, templates, the render thread). A cold
+  start reads and scans the whole 211 MB exe (10 s on this PC the first time after a build): inherent to a single file.
+  Trimming is unsupported for WPF; a framework-dependent build would need .NET on the target PC. The self-test is 39 %
+  of the main project's source and ships in the same assembly; its own assembly, loaded only with `--selftest`, would
+  make every start load less (a follow-up).
+- **Tests:** SelfTest051 (0.6.32): the generated resolver answers for the four store types; the demo settings, data,
+  format record and workspace entries serialise to the same JSON through the generated metadata and through
+  reflection, and round-trip; WinForms is not loaded at the end of the AI-off suite's start (checked at idle);
+  `WinFormsSetup.Ensure()` is idempotent.
+
+## ADR-111: The OpenAI API engine (Responses API) and portals pinned to the hosts panel (0.6.34)
+
+- **Context:** DarkCipher0x asked to "integrate openai api" before releasing, and for "being able to pin portal tabs to
+  the "hosts" bar". The generic `openai` engine (Chat Completions) already reached OpenAI with a key, but OpenAI's
+  changelog says current GPT-6 models take tool definitions only through the Responses API ("Tool calling requires the
+  Responses API"), they refuse custom `temperature`, and `/v1/models` lists embeddings, image, audio and realtime models
+  that can't chat. The AI Engineer depends on tools.
+- **Decision — a separate engine, `openai-api`** (`AiClient.OpenAiResponses.cs`), with its own settings
+  (`OpenAiApiUrl` = https://api.openai.com/v1, `OpenAiApiKey`, `OpenAiApiModel` = gpt-6-sol, `OpenAiApiReasoning`), so a
+  local LM Studio set-up and an OpenAI one don't overwrite each other. The generic engine stays for LM Studio, vLLM,
+  Azure OpenAI and Chat Completions gateways.
+  - Messages map to Responses input items: system / user / assistant messages, `function_call` items with `call_id`
+    only (an item id would make the API ask for the reasoning item before it, which isn't kept), `function_call_output`
+    for tool results, images as `input_image` data URLs.
+  - Tools are flattened (`{type, name, description, parameters}`) with `strict: false` (the Responses API defaults to
+    strict schemas, which need every property required; the app's tools have optional arguments). Structured results
+    use `text.format` json_schema (not strict), falling back to json_object, then plain instructions.
+  - `store: false`; no sampling settings; `reasoning.effort` only when the user picks one.
+  - Streaming: `response.output_text.delta` pieces are passed on; the final message is built from
+    `response.completed` (or from the `output_item.done` items of a stream that ends without it).
+  - The parser treats the answer as untrusted: fields are type-checked, a nameless call is dropped, unparsable
+    arguments become `{}`, an empty incomplete answer throws with its reason.
+  - Models: `/v1/models` filtered to chat families (`gpt-`, `o<n>`, `chatgpt-`, `chat-latest`, `codex-`) minus
+    embedding / image / audio / realtime / tts / transcribe / moderation / search-preview / instruct. Vision by family
+    (GPT-4o, 4.1, 4.5, 5, 6, 7, o1 (not mini), o3 (not mini), o4).
+  - Gating as every internet engine: `AiAllowCloud`, offline mode, Privacy & network, secret masking. The key is
+    excluded from Group Policy and stripped from exports without secrets.
+- **Decision — pinned portals:** `PortalBookmark.PinnedToHosts`. The hosts panel's tree gets a 🌐 Portals node after
+  Favourites (key `portals:`, not a folder: no hosts, no drag, no folder actions; selecting it leaves the Hosts list as
+  it was). Its leaves open through `PortalUi.Open` (padlocks, offline mode, address rules). Pin / Unpin is in the
+  portal tab's right-click and ⋯ menus and on the Portals screen; an unsaved page must be saved first.
+  `MainWindow.PortalPinsChanged` redraws the tree at once, even while the Hosts tab is behind another tab.
+- **Rejected:** switching the generic engine to the Responses API (LM Studio, vLLM and gateways speak Chat
+  Completions); sending reasoning items back (needs `include: reasoning.encrypted_content` and keeping them per chat:
+  more state for a small gain); a strict-schema conversion of every tool.
+- **Tests:** SelfTestAgent: the fake engine speaks `/v1/responses` whole and as SSE; `openai-api` joins the streaming
+  and refused-sampling loops; a tool round trip through `AiAgent` checks the request shape (store off, no temperature,
+  reasoning effort, flattened non-strict tools, `call_id` without item id, `function_call_output`), JSON schema output,
+  image parts and a text-only model refused before sending, the model filter, auth headers, the incomplete answer and
+  3,000 fuzzed answers. SelfTestPortals: pin / unpin menus (refused until saved), the 🌐 Portals node, selecting it
+  leaves the Hosts folder, the pin kept in the encrypted store, gone when unpinned.
+
+## ADR-112: Portal tabs — pop-ups blocked by default, sound per tab and per site (0.6.34)
+- **Context:** DarkCipher0x asked to mute a portal tab or a whole site that plays audio, and to block pop-ups by default
+  with the option to allow them, "liteweight and secure".
+- **Decision — pop-ups:** `BrowserView.OnNewWindow` sets `Handled = true` without a `NewWindow` unless
+  `Portals.PopupsAllowed(site)`: WebView2 then makes no view and `window.open` returns null, so a refused pop-up costs
+  nothing. The target is remembered (last 10, cleared on the next top-level navigation) behind the ⛔ ⧉ toolbar button:
+  open one once (an http(s) address only, through `PortalUi.OpenPopup` + `Go`, so the address and navigation rules apply
+  and there is no opener link) or allow the site. Setting `PortalBlockPopups` (default on, Group Policy) switches the
+  blocking; `AppData.PortalPopupSites` is the allow list.
+- **Decision — sound:** WebView2's own `IsMuted` / `IsDocumentPlayingAudio`. A tab's choice (`_muteChoice`) wins over the
+  site's "always mute" (`AppData.PortalMutedSites`) until the site setting changes, which then replaces it. The tab
+  header shows 🔇 / 🔊; the toolbar's speaker toggles; the tab's right-click and ⋯ menus carry both, and allow / block
+  pop-ups on the site.
+- **Site key:** `Portals.SiteOf(url)` = scheme://idn-host:port, so a choice never spreads to another port or scheme.
+  `Portals.SitesChanged` updates every open tab at once; every change is audited.
+- **Code:** `Views/BrowserView.PopupsSound.cs` (a partial of BrowserView: the logic in one file), the lists and helpers in
+  `Portals` (PortalBrowser.cs), the side panel in `PortalsView`.
+- **Rejected:** an injected script overriding `window.open` (a page can undo it, and it runs page code); a pop-up
+  counter per profile (the per-page list is what the user acts on).
+- **Tests:** the portal tab self-test (pop-up refused and listed, open once, allow the site; tab mute, site mute applied
+  to an open tab).
+
+## ADR-113: Files other programs read are encrypted by Windows (0.6.34)
+- **Context:** DarkCipher0x: everything the app writes must be encrypted, browser data and cache included, with no leaks.
+  The store is sealed with the app's key (ADR-009), but an audit of every writer found plain files that another program
+  must read as this user: the WebView2 profile and cache, the Bitwarden CLI's data, a key exported for an external
+  OpenSSH terminal, .rdp files, Share-sheet / Open-externally copies, SCP transfer buffers, and the default screenshot
+  and Claude Code folders.
+- **Decision:** `Dcx.Core/Services/PrivateFolders.cs`. `Ensure(dir)` creates the folder and marks it encrypted
+  (`File.Encrypt` on a folder = EncryptFileW: every file and subfolder created in it is EFS-encrypted with this
+  account's key) before the first write; every writer above goes through it. `Prepare(dir)` is for the browser profile:
+  called before the browser process starts (`WebHost.CreateEnvironmentAsync`), it also encrypts files that aren't, at
+  every start: files an earlier version left there, and files the browser's component updater MOVED in during its last
+  run (a moved file keeps its attributes; certificate revocation lists, origin trials and the like — public data, the
+  same for everyone). The listing carries the attributes, so an encrypted profile costs one directory walk. Its marker
+  tells `ProtectExisting` to leave the profile alone (its files are open while the browser runs). `ProtectExisting()` does the same for the other
+  cache folders in the background 8 s after start-up (not in the self-test). Folders the user chose (screenshots,
+  Claude Code workspace) are left alone.
+- **Audit:** `EncryptionAudit.Run(..., privateFolders)` walks `PrivateFolders.All` too: a non-empty file without the EFS
+  attribute in a marked folder is PLAIN (EFS never encrypts an empty file, so those are skipped), except in the
+  browser's component folders (`PrivateFolders.BrowserComponentFolders`, or any folder in the updater's layout
+  `EBWebView\<name>\<version>\manifest.json`), named "browser component" (downloaded this
+  run, encrypted at the next start); a folder that couldn't
+  be marked (Windows Home, FAT / exFAT, EFS off by policy) is "owner only" and the summary says why. Settings → Security
+  → Verify encryption and the setup window use it.
+- **By design not encrypted:** exports and saves the user asks for; the elevated helper's request file in %TEMP%
+  (settings only, read by an administrator account that may not be this user, deleted after use); the VPN configuration
+  while a tunnel is up (read by the tunnel service as SYSTEM, which can't open this account's EFS files; owner-only ACL;
+  removed when it goes down); the app's own unpacked program files (`web-<version>`, add-ons, a downloaded update —
+  code, signed or public); the error logs (already sealed once the store is unlocked).
+- **Why EFS:** transparent to the other program (it runs as this user), keys protected by the Windows account like the
+  store's DPAPI wrap, no secret for the app to keep, and it covers files the app doesn't write itself (Chromium's cache,
+  crash dumps). The cost is a one-time pass over an existing browser profile.
+- **Rejected:** turning the component updater off (`--disable-component-update`: the certificate revocation lists
+  would go stale); InPrivate browser profiles (portal sign-ins would not survive a restart); clearing the cache at every
+  exit (slower portals, and a crash leaves it anyway); app-level encryption of SCP buffers only (the other folders would
+  still need EFS).
+- **Tests:** ProfileTests "private folders (Windows encryption)": a new file and one in a new subfolder are encrypted, an
+  older plain file is reported then encrypted in place (still readable), the marker, this run's browser profile and the
+  share folder; a file moved in is PLAIN, one in a component folder is named, and the next Prepare encrypts both.
+
+## ADR-114: Self-describing providers — Redfish BMCs, HPE GreenLake, Sophos Central (0.6.34)
+- **Context:** DarkCipher0x asked for HPE GreenLake, Supermicro and similar server-management APIs, and security platforms
+  such as Sophos Central (firewalls and devices), integrated cleanly and securely with code that stays easy to manage.
+- **Decision — one record per kind:** `Dcx.Infra/Infra/ProviderKinds.cs`: a `ProviderKind` (title, menu label, factory,
+  object kinds, address label and check, credential label, extra fields, hint, TLS pinning) lives in the provider's own
+  file; `ProviderKinds.All` lists them. `Infra.Create` / `KindTitle` and the Infrastructure screen (add menu, form,
+  validation, filter) read it, so a new kind is one file plus one line. The older kinds keep their branches.
+- **Shared pieces:** `InfraJson` (strict parse with duplicate keys refused and a depth cap, type-safe reads, bounded body,
+  `IsHttpsIn(url, domain)`), `OAuthClientCredentials` (a DelegatingHandler: client id / secret from the vault per token,
+  token in memory until a minute before expiry, dropped on 401, never reused for another credential). Both sit on the
+  offline-mode guarded handler (no auto-redirects).
+- **Redfish** (`Redfish.cs`): https only, TOFU pin; one session per refresh or action (`Operation`: service root, POST to
+  the root's Sessions link, work, DELETE), Basic over https only when the BMC has no sessions; `SafePath` accepts only
+  /redfish/v1 paths on the same BMC. Reads systems, storage → drives, managers → IML / IEL / SEL, chassis → Power /
+  Thermal, UpdateService → FirmwareInventory, four requests at a time with caps. Actions: only the ComputerSystem.Reset
+  types the system lists (verified by PowerState when the type has an end state), the identify light
+  (LocationIndicatorActive, or IndicatorLED on older BMCs, with If-Match when there is an ETag), Manager.Reset.
+- **HPE GreenLake** (`GreenLake.cs`): token from sso.common.cloud.hpe.com, or the workspace's own
+  /authorization/v2/oauth2/{workspace}/token when its id is set; devices, subscriptions (v1, then v1beta1), audit log,
+  Compute Ops Management servers in the chosen region (compute-ops-mgmt v1, v1beta2, then compute-ops v1beta2). Read-only;
+  "Add its iLO as a Redfish provider" adds a `redfish` provider for a server's iLO address.
+- **Sophos Central** (`SophosCentral.cs`): token from id.sophos.com (scope token); whoami → tenant (its data region), or a
+  partner's / organization's tenant list (X-Partner-ID / X-Organization-ID, capped at 25); every address must be https
+  under sophos.com; X-Tenant-ID only to that tenant's region. Firewalls and groups (numbered pages), endpoints and alerts
+  (keyed pages). Actions: firmware-upgrade-check, firmware-upgrade (only an offered version, re-checked first), scans,
+  update-checks, isolation on / off (verified), alert acknowledge (verified by the alert's 404).
+- **Add menu:** grouped (Containers, Hypervisors, Storage & lifecycle, Network, then each descriptor's `MenuGroup`:
+  Server hardware, Security), so past `Menus.GroupThreshold` rows the groups fold into submenus.
+- **ProviderConfig:** `Region` (GreenLake COM region) and `WorkspaceId`. `NetworkPolicy.KnownInternet` gains
+  greenlake.hpe.com, cloud.hpe.com and sophos.com.
+- **Rejected:** GreenLake / COM power jobs (job templates differ by version; the iLO over Redfish verifies the result);
+  Sophos Firewall's on-box XML API (credentials in a query string); IPMI over LAN (weak or no encryption; Redfish covers
+  the same BMCs).
+- **Tests:** `InfraApiTests` (fake BMC, GreenLake and Sophos Central: sessions opened and deleted, paths refused, actions
+  limited to the offered values and verified, tokens cached and sent only to the service's own hosts), fuzzing
+  (`redfish-inventory`, `greenlake-inventory`, `sophos-inventory`).

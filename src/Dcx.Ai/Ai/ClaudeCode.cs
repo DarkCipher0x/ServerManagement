@@ -27,6 +27,14 @@ public static class ClaudeCode
         }
     }
 
+    /// <summary>0.6.33: the default workspace is encrypted by Windows for this account (Claude Code reads it as this user);
+    /// a folder chosen in Settings is left as it is.</summary>
+    private static void PrepareWorkspace()
+    {
+        if (AppSettings.Current.ClaudeCodeWorkspace.Trim().Length == 0) PrivateFolders.Ensure(Workspace);
+        else Directory.CreateDirectory(Workspace);
+    }
+
     public static string Model => AppSettings.Current.ClaudeCodeModel.Trim() is { Length: > 0 } m ? m : AppSettings.Current.OllamaModel;
 
     private static readonly object SharedLock = new();
@@ -102,7 +110,7 @@ public static class ClaudeCode
         // Offline mode (ADR-016): only with an allowed model endpoint (the CLI also runs with its non-essential traffic off).
         try { await Offline.EnforceAsync(st.OllamaUrl, "Claude Code (model endpoint)"); }
         catch (OfflineBlockedException ex) { Offline.Tell(ex); return; }
-        Directory.CreateDirectory(Workspace);
+        PrepareWorkspace();
         Directory.CreateDirectory(Path.Combine(Workspace, "reports"));
         var guide = Path.Combine(Workspace, "CLAUDE.md");
         if (!File.Exists(guide)) File.WriteAllText(guide, Guide, new UTF8Encoding(false));
@@ -132,7 +140,8 @@ public static class ClaudeCode
     /// <summary>Writes the report into the workspace (after consent — it becomes a plain file) and opens Claude Code on it.</summary>
     public static void OpenWithReport(ServerReport r)
     {
-        if (!Ui.Dialogs.Confirm("Open in Claude Code", $"Write this report as a plain Markdown file into\n{Path.Combine(Workspace, "reports")}\nand open Claude Code (local model {Model}) to work through it?\n\nThe file isn't encrypted. Secrets in evidence are masked{(AppSettings.Current.AiRedactSecrets ? "" : " — masking is OFF in Settings")}.", "Open")) return;
+        if (!Ui.Dialogs.Confirm("Open in Claude Code", $"Write this report as a plain Markdown file into\n{Path.Combine(Workspace, "reports")}\nand open Claude Code (local model {Model}) to work through it?\n\n{(AppSettings.Current.ClaudeCodeWorkspace.Trim().Length == 0 && PrivateFolders.Unavailable == null ? "The file is encrypted by Windows for your account (Claude Code reads it as you), not with the app's key." : "The file isn't encrypted.")} Secrets in evidence are masked{(AppSettings.Current.AiRedactSecrets ? "" : " — masking is OFF in Settings")}.", "Open")) return;
+        PrepareWorkspace();
         Directory.CreateDirectory(Path.Combine(Workspace, "reports"));
         var name = $"report-{r.Created:yyyyMMdd-HHmm}-{string.Concat(r.Hosts.FirstOrDefault()?.Where(char.IsLetterOrDigit) ?? "fleet")}.md";
         var md = ReportEngine.Markdown(r);

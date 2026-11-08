@@ -32,6 +32,18 @@ public static partial class AiClient
                 var node = JsonNode.Parse(await resp.Content.ReadAsStringAsync(ct));
                 return node?["data"]?.AsArray().Select(m => m?["id"]?.GetValue<string>() ?? "").Where(s => s.Length > 0).OrderBy(s => s).ToList() ?? new();
             }
+            case "openai-api":
+            {
+                var url = await BaseUrlAsync(ct);
+                using var req = new HttpRequestMessage(HttpMethod.Get, url + "/models");
+                foreach (var (k, v) in OpenAiApiHeaders(url) ?? new()) req.Headers.TryAddWithoutValidation(k, v);
+                using var resp = await Http.SendAsync(req, ct);
+                var text = await resp.Content.ReadAsStringAsync(ct);
+                var node = JsonNode.Parse(text);
+                if (!resp.IsSuccessStatusCode)
+                    throw new InvalidOperationException("OpenAI API: " + (node?["error"]?["message"]?.GetValue<string>() ?? $"HTTP {(int)resp.StatusCode}"));
+                return node?["data"]?.AsArray().Select(m => m?["id"]?.GetValue<string>() ?? "").Where(OpenAiChatModel).OrderByDescending(s => s, StringComparer.Ordinal).ToList() ?? new();
+            }
             case "anthropic":
             {
                 var url = await BaseUrlAsync(ct);

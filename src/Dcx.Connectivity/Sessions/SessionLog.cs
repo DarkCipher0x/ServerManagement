@@ -105,7 +105,7 @@ public sealed class SessionLogger : IDisposable
     }
 }
 
-public static class SessionLog
+public static partial class SessionLog
 {
     public const string Ext = SessionLogFiles.Ext;
     public sealed record Header(string Title, DateTime Started);
@@ -121,11 +121,17 @@ public static class SessionLog
     public static bool Wanted(bool profileSays) => AppSettings.Current.SessionLogs switch { "on" => true, "off" => false, _ => profileSays };
     internal static string Context(string path) => "sessionlog:" + System.IO.Path.GetFileName(path);
 
-    private static readonly Regex Escapes = new(
-        @"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[PX^_][^\x1b]*\x1b\\|\x1b[()*+][ -~]|\x1b[ -/]*[0-~]|\u009b[0-?]*[ -/]*[@-~]",
-        RegexOptions.Compiled, TimeSpan.FromSeconds(1));
-    private static readonly Regex RowMoves = new(@"(?:\x1b\[[0-9;]*[HfEd])+", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
-    private static readonly Regex Controls = new(@"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", RegexOptions.Compiled);
+    // 0.6.32: generated at build time (ADR-110). RegexOptions.Compiled emitted IL at first use — here in the start-up's
+    // layer wiring, which loaded Reflection.Emit and compiled three patterns before the window existed.
+    private static readonly Regex Escapes = EscapesRx();
+    private static readonly Regex RowMoves = RowMovesRx();
+    private static readonly Regex Controls = ControlsRx();
+    [GeneratedRegex(@"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[PX^_][^\x1b]*\x1b\\|\x1b[()*+][ -~]|\x1b[ -/]*[0-~]|\u009b[0-?]*[ -/]*[@-~]", RegexOptions.None, 1000)]
+    private static partial Regex EscapesRx();
+    [GeneratedRegex(@"(?:\x1b\[[0-9;]*[HfEd])+", RegexOptions.None, 1000)]
+    private static partial Regex RowMovesRx();
+    [GeneratedRegex(@"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")]
+    private static partial Regex ControlsRx();
 
     /// <summary>Escape sequences and control characters out; CR LF → LF (lone CRs stay for <see cref="Overwrite"/>).</summary>
     public static string Strip(string s)

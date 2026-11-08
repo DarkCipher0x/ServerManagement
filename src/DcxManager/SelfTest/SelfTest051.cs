@@ -345,6 +345,33 @@ public static class Release051Tests
             return Task.CompletedTask;
         });
 
+        await Run("0.6.32 (ADR-110): the store's settings, data, format record and workspace go through build-time JSON metadata that matches reflection exactly and round-trips", () =>
+        {
+            var json = SecureStore.Json;
+            var refl = SecureStore.ReflectionJsonForTest();
+            foreach (var t in new[] { typeof(AppSettings), typeof(AppData), typeof(StoreSchema.Meta), typeof(List<Workspace.Entry>) })
+                if (json.GetTypeInfo(t).OriginatingResolver != StoreJsonContext.Default) throw new Exception($"{t.Name} is not answered by the generated metadata");
+            if (json.GetTypeInfo(typeof(Recovery.Journal)).OriginatingResolver == StoreJsonContext.Default) throw new Exception("a type outside the context was answered by it");
+            if (AppData.Current.Hosts.Count == 0 || AppData.Current.Credentials.Count == 0) throw new Exception("no demo hosts or credentials to compare");
+            void Same<T>(T value, string what)
+            {
+                var a = JsonSerializer.Serialize(value, json);
+                var b = JsonSerializer.Serialize(value, refl);
+                if (!JsonNode.DeepEquals(JsonNode.Parse(a), JsonNode.Parse(b))) throw new Exception($"{what}: the generated and the reflected JSON differ");
+                var back = JsonSerializer.Deserialize<T>(a, json) ?? throw new Exception($"{what}: did not deserialize");
+                if (!JsonNode.DeepEquals(JsonNode.Parse(JsonSerializer.Serialize(back, json)), JsonNode.Parse(a))) throw new Exception($"{what}: did not round-trip");
+                var viaReflection = JsonSerializer.Deserialize<T>(a, refl) ?? throw new Exception($"{what}: reflection did not read the generated JSON");
+                if (!JsonNode.DeepEquals(JsonNode.Parse(JsonSerializer.Serialize(viaReflection, refl)), JsonNode.Parse(a))) throw new Exception($"{what}: reflection read the generated JSON differently");
+            }
+            Same(AppSettings.Current, "settings");
+            Same(AppData.Current, "data");
+            Same(new StoreSchema.Meta { Versions = { ["data"] = 1, ["settings"] = 2 }, WrittenBy = "0.6.32", Updated = new DateTime(2026, 11, 7, 10, 30, 0), History = { "2026-11-07 10:30 0.6.32: versions recorded (baseline)" } }, "format record");
+            Same(new List<Workspace.Entry> { new("terminal", "selftest-h1"), new("files", "selftest-h2") }, "workspace");
+            WinFormsSetup.Ensure();
+            WinFormsSetup.Ensure();   // idempotent: a second call never throws
+            return Task.CompletedTask;
+        });
+
         await Run("0.6.7 (DarkCipher0x): the Hosts page's tree is a full host pane: hosts inside their folders, filter, selecting a host selects it in the list, drop onto a host = into its folder", () =>
         {
             var mw = MainWindow.Instance ?? throw new Exception("no main window");

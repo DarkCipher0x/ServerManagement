@@ -147,12 +147,22 @@ public partial class App : Application
     /// <summary>What <see cref="AppInfo.MigrateLegacyFolders"/> moved at this start (written to the audit log once the store is open).</summary>
     private List<string>? _migrated;
 
+    /// <summary>The first managed code of the app (the generated Main makes the App, loads App.xaml, then runs it). The
+    /// store's JSON metadata starts building on a pool thread here, under the rest of the start (0.6.32, ADR-110).</summary>
+    public App()
+    {
+        StartupTrace.Mark("App constructed (host, runtime, WPF assemblies)");
+        StoreSchema.WarmUp();
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // The seams the lower layers use for dialogs, the window and the UI thread (0.2.0 phase 1): registered before
         // anything below the screens can run.
+        StartupTrace.Mark("OnStartup entered (App.xaml + Themes/Controls.xaml, Application.Run)");
         WpfUi.Register();
         WireLayers();
+        StartupTrace.Mark("layers wired");
         // The capability registry (0.2.0 phase 2) learns the app's own capabilities here, in this order: the operator's
         // built-ins first, then each feature's (the AI's tool list and add-ons' app.capabilities keep their 0.1.18 order).
         Capabilities.BuiltIns = () => { OperatorCapabilities.Register(); FeatureCapabilities.Register(); };
@@ -240,6 +250,7 @@ public partial class App : Application
             }
             if (!StartupFlow.ChooseProfile(e.Args)) { Shutdown(0); return; }
         }
+        StartupTrace.Mark("theme, fonts, folder migration, profile");
         if (!SingleInstance.TryAcquire())
         {
             if (selfTestRun) { EarlyExitReport(e, "another instance is already running on this test store (DCX_DATA_DIR) — a previous run still exiting?"); Shutdown(3); return; }
@@ -248,6 +259,7 @@ public partial class App : Application
             return;
         }
         if (probe) { Shutdown(9); return; }
+        SecureStore.BeginInitialize();   // 0.6.32: the key ring opens on a pool thread while the handlers, theme and fonts are set up
         // From now on a later launch brings this instance forward — the unlock window too, if it is still asking. Never during
         // the self-test: there it is only counted, so an off-screen test window can't take focus from the user's desktop.
         SingleInstance.Listen(() => Dispatcher.BeginInvoke(() =>
@@ -259,9 +271,10 @@ public partial class App : Application
             w.Show(); w.Activate();
             w.Topmost = true; w.Topmost = false;   // Windows only lets a foreground process take focus: flash to the front
         }));
+        StartupTrace.Mark("single-instance guard");
 
-        // WinForms (only the embedded RDP host) must never show its own "unhandled exception" box: errors go to ours.
-        System.Windows.Forms.Application.SetUnhandledExceptionMode(System.Windows.Forms.UnhandledExceptionMode.ThrowException);
+        // WinForms (only the embedded RDP host and the tray balloon) must never show its own "unhandled exception" box: errors
+        // go to ours. Set by the first WinForms user (Services/WinFormsSetup.cs), so a start doesn't load WinForms (0.6.32).
         DispatcherUnhandledException += OnUiException;
         TaskScheduler.UnobservedTaskException += (_, ev) => { Log("Background task", ev.Exception); ev.SetObserved(); };
         AppDomain.CurrentDomain.UnhandledException += (_, ev) =>
@@ -277,6 +290,7 @@ public partial class App : Application
         ThemeManager.Apply(Services.ThemeMode.System);
         Typography.Install();
         base.OnStartup(e);
+        StartupTrace.Mark("exception handlers, AppUserModelId, theme, fonts, base.OnStartup");
 
         bool open;
         try { open = SecureStore.Initialize(); }
@@ -291,6 +305,7 @@ public partial class App : Application
         if (!open && selfTestRun) { EarlyExitReport(e, "the test store asks for a password (it must be a fresh scratch folder)"); Shutdown(1); return; }
         if (!open && new UnlockWindow(needPassword: true, needCode: SecureStore.HasTotp).ShowDialog() != true) { Shutdown(0); return; }
         if (open && SecureStore.HasTotp && new UnlockWindow(needPassword: false, needCode: true).ShowDialog() != true) { SecureStore.Forget(); Shutdown(0); return; }
+        StartupTrace.Mark("store opened");
 
         // ADR-009: finish an interrupted restore/upgrade, offer snapshot copies of damaged files, migrate the format.
         // The self-test never shows a window: any question there means "close" (and is logged).
@@ -300,12 +315,15 @@ public partial class App : Application
             : (t, m, o) => Dialogs.Choose(t, m, o, cancelIndex: Array.FindIndex(o, x => x.StartsWith("Close")));
         if (!StoreRecovery.RunAtStart(ask)) { if (selfTestRun) EarlyExitReport(e, "start-up store recovery stopped (see the error log)"); SecureStore.Forget(); Shutdown(1); return; }
 
+        StartupTrace.Mark("store recovery");
         ShareService.Cleanup();
+        StartupTrace.Mark("share cleanup");
         // Group Policy (0.3.0 §10) is read before the settings, so every load and save enforces it. The self-test never
         // reads the real policy keys.
         if (selfTest) PolicySettings.SourceForTest = _ => null;
         PolicySettings.Install();
         AppSettings.Load();
+        StartupTrace.Mark("policy + settings loaded");
         // Admin-protected settings (0.3.0 §1) override the user's copies before anything reads them (AI features below).
         // The self-test reads a scratch store, never the real HKLM record.
         if (selfTest) ProtectedSettings.UseStoreForTest(new ProtectedSettings.FileStore(System.IO.Path.Combine(SecureStore.DataDir, "protected-test")));
@@ -319,20 +337,26 @@ public partial class App : Application
         // machine policy, then DCX_AI_FEATURES unless locked, then the setting); off means no AI anywhere — nothing to hide.
         // Registered before the main window exists, so the first sidebar build already sees the contributions.
         // 0.3.0 §23: a profile bound to a directory opens only after that sign-in (or a recent cached proof).
+        StartupTrace.Mark("protected settings, admin gate");
         if (!selfTest && !StartupFlow.DirectoryGate()) { SecureStore.Forget(); Shutdown(0); return; }
         if (AiFeatures.DecideAtStartup().On) LoadAiModule();
+        StartupTrace.Mark("directory gate, AI module");
         try { Addons.AddonPackages.SealExisting(); } catch (Exception ex) { Log("Seal add-ons", ex); }   // ADR-035: data-only add-ons encrypted at rest
+        StartupTrace.Mark("add-ons sealed");
         AppData.Load();
+        StartupTrace.Mark("app data loaded");
         if (_migrated is { Count: > 0 } mv) AuditLog.Write("app", "data folders", "moved to the DarkCipher Systems folder (0.4.0)", string.Join("; ", mv));
         Workspace.BeginSession();
         Recovery.LoadPrevious();   // ADR-022: unsaved drafts / unfinished transfers left by the previous run
         DcxManager.Library.SharedLibraries.Load();   // ADR-033: cached shared libraries (the share is synced after start-up)
+        StartupTrace.Mark("workspace session, recovery journal, shared libraries");
         // 0.3.0 §3/§4: the audit and error logs to a syslog collector over TLS (when set up) and e-mail notifications.
         Notify.SyslogForwarder.Start();
         Notify.LogShipper.Start();   // 0.4.0: the same events to Elastic / Loki / Azure Monitor / Splunk / Graylog / webhooks (when set up)
         Notify.Notifier.Start();
         LanMonitors.Start();      // 0.3.0 §7: the scheduled LAN re-scans you set up (none until you do)
         VpnManager.Start();       // 0.3.0 §24: "connect through" hook + auto-start tunnels (none until you add one)
+        StartupTrace.Mark("syslog, log shipper, notifier, LAN monitors, VPN");
         // The self-test's crash probe (ADR-022): journals work and waits to be killed, or reports what it finds. No UI ever,
         // and only against a scratch store.
         if (e.Args.Length >= 3 && e.Args[0] == "--selftest-crash" && Environment.GetEnvironmentVariable("DCX_DATA_DIR") is { Length: > 0 })
@@ -350,20 +374,38 @@ public partial class App : Application
         DispatcherWatchdog.Start(Dispatcher);   // 0.5.3: WPF's work queue can't stall for good if its wake-up message is lost
         CaptureGuard.Install();   // 0.5.4: the mouse is never left captured once every button is up (outside menus and popups)
         DcxManager.Ssh.ExternalSsh.CleanUp();
+        // 0.6.33: files that earlier versions (or the browser engine) left in the cache folders are encrypted by Windows,
+        // in the background after start-up. The self-test leaves the installation's folders alone.
+        if (!selfTest) _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(8));
+            try { PrivateFolders.ProtectExisting(); } catch (Exception ex) { Log("Encrypt cache folders", ex); }
+        });
+        StartupTrace.Mark("typography, sandbox, density, theme, scroll/menus/watchdog/capture, ssh cleanup");
 
         var main = new MainWindow();
         MainWindow = main;
+        StartupTrace.Mark("MainWindow constructed");
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         if (e.Args.Length >= 2 && e.Args[0] == "--selftest" && Environment.GetEnvironmentVariable("DCX_DATA_DIR") is { Length: > 0 })
         {
             // Off-screen, against a scratch data folder only.
             main.WindowStartupLocation = WindowStartupLocation.Manual;
             main.Left = -10000; main.Top = -10000; main.ShowActivated = false; main.ShowInTaskbar = false;
+            TestMode.Running = true;   // 0.6.32: before the window's first frame and its ContentRendered work, not when the suite begins
             main.Show();
-            _ = SelfTest.RunAsync(main, e.Args[1]);
+            StartupTrace.Mark("main.Show returned (self-test, off-screen)");
+            // 0.6.32: the suite starts once the window has rendered its first frame and gone idle, so its start-up line
+            // measures a real start (to the idle window) and its first tests don't share the UI thread with the first frame.
+            // It runs from a Normal-priority operation: WPF gives an async method's continuations the priority of the
+            // operation that started it, and a suite running at ApplicationIdle starves behind any animation (seen as a
+            // live-lock in the Puppet screen test: the UI thread busy, the suite's Settle never resumed).
+            main.ContentRendered += (_, _) => main.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+                () => main.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => _ = SelfTest.RunAsync(main, e.Args[1])));
             return;
         }
         main.Show();
+        StartupTrace.Mark("main.Show returned");
         AppLock.Start();
         LockGate.Install();   // 0.5.1 (ADR-067): locks close on time, and when Windows locks or the PC sleeps
         StartupFlow.MaybeRunSetup(main);   // 0.3.0 §19: a new store gets the guided, all-optional setup
@@ -371,6 +413,7 @@ public partial class App : Application
         // Modules' background start-up tasks (0.2.0 phase 3): the AI module applies its default engine (ADR-023), sets up
         // Foundry Local hands-off (ADR-026) and starts the memory guard (ADR-034). Never in the self-test (above).
         AppModules.StartBackgroundTasks();
+        StartupTrace.Mark("app lock, lock gate, setup offer, key import, module tasks");
     }
 
     /// <summary>A self-test that ends before it starts still leaves a report saying why (ADR-025): a missing report is

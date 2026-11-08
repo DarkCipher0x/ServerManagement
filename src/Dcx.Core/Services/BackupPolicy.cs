@@ -38,7 +38,7 @@ public static class BackupPolicy
     /// local API tokens), cleared from a copy that is about to be exported when secrets are not allowed.</summary>
     public static void StripSettingSecrets(AppSettings s)
     {
-        s.OpenAiKey = ""; s.AnthropicKey = ""; s.SmtpPassword = ""; s.UpdateGitHubToken = "";
+        s.OpenAiKey = ""; s.OpenAiApiKey = ""; s.AnthropicKey = ""; s.SmtpPassword = ""; s.UpdateGitHubToken = "";
         s.ObserveSecrets = new(); s.ApiTokens = new();
         s.VultrAccounts = new(); s.ContaboAccounts = new(); s.HetznerAccounts = new(); s.AzureAccounts = new(); s.GcpAccounts = new();
     }

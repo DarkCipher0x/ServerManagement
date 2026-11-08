@@ -175,6 +175,37 @@ public static class Portals
 
     public static void Save() => AppData.Save();
 
+    // ---- per-site pop-ups and sound (0.6.33) --------------------------------------------------------------------
+
+    /// <summary>A page's site as scheme://host:port (lower case, default ports included), or null for anything that isn't
+    /// an http(s) address. Pop-up and mute choices are kept per site, so a choice never spreads to another port or host.</summary>
+    public static string? SiteOf(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme is "http" or "https" && u.Host.Length > 0
+            ? $"{u.Scheme}://{u.IdnHost.ToLowerInvariant()}:{u.Port}" : null;
+
+    /// <summary>Pop-ups are blocked unless the setting is off or the user allowed this site.</summary>
+    public static bool PopupsAllowed(string? site) =>
+        !AppSettings.Current.PortalBlockPopups || site != null && AppData.Current.PortalPopupSites.Contains(site, StringComparer.OrdinalIgnoreCase);
+
+    public static bool SiteMuted(string? site) => site != null && AppData.Current.PortalMutedSites.Contains(site, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Adds or removes a site in one of the per-site lists, saves and tells open tabs.</summary>
+    public static void SetSite(List<string> list, string site, bool on, string what)
+    {
+        bool has = list.Contains(site, StringComparer.OrdinalIgnoreCase);
+        if (has == on) return;
+        if (on) list.Add(site); else list.RemoveAll(s => s.Equals(site, StringComparison.OrdinalIgnoreCase));
+        Save();
+        AuditLog.Write("you", "browser", what + (on ? " on" : " off"), site);
+        try { SitesChanged?.Invoke(); } catch (Exception ex) { Log.Write("Portal site setting", ex); }
+    }
+
+    /// <summary>A site's pop-up or mute choice changed (open tabs apply it at once).</summary>
+    public static event Action? SitesChanged;
+
+    public static void SetPopupsAllowed(string site, bool allowed) => SetSite(AppData.Current.PortalPopupSites, site, allowed, "pop-ups allowed");
+    public static void SetSiteMuted(string site, bool muted) => SetSite(AppData.Current.PortalMutedSites, site, muted, "site muted");
+
     /// <summary>Why a bookmark can't be saved, or null.</summary>
     public static string? Validate(PortalBookmark b)
     {

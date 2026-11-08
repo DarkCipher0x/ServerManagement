@@ -58,6 +58,19 @@ public static class AiSettingsCards
         oImg.Click += (_, _) => { s.OpenAiAcceptsImages = oImg.IsChecked == true; v.Save(); };
         openai.Children.Add(oImg);
 
+        // OpenAI API (0.6.33, ADR-111): OpenAI's Responses API
+        var xUrl = Tb(s.OpenAiApiUrl); var xKey = Pb(s.OpenAiApiKey);
+        var efforts = new[] { "(model default)", "low", "medium", "high" };
+        var xEffort = new ComboBox { Width = 160, ItemsSource = efforts, SelectedItem = efforts.Contains(s.OpenAiApiReasoning) ? s.OpenAiApiReasoning : efforts[0],
+            ToolTip = "How long OpenAI's reasoning models think before answering: low is faster and cheaper, high is more thorough" };
+        var openaiApi = new StackPanel();
+        openaiApi.Children.Add(new TextBlock { Text = "OpenAI's own API through the Responses API, which GPT-6 models need for tool calling. Create a key at platform.openai.com → API keys " +
+            "(a project key limited to the models you use is best). Requests are sent with store off, so OpenAI keeps no copy for later retrieval. " +
+            "For LM Studio, vLLM, Azure OpenAI or a Chat Completions gateway pick “OpenAI-compatible server” instead.", Style = (Style)v.FindResource("Hint"), TextWrapping = TextWrapping.Wrap });
+        openaiApi.Children.Add(v.L("BASE URL (https://api.openai.com/v1, or a gateway that speaks the Responses API)")); openaiApi.Children.Add(xUrl); openaiApi.Children.Add(NetUi.LiveBadge(xUrl));
+        openaiApi.Children.Add(v.L("API KEY (stored encrypted)")); openaiApi.Children.Add(xKey);
+        openaiApi.Children.Add(v.Labeled("REASONING EFFORT", xEffort));
+
         // Anthropic
         var aUrl = Tb(s.AnthropicUrl); var aKey = Pb(s.AnthropicKey);
         var anthropic = new StackPanel();
@@ -66,7 +79,7 @@ public static class AiSettingsCards
 
         var result = new TextBlock { Style = (Style)v.FindResource("Hint"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         string Id() => AiEngines.All[Math.Max(0, engine.SelectedIndex)].Id;
-        string ModelOf(string id) => id switch { "npu" => s.FoundryModel, "openai" => s.OpenAiModel, "anthropic" => s.AnthropicModel, _ => s.OllamaModel };
+        string ModelOf(string id) => id switch { "npu" => s.FoundryModel, "openai" => s.OpenAiModel, "openai-api" => s.OpenAiApiModel, "anthropic" => s.AnthropicModel, _ => s.OllamaModel };
 
         void ShowPanels()
         {
@@ -76,6 +89,7 @@ public static class AiSettingsCards
             cpuRow.Visibility = id == "ollama-cpu" ? Visibility.Visible : Visibility.Collapsed;
             npu.Visibility = id == "npu" ? Visibility.Visible : Visibility.Collapsed;
             openai.Visibility = id == "openai" ? Visibility.Visible : Visibility.Collapsed;
+            openaiApi.Visibility = id == "openai-api" ? Visibility.Visible : Visibility.Collapsed;
             anthropic.Visibility = id == "anthropic" ? Visibility.Visible : Visibility.Collapsed;
             model.IsEnabled = id != "off";
             model.Text = ModelOf(id);
@@ -97,6 +111,7 @@ public static class AiSettingsCards
             {
                 case "npu": s.FoundryModel = model.Text.Trim(); break;
                 case "openai": s.OpenAiModel = model.Text.Trim(); break;
+                case "openai-api": s.OpenAiApiModel = model.Text.Trim(); break;
                 case "anthropic": s.AnthropicModel = model.Text.Trim(); break;
                 case "off": break;
                 default: s.OllamaModel = model.Text.Trim(); break;
@@ -108,6 +123,8 @@ public static class AiSettingsCards
             if (s.FoundryUrl != fUrl.Text.Trim()) AiClient.ForgetFoundry();
             s.FoundryUrl = fUrl.Text.Trim();
             s.OpenAiUrl = oUrl.Text.Trim(); s.OpenAiKey = oKey.Password.Trim();
+            s.OpenAiApiUrl = xUrl.Text.Trim(); s.OpenAiApiKey = xKey.Password.Trim();
+            s.OpenAiApiReasoning = xEffort.SelectedItem is string eff && eff != efforts[0] ? eff : "";
             s.AnthropicUrl = aUrl.Text.Trim(); s.AnthropicKey = aKey.Password.Trim();
             v.Save();
         }
@@ -209,11 +226,11 @@ public static class AiSettingsCards
         ShowPanels();
 
         return v.Card("AI engine",
-            "Pick where models run — GPU, CPU-only for laptops, the NPU of a Copilot+ PC, any OpenAI-compatible server, or the Anthropic API — or switch AI off entirely. " +
+            "Pick where models run — GPU, CPU-only for laptops, the NPU of a Copilot+ PC, any OpenAI-compatible server, the OpenAI API or the Anthropic API — or switch AI off entirely. " +
             "Offline features (log digests, rule-based reports, help search) work in every mode.",
             v.Check("Enable AI features", s.AiEnabled, v => s.AiEnabled = v),
             v.L("ENGINE"), engine, engineHint,
-            ollama, npu, openai, anthropic,
+            ollama, npu, openai, openaiApi, anthropic,
             v.L("MODEL"), v.Row(model, v.Btn("Load models", async () => await Load()), v.Btn("Test", async () => await Test()), v.Btn("Save", Apply, "PrimaryButton")),
             foundryRow!,
             result,
@@ -221,7 +238,7 @@ public static class AiSettingsCards
             v.L("FEATURES"), features,
             v.L("PRIVACY & POWER"),
             v.ProtectedCheck("ai.redactSecrets", "Mask secrets (keys, passwords, tokens) before anything is sent to a model"),
-            CloudAiPanel(v, () => Id() switch { "openai" => oUrl.Text.Trim(), "anthropic" => aUrl.Text.Trim(), "npu" => fUrl.Text.Trim(), _ => url.Text.Trim() }),
+            CloudAiPanel(v, () => Id() switch { "openai" => oUrl.Text.Trim(), "openai-api" => xUrl.Text.Trim(), "anthropic" => aUrl.Text.Trim(), "npu" => fUrl.Text.Trim(), _ => url.Text.Trim() }),
             v.Check("Pause automatic AI work on battery power", s.AiPauseOnBattery, v => s.AiPauseOnBattery = v),
             v.L("CLAUDE CODE WITH A LOCAL MODEL (via Ollama's Anthropic-compatible API)"),
             v.Row(v.Labeled("MODEL", ccModel), v.Labeled("WORKSPACE FOLDER", ccWork)),

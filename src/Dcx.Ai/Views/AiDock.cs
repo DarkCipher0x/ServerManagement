@@ -41,6 +41,7 @@ public sealed class AiDock : IDockController
         _owner = owner; _col = col; _splitter = splitter; _host = host;
         _col.MinWidth = 0; _col.MaxWidth = MaxWidth;
         Panel = new AiPanel(AiWorkspace.Current);
+        StartupTrace.Mark("AiDock: workspace + panel made");
         Panel.DetachToggleRequested += () => { if (State == AiDockState.Detached) Apply(AiDockState.Docked); else Apply(AiDockState.Detached); };
         Panel.CollapseRequested += () => Apply(AiDockState.Collapsed);
         Panel.HideRequested += () => Apply(AiDockState.Hidden);

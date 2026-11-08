@@ -63,6 +63,7 @@ public static class AiOverview
                 {
                     "npu" => string.IsNullOrWhiteSpace(s.FoundryUrl) ? "Foundry Local on this PC (auto-discovered)" : s.FoundryUrl,
                     "openai" => s.OpenAiUrl,
+                    "openai-api" => s.OpenAiApiUrl,
                     "anthropic" => s.AnthropicUrl,
                     _ => s.OllamaUrl,
                 };

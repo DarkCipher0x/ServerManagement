@@ -59,7 +59,7 @@ public partial class MainWindow
     {
         _hostPaneWired = true;
         if (_hostsPage != null) HostPaneHost.Child = _hostsPage.TakeFolderPane();
-        else Dispatcher.BeginInvoke(DispatcherPriority.Background, () => _ = HostsPage);
+        else Dispatcher.BeginInvoke(DispatcherPriority.Background, () => { _ = HostsPage; StartupTrace.Mark("hosts page made (deferred, Background priority)"); });
         BuildHostStrip();
         _hostPaneClose.Tick += (_, _) =>
         {
@@ -148,6 +148,10 @@ public partial class MainWindow
         HostPaneCol.Width = new GridLength(open ? HostStripWidth + HostPaneWidth : HostStripWidth);
         HostPaneHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    /// <summary>A portal was pinned to or unpinned from the panel (0.6.33): its tree is redrawn now, even while the Hosts tab
+    /// itself is behind another tab (the panel is showing).</summary>
+    internal void PortalPinsChanged() => _hostsPage?.RebuildTree();
 
     /// <summary>The Hosts tab's content: the one page, taken out of a tab it was in before (closing a tab leaves the page
     /// as that tab's content).</summary>

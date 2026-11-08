@@ -100,6 +100,7 @@ public static class SessionAlerts
         {
             if (_icon == null)
             {
+                WinFormsSetup.Ensure();   // 0.6.32: WinForms' exception mode is set by its first user, not at start-up
                 _icon = new System.Windows.Forms.NotifyIcon();
                 try { _icon.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath ?? "") ?? System.Drawing.SystemIcons.Information; }
                 catch { _icon.Icon = System.Drawing.SystemIcons.Information; }

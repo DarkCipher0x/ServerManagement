@@ -208,7 +208,9 @@ public sealed class PaneHost : Border
 
     public PaneHost()
     {
+        StartupTrace.Mark("PaneHost: entered (first control: theme dictionary)");
         var root = NewFrame();
+        StartupTrace.Mark("PaneHost: first frame + DocPane made");
         Child = root;
         ActivePane = root.Pane;
         _mainLast = root.Pane;

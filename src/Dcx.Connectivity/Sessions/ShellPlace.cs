@@ -13,13 +13,24 @@ namespace DcxManager.Sessions;
 /// A prompt that only shows the folder's name (Red Hat's <c>[user@host dir]$</c>) can't say where it is: nothing is saved.
 /// Also whether a tmux session was left: tmux prints "[detached …]" or "[exited]" when you leave it.
 /// </summary>
-public static class ShellPlace
+public static partial class ShellPlace
 {
-    private static readonly Regex Osc7 = new(@"\x1b\]7;file://[^/\x07\x1b]*(?<p>/[^\x07\x1b]*)(?:\x07|\x1b\\)", RegexOptions.Compiled);
-    private static readonly Regex Ansi = new(@"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]", RegexOptions.Compiled);
-    private static readonly Regex PosixPrompt = new(@"(?:^|[\r\n])(?:\([^)\r\n]{1,40}\) )?[A-Za-z0-9_.-]{1,64}@[A-Za-z0-9_.-]{1,253}:(?<p>~(?:/[^\r\n$#]*)?|/[^\r\n$#]*)[$#] ", RegexOptions.Compiled);
-    private static readonly Regex PsPrompt = new(@"(?:^|[\r\n])PS (?<p>[A-Za-z]:\\[^\r\n>]*)> ", RegexOptions.Compiled);
-    private static readonly Regex TmuxLeft = new(@"\[(?:detached(?: \(from session [^\]\r\n]*\))?|exited)\]", RegexOptions.Compiled);
+    // 0.6.32: generated at build time (ADR-110) instead of IL emitted when the first terminal opens.
+    private static readonly Regex Osc7 = Osc7Rx();
+    private static readonly Regex Ansi = AnsiRx();
+    private static readonly Regex PosixPrompt = PosixPromptRx();
+    private static readonly Regex PsPrompt = PsPromptRx();
+    private static readonly Regex TmuxLeft = TmuxLeftRx();
+    [GeneratedRegex(@"\x1b\]7;file://[^/\x07\x1b]*(?<p>/[^\x07\x1b]*)(?:\x07|\x1b\\)")]
+    private static partial Regex Osc7Rx();
+    [GeneratedRegex(@"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]")]
+    private static partial Regex AnsiRx();
+    [GeneratedRegex(@"(?:^|[\r\n])(?:\([^)\r\n]{1,40}\) )?[A-Za-z0-9_.-]{1,64}@[A-Za-z0-9_.-]{1,253}:(?<p>~(?:/[^\r\n$#]*)?|/[^\r\n$#]*)[$#] ")]
+    private static partial Regex PosixPromptRx();
+    [GeneratedRegex(@"(?:^|[\r\n])PS (?<p>[A-Za-z]:\\[^\r\n>]*)> ")]
+    private static partial Regex PsPromptRx();
+    [GeneratedRegex(@"\[(?:detached(?: \(from session [^\]\r\n]*\))?|exited)\]")]
+    private static partial Regex TmuxLeftRx();
 
     /// <summary>The working folder the output last showed, or null. <paramref name="shell"/> is "posix" or "powershell".</summary>
     public static string? FromOutput(string raw, string shell)
@@ -47,7 +58,9 @@ public static class ShellPlace
     private static bool Usable(string? p) => p is { Length: > 0 and <= 1024 } && !p.Any(ch => char.IsControl(ch) || char.GetUnicodeCategory(ch) == System.Globalization.UnicodeCategory.Format);
 
     // A line the cursor sits on that reads like a shell prompt: "user@host:~$ ", "[root@db ~]# ", "PS C:\> ", "% ", "❯ "…
-    private static readonly Regex PromptEnd = new(@"[$#%>❯»]\s?$", RegexOptions.Compiled);
+    private static readonly Regex PromptEnd = PromptEndRx();
+    [GeneratedRegex(@"[$#%>❯»]\s?$")]
+    private static partial Regex PromptEndRx();
 
     /// <summary>Whether a screen line (the cursor's) looks like a shell waiting at its prompt (0.6.29 alerts: a long command
     /// finished). Questions (y/N, password:) and empty lines don't.</summary>

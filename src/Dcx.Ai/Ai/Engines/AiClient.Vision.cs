@@ -37,6 +37,11 @@ public static partial class AiClient
                     ? new(true, $"you marked “{Model}” as accepting images (Settings → AI engine)")
                     : new(false, $"the app can't verify that “{Model}” on this OpenAI-compatible server reads images. If it does, tick “This model accepts images” in Settings → AI engine.");
                 break;
+            case "openai-api":
+                r = OpenAiReadsImages(Model)
+                    ? new(true, $"OpenAI model “{Model}” accepts images")
+                    : new(false, $"“{Model}” isn't an OpenAI model known to read images (GPT-4o, GPT-4.1, GPT-5 / GPT-6, o3, o4); not sent.");
+                break;
             case "anthropic" when !IsLocal(url):
                 r = Model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)
                     ? new(true, $"Claude model “{Model}” accepts images")

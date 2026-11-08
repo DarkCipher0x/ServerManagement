@@ -27,6 +27,7 @@ public static class NetworkPolicy
     {
         "darkciphersystems.com", "openai.com", "openai.azure.com", "anthropic.com", "claude.ai", "vultr.com", "googleapis.com", "github.com",
         "githubusercontent.com", "huggingface.co", "together.xyz", "groq.com", "mistral.ai", "openrouter.ai", "x.ai", "deepseek.com",
+        "greenlake.hpe.com", "cloud.hpe.com", "sophos.com",   // 0.6.33: the cloud infrastructure providers
     };
 
     public static NetClass Classify(string? url)
