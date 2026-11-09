@@ -85,7 +85,8 @@ if (Test-Path $portable) {
 }
 
 # --- the bundle and its checksums ---------------------------------------------------------------------------------------
-$assets = $cfg.releaseAssets | ForEach-Object { $_.Replace('{ver}', $Version) }
+$addonAssets = Get-PublishedAddonAssets $cfg
+$assets = @($cfg.releaseAssets | ForEach-Object { $_.Replace('{ver}', $Version) }) + $addonAssets
 $expected = @($assets) + "DarkCipherServerManagement-$Version-release-notes.md"
 foreach ($n in $expected) { Need (Test-Path (Join-Path $out $n)) "$n is missing from dist\$Version" }
 foreach ($n in $assets) {
@@ -118,6 +119,17 @@ $termsFile = Join-Path $PSScriptRoot 'privacy-terms.local.txt'
 if (Test-Path $termsFile) { $terms = [IO.File]::ReadAllLines($termsFile) | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 -and -not $_.StartsWith('#') } }
 function Test-PrivateName([string]$name) { foreach ($t in $terms) { if ($name.IndexOf($t, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true } }; return $false }
 foreach ($n in @($cfg.releaseAssets)) { Need ($n -notmatch '(?i)addon' -and -not (Test-PrivateName $n)) "release asset '$n' looks like an add-on or a private name: add-ons are never published" }
+# DarkCipher0x's exceptions (release.json publishedAddons): only signed module packages, never a private name.
+foreach ($n in $addonAssets) {
+    Need (-not (Test-PrivateName $n)) "published add-on '$n' has a private name"
+    $p = Join-Path $out $n
+    if (-not (Test-Path $p)) { continue }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $za = [IO.Compression.ZipFile]::OpenRead($p)
+    try { $names = @($za.Entries | ForEach-Object FullName) } finally { $za.Dispose() }
+    foreach ($req in 'addon.json', 'module.json', 'module.json.sig', 'module.json.pq.sig') { Need ($names -contains $req) "published add-on '$n' has no $req (only signed module packages are published)" }
+    Need (-not ($names | Where-Object { (Test-PrivateName $_) -or $_ -match '(?i)\.(pdb|cs|csproj)$' })) "published add-on '$n' holds source, symbols or a private name"
+}
 # 0.6.23: every release zip names its entries with forward slashes (the ZIP specification; the 0.6.22 zips had
 # backslashes, which Linux and macOS tools mangle, and which the dist/ rule below couldn't see).
 . (Join-Path $PSScriptRoot 'zip-tools.ps1')

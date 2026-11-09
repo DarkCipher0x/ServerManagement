@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 using DcxManager.Views.Editors;
 
 namespace DcxManager.Views;
@@ -80,11 +81,11 @@ public static class HexEditorWindow
         saveBtn.Click += async (_, _) => await DoSave();
         w.PreviewKeyDown += async (_, e) =>
         {
-            var mods = Keyboard.Modifiers;
-            if (e.Key == Key.S && mods == ModifierKeys.Control) { e.Handled = true; await DoSave(); }
-            else if (e.Key == Key.F && mods == ModifierKeys.Control) { e.Handled = true; Find(false); }
-            else if (e.Key == Key.F3) { e.Handled = true; Find(true); }
-            else if (e.Key == Key.G && mods == ModifierKeys.Control)
+            // Keys from Settings → Keyboard (0.6.36, ADR-115).
+            if (KeyCommands.Matches(e, ViewCommands.EditorSave)) { e.Handled = true; await DoSave(); }
+            else if (KeyCommands.Matches(e, ViewCommands.EditorFind)) { e.Handled = true; Find(false); }
+            else if (KeyCommands.Matches(e, ViewCommands.EditorFindNext)) { e.Handled = true; Find(true); }
+            else if (KeyCommands.Matches(e, ViewCommands.EditorGoTo))
             {
                 e.Handled = true;
                 if (Dialogs.Prompt("Go to offset", "Offset (decimal, or hex with 0x):") is { } s

@@ -37,11 +37,18 @@ public interface IAppHost
     /// return the action or null when it doesn't apply right now (then the box is a plain warning).</summary>
     void ErrorAction(Func<string, string, Exception?, ErrorBoxAction?> provide);
 
-    /// <summary>A global keyboard shortcut of the main window (<paramref name="gesture"/> is the text shown in menus).</summary>
-    void Shortcut(System.Windows.Input.Key key, System.Windows.Input.ModifierKeys modifiers, string gesture, Action run);
+    /// <summary>A command of the main window with its default keys (0.6.36, ADR-115): it is listed in Settings → Keyboard,
+    /// where its keys can be changed, and in the command palette. <paramref name="id"/> is lower-case words joined by dots
+    /// ("ai.toggle"); <paramref name="defaults"/> are key texts such as "Ctrl+Shift+A".</summary>
+    void Command(string id, string title, string category, Action run, params string[] defaults);
 
     /// <summary>The right-hand dock column of the main window: one module may fill it. <paramref name="create"/> gets the
     /// window, the column, its splitter and the host border, and returns the controller the window talks to.</summary>
+    /// <summary>A side panel (ADR-117): shown in the main window's panel column (between the documents and the right dock)
+    /// with <see cref="ModulePanels.Show"/>. <paramref name="make"/> builds it each time it is shown; content that is
+    /// <see cref="IDisposable"/> is disposed when the panel closes.</summary>
+    void SidePanel(string id, string title, Func<FrameworkElement> make);
+
     void RightDock(Func<Window, System.Windows.Controls.ColumnDefinition, System.Windows.Controls.GridSplitter, System.Windows.Controls.Border, IDockController> create);
 
     /// <summary>Runs once the main window has rendered (restore a detached window, hook status lines).</summary>
@@ -74,6 +81,9 @@ public interface IAppHost
 
     /// <summary>The analysis pass of the offline reports (<see cref="Reports.IReportAnalyst"/>). One at most.</summary>
     void ReportAnalyst(Reports.IReportAnalyst analyst);
+
+    /// <summary>Where the screens' "💬 Send to a chat…" items go (<see cref="Services.ISendTarget"/>, ADR-117). One at most.</summary>
+    void SendTarget(Services.ISendTarget target);
 }
 
 /// <summary>Context of the "screenshot" menu surface (every 📷 menu): the capture to run on click, its subject and owner window.</summary>
@@ -94,6 +104,8 @@ public interface IDockController
 
 /// <summary>One sidebar contribution.</summary>
 public sealed record NavContribution(string Module, string Section, string Key, string Text, string? Tip, Func<FrameworkElement>? Screen, string? Header, Action? Open, Func<IEnumerable<object?>>? Menu);
+/// <summary>One side panel contribution.</summary>
+public sealed record SidePanelContribution(string Module, string Id, string Title, Func<FrameworkElement> Make);
 /// <summary>One Settings category contribution.</summary>
 public sealed record SettingsCategoryContribution(string Module, string Name, string Glyph, string Blurb, string? After);
 /// <summary>One Settings card contribution.</summary>
@@ -107,6 +119,7 @@ public static class AppModules
     private static readonly List<NavContribution> Nav = new();
     private static readonly List<SettingsCategoryContribution> SettingsCategories = new();
     private static readonly List<SettingsCardContribution> SettingsCards = new();
+    private static readonly List<SidePanelContribution> Panels = new();
     private static readonly List<(string Module, string Surface, Func<object?, IEnumerable<object?>> Items)> Menus = new();
     private static readonly List<(string Module, Func<string, string, Exception?, ErrorBoxAction?> Provide)> ErrorActions = new();
 
@@ -146,21 +159,10 @@ public static class AppModules
     public static int MenuSurfaceCount(string surface) => Menus.Count(m => m.Surface == surface);
     public static int ErrorActionCount => ErrorActions.Count;
 
-    private static readonly List<(string Module, System.Windows.Input.Key Key, System.Windows.Input.ModifierKeys Mods, string Gesture, Action Run)> Shortcuts = new();
     private static (string Module, Func<Window, System.Windows.Controls.ColumnDefinition, System.Windows.Controls.GridSplitter, System.Windows.Controls.Border, IDockController> Create)? _rightDock;
     private static readonly List<Action<Window>> WindowReadyHooks = new();
     private static readonly List<Func<Task>> StartupTasks = new();
     private static readonly List<Action> ShutdownHooks = new();
-
-    /// <summary>Runs the module shortcut bound to this key and modifiers, if any.</summary>
-    public static bool RunShortcut(System.Windows.Input.Key key, System.Windows.Input.ModifierKeys mods)
-    {
-        var s = Shortcuts.FirstOrDefault(x => x.Key == key && x.Mods == mods);
-        if (s.Run == null) return false;
-        s.Run();
-        return true;
-    }
-    public static string? ShortcutGesture(System.Windows.Input.Key key, System.Windows.Input.ModifierKeys mods) => Shortcuts.FirstOrDefault(x => x.Key == key && x.Mods == mods).Gesture;
 
     /// <summary>Fills the main window's right dock column with the registered module's dock, or leaves it empty (null).</summary>
     public static IDockController? CreateRightDock(Window owner, System.Windows.Controls.ColumnDefinition col, System.Windows.Controls.GridSplitter splitter, System.Windows.Controls.Border host) =>
@@ -202,21 +204,27 @@ public static class AppModules
     }
 
     public static IEnumerable<NavContribution> NavItemsIn(string section) => Nav.Where(n => n.Section == section);
+    public static IReadOnlyList<SidePanelContribution> SidePanels => Panels.ToList();
+    public static SidePanelContribution? FindSidePanel(string id) => Panels.FirstOrDefault(p => p.Id == id);
     public static NavContribution? FindNav(string key) => Nav.FirstOrDefault(n => n.Key == key);
 
     /// <summary>Self-test: forget every module and contribution (the test re-registers what it needs).</summary>
-    internal static void ResetForTest() { Modules.Clear(); Nav.Clear(); SettingsCategories.Clear(); SettingsCards.Clear(); Menus.Clear(); ErrorActions.Clear(); Shortcuts.Clear(); _rightDock = null; WindowReadyHooks.Clear(); StartupTasks.Clear(); ShutdownHooks.Clear(); Services.DashboardSources.ResetForTest(); Services.PrivacyRows.ResetForTest(); Services.HelpKb.ResetOwnersForTest(); Services.Assist.ResetForTest(); Services.HostIdentify.ResetForTest(); Services.LocalAiSetup.ResetForTest(); Reports.ReportAnalysis.ResetForTest(); }
+    internal static void ResetForTest() { Modules.Clear(); Nav.Clear(); Panels.Clear(); SettingsCategories.Clear(); SettingsCards.Clear(); Menus.Clear(); ErrorActions.Clear(); Services.Keys.KeyCommands.ResetModulesForTest(); _rightDock = null; WindowReadyHooks.Clear(); StartupTasks.Clear(); ShutdownHooks.Clear(); Services.DashboardSources.ResetForTest(); Services.PrivacyRows.ResetForTest(); Services.HelpKb.ResetOwnersForTest(); Services.Assist.ResetForTest(); Services.HostIdentify.ResetForTest(); Services.LocalAiSetup.ResetForTest(); Reports.ReportAnalysis.ResetForTest(); Services.SendTo.ResetForTest(); }
 
     private sealed class Host(string module) : IAppHost
     {
         public void ContextMenu(string surface, Func<object?, IEnumerable<object?>> items) => Menus.Add((module, surface, items));
         public void ErrorAction(Func<string, string, Exception?, ErrorBoxAction?> provide) => ErrorActions.Add((module, provide));
-        public void Shortcut(System.Windows.Input.Key key, System.Windows.Input.ModifierKeys modifiers, string gesture, Action run)
+        public void Command(string id, string title, string category, Action run, params string[] defaults)
         {
-            if (Shortcuts.All(s => s.Key != key || s.Mods != modifiers)) Shortcuts.Add((module, key, modifiers, gesture, run));
+            Services.Keys.KeyCommands.Register(new Services.Keys.KeyCommand(id, title, category, Services.Keys.KeyScopes.App, Services.Keys.KeyCommands.Keys(defaults)) { Run = run, Module = module });
         }
         public void RightDock(Func<Window, System.Windows.Controls.ColumnDefinition, System.Windows.Controls.GridSplitter, System.Windows.Controls.Border, IDockController> create) => _rightDock ??= (module, create);
         public void WindowReady(Action<Window> run) => WindowReadyHooks.Add(run);
+        public void SidePanel(string id, string title, Func<FrameworkElement> make)
+        {
+            if (Panels.All(p => p.Id != id)) Panels.Add(new SidePanelContribution(module, id, title, make));
+        }
         public void Startup(Func<Task> run) => StartupTasks.Add(run);
         public void Shutdown(Action run) => ShutdownHooks.Add(run);
         public void DashboardSource(string id, string title, Func<string?> host, Func<Task<Services.CheckOutcome>> check,
@@ -227,6 +235,7 @@ public static class AppModules
         public void HelpArticles() => Services.HelpKb.OwnModule(module);
         public void Assistant(Services.IAssistant assistant) => Services.Assist.Register(assistant);
         public void ReportAnalyst(Reports.IReportAnalyst analyst) => Reports.ReportAnalysis.Register(analyst);
+        public void SendTarget(Services.ISendTarget target) => Services.SendTo.Register(target);
 
         public void SettingsCategory(string name, string glyph, string blurb, string? after = null)
         {

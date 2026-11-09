@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.Chat (ADR-117): CipherChat built into ServerManagement. The protocol, cryptography and chat logic are
+       CipherChat's own libraries, vendored unchanged in src\Vendor\CipherChat (tools\sync-cipherchat.ps1); this
+       project adds only what makes it part of the app: the encrypted accounts, the session, the screens, the side
+       panel, sharing, dashboard cards, settings, policy and the module that contributes them. Referenced only by the
+       app's composition root (and its self-test): with CipherChat off the module isn't registered and neither this
+       assembly nor CipherChat's are loaded. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DcxManager.Chat</RootNamespace>
+    <AssemblyName>Dcx.Chat</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+    <ProjectReference Include="..\Dcx.Ui\Dcx.Ui.csproj" />
+    <ProjectReference Include="..\Vendor\CipherChat\CipherChat.Crypto\CipherChat.Crypto.csproj" />
+    <ProjectReference Include="..\Vendor\CipherChat\CipherChat.Transport\CipherChat.Transport.csproj" />
+    <ProjectReference Include="..\Vendor\CipherChat\CipherChat.Api\CipherChat.Api.csproj" />
+    <ProjectReference Include="..\Vendor\CipherChat\CipherChat.Engine\CipherChat.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 0.6.38: calls run CipherChat's own call page in WebView2 (the same version as the app's) -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 0.6.38: the call page (vendored unchanged, checked by build.ps1), served from memory by Calls\CallPage.cs -->
+    <EmbeddedResource Include="..\Vendor\CipherChat\CallHost\**" LogicalName="callhost/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The app (its composition root and self-test) uses its internal members -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+  </ItemGroup>
+
+</Project>

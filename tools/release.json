@@ -24,6 +24,10 @@
     "update.json.sig",
     "update.json.pq.sig"
   ],
+  "_publishedAddons": "Add-ons are never published, except the ones listed here by DarkCipher0x: each is the signed package from dist/addons/<id>/, attached to this release and offered on the website. Its source stays private.",
+  "publishedAddons": [
+    { "id": "com.darkcipher.stream", "version": "0.2.1", "reason": "DarkCipher0x, 2026-11-09: release the stream add-on with 0.6.40" }
+  ],
   "website": { "enabled": true, "reason": "launched (DarkCipher0x, 2026-10-24)" },
   "discord": { "enabled": true, "reason": "launched (DarkCipher0x, 2026-10-24)" }
 }

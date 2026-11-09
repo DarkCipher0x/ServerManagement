@@ -48,6 +48,9 @@ public partial class MainWindow
             case Key.Down or Key.Up when open && _quickList != null:
                 MoveQuickSelection(e.Key == Key.Down ? 1 : -1); e.Handled = true; break;
             case Key.Escape when open: _quickPopup!.IsOpen = false; e.Handled = true; break;
+            // Shift+Delete forgets the selected recent line (as browsers do for their address bar).
+            case Key.Delete when open && Keyboard.Modifiers == ModifierKeys.Shift && _quickList?.SelectedItem is ListBoxItem { Tag: QuickTargets.Entry { Group: "Recent" } gone }:
+                QuickTargets.Forget(gone.Text); FillQuickList(); e.Handled = true; break;
             case Key.Enter:
                 e.Handled = true;
                 if (open && _quickList?.SelectedItem is ListBoxItem { Tag: QuickTargets.Entry pick }) { _quickPopup!.IsOpen = false; ConnectEntry(pick.Text); }
@@ -146,7 +149,13 @@ public partial class MainWindow
             if (e.OriginalSource is DependencyObject d && FindParent<Button>(d) == null && FindParent<ListBoxItem>(d) is { Tag: QuickTargets.Entry en })
             { _quickPopup!.IsOpen = false; ConnectEntry(en.Text); }
         };
-        var border = new Border { Child = _quickList, BorderThickness = new Thickness(1), Padding = new Thickness(2), Width = QuickBox.Width };
+        // Under the list: whether history is kept, "Clear recent" and the History settings (ADR-116).
+        _quickFooter = new WrapPanel { Margin = new Thickness(6, 6, 6, 4) };
+        var body = new DockPanel();
+        DockPanel.SetDock(_quickFooter, Dock.Bottom);
+        body.Children.Add(_quickFooter);
+        body.Children.Add(_quickList);
+        var border = new Border { Child = body, BorderThickness = new Thickness(1), Padding = new Thickness(2), Width = QuickBox.Width };
         border.SetResourceReference(Border.BackgroundProperty, "Surface");
         border.SetResourceReference(Border.BorderBrushProperty, "Line");
         _quickPopup = new Popup { Child = border, PlacementTarget = QuickBox, Placement = PlacementMode.Bottom, StaysOpen = false, AllowsTransparency = true };
@@ -178,9 +187,35 @@ public partial class MainWindow
             row.Children.Add(text);
             list.Items.Add(new ListBoxItem { Content = row, Tag = en, ToolTip = en.Detail });
         }
-        if (list.Items.Count == 0) list.Items.Add(new ListBoxItem { Content = new TextBlock { Text = "Nothing yet: connections you make appear here; 📍 pins one to the top.", Style = (Style)FindResource("Hint"), TextWrapping = TextWrapping.Wrap }, IsEnabled = false });
+        if (list.Items.Count == 0) list.Items.Add(new ListBoxItem { Content = new TextBlock { Text = ActivityHistory.Saving ? "Nothing yet: connections you make appear here; 📍 pins one to the top." : "Nothing pinned: 📍 pins a line to the top. History is off, so connections aren't remembered.", Style = (Style)FindResource("Hint"), TextWrapping = TextWrapping.Wrap }, IsEnabled = false });
+        FillQuickFooter();
         list.SelectedItem = list.Items.OfType<ListBoxItem>().FirstOrDefault(i => i.Tag is QuickTargets.Entry);
     }
+
+    private WrapPanel? _quickFooter;
+
+    private void FillQuickFooter()
+    {
+        var f = _quickFooter!;
+        f.Children.Clear();
+        int recent = AppData.Current.RecentAdHoc.Count;
+        f.Children.Add(new TextBlock
+        {
+            Text = ActivityHistory.Saving ? $"🕘 History kept · cleared {ActivityHistory.AutoClear.Text(AppSettings.Current.HistoryAutoClear)} · Shift+Del forgets one" : "🕘 History is off: nothing is remembered",
+            Style = (Style)FindResource("Hint"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0), TextWrapping = TextWrapping.Wrap,
+        });
+        if (recent > 0)
+        {
+            var clear = new Button { Content = $"Clear recent ({recent})", Style = (Style)FindResource("SmallButton"), Margin = new Thickness(0, 0, 6, 0), ToolTip = "Forget every recent line (pinned lines stay)" };
+            clear.Click += (_, e) => { ActivityHistory.Clear("quick-connect"); FillQuickList(); Status("Quick connect recents cleared."); e.Handled = true; };
+            f.Children.Add(clear);
+        }
+        var settings = new Button { Content = "History settings…", Style = (Style)FindResource("SmallButton") };
+        settings.Click += (_, e) => { _quickPopup!.IsOpen = false; ShowHistorySettings(); e.Handled = true; };
+        f.Children.Add(settings);
+    }
+
+    internal void ShowHistorySettings() { Navigate("settings"); SettingsView.Current?.RevealCard(SettingsView.HistoryCardTitle); }
 
     private void MoveQuickSelection(int step)
     {
@@ -200,6 +235,21 @@ public partial class MainWindow
         var rows = _quickList!.Items.OfType<ListBoxItem>().Select(i => i.Tag is QuickTargets.Entry en ? (en.Pinned ? "📌 " : "") + en.Text : "# " + ((i.Content as TextBlock)?.Text ?? "")).ToList();
         QuickConnect.Clear();
         return rows;
+    }
+
+    /// <summary>Self-test: the footer under the dropdown (its text and buttons), built without opening it.</summary>
+    internal string QuickFooterForTest()
+    {
+        FillQuickList();
+        return string.Join(" | ", _quickFooter!.Children.OfType<FrameworkElement>().Select(c => c is TextBlock t ? t.Text : (c as Button)?.Content as string ?? ""));
+    }
+
+    /// <summary>Self-test: presses the footer's "Clear recent".</summary>
+    internal void QuickFooterClearForTest()
+    {
+        FillQuickList();
+        var b = _quickFooter!.Children.OfType<Button>().FirstOrDefault(x => (x.Content as string)?.StartsWith("Clear recent", StringComparison.Ordinal) == true) ?? throw new InvalidOperationException("no Clear recent");
+        b.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
     }
 
     private static T? FindParent<T>(DependencyObject? d) where T : DependencyObject

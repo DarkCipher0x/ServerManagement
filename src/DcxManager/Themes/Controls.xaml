@@ -18,6 +18,17 @@
          Radius / RadiusCard follow Settings → Appearance → Corners (Services/NavLayout.ApplyCorners). -->
     <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
     <CornerRadius x:Key="Radius">2</CornerRadius>
+    <!-- Keyboard focus (0.6.36, ADR-115): a clear ring in the accent colour instead of Windows' faint dotted line, on every
+         control that doesn't draw its own focus (styles with an IsKeyboardFocused trigger keep theirs). -->
+    <Style x:Key="{x:Static SystemParameters.FocusVisualStyleKey}">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Rectangle Margin="-2" StrokeThickness="2" Stroke="{DynamicResource Accent}" RadiusX="3" RadiusY="3" SnapsToDevicePixels="True"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
     <CornerRadius x:Key="RadiusCard">2</CornerRadius>
     <Thickness x:Key="CardPadding">16,14</Thickness>
     <ScaleTransform x:Key="UiScaleTransform" ScaleX="1" ScaleY="1"/>

@@ -177,6 +177,31 @@
         "resolved": "10.0.13",
         "contentHash": "JZiWshNhK2+lbPnfV+JTYqKKrT27e5LRdbCU2SFkXwIIJPVKw/7KfrHU/DDbO3OXd4KwJZgAdyWbXl+kwzxWOw=="
       },
+      "cipherchat.api": {
+        "type": "Project",
+        "dependencies": {
+          "CipherChat.Transport": "[0.2.0, )"
+        }
+      },
+      "cipherchat.crypto": {
+        "type": "Project",
+        "dependencies": {
+          "BouncyCastle.Cryptography": "[2.7.0, 2.7.0]"
+        }
+      },
+      "cipherchat.engine": {
+        "type": "Project",
+        "dependencies": {
+          "CipherChat.Api": "[0.2.0, )",
+          "CipherChat.Crypto": "[0.2.0, )"
+        }
+      },
+      "cipherchat.transport": {
+        "type": "Project",
+        "dependencies": {
+          "BouncyCastle.Cryptography": "[2.7.0, 2.7.0]"
+        }
+      },
       "dcx.addons": {
         "type": "Project",
         "dependencies": {
@@ -209,6 +234,18 @@
           "Dcx.Core": "[1.0.0, )",
           "Dcx.Infra": "[1.0.0, )",
           "Dcx.Ui": "[1.0.0, )"
+        }
+      },
+      "dcx.chat": {
+        "type": "Project",
+        "dependencies": {
+          "CipherChat.Api": "[0.2.0, )",
+          "CipherChat.Crypto": "[0.2.0, )",
+          "CipherChat.Engine": "[0.2.0, )",
+          "CipherChat.Transport": "[0.2.0, )",
+          "Dcx.Core": "[1.0.0, )",
+          "Dcx.Ui": "[1.0.0, )",
+          "Microsoft.Web.WebView2": "[1.0.2903.40, )"
         }
       },
       "dcx.cloud": {
@@ -263,6 +300,14 @@
         "type": "Project",
         "dependencies": {
           "Dcx.Core": "[1.0.0, )"
+        }
+      },
+      "dcx.wintools": {
+        "type": "Project",
+        "dependencies": {
+          "Dcx.Core": "[1.0.0, )",
+          "Dcx.Ui": "[1.0.0, )",
+          "System.Management": "[10.0.13, )"
         }
       }
     },

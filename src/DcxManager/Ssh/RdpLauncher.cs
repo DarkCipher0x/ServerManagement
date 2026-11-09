@@ -63,8 +63,8 @@ public static class RdpLauncher
 
             var proc = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "mstsc.exe"), $"\"{file}\"") { UseShellExecute = false });
             started?.Invoke(proc);
-            h.LastConnected = DateTime.Now;
-            if (!h.IsAdHoc) { try { AppData.SaveSoon(); } catch { } }
+            ActivityHistory.NoteConnected(h);   // ADR-116: only while history is kept
+            if (!h.IsAdHoc && ActivityHistory.Saving) { try { AppData.SaveSoon(); } catch { } }
             AuditLog.Write("you", h.Display, "opened Remote Desktop", h.Port == 3389 ? h.Address : $"{h.Address}:{h.Port}");
             Ui.Window.Status($"Remote Desktop → {h.Display}{(wroteCred ? " (vault password handed to Windows for this sign-in)" : "")}");
 

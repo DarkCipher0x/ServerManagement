@@ -66,6 +66,7 @@ public sealed partial class SettingsView
     internal void ApplyImport(AppearanceTransfer.Plan plan)
     {
         AppearanceTransfer.Apply(plan, _s);
+        Services.Keys.KeyCommands.NotifyChanged();   // 0.6.36: imported shortcuts redraw the Keyboard page and tooltips
         Save();
         AuditLog.Write("you", "settings", "appearance imported", $"{plan.Changes.Count} setting(s): {string.Join(", ", plan.Changes.Select(c => c.Name))}");
         ApplyLook();

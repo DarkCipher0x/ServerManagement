@@ -43,9 +43,13 @@ $roles = @(
     @{ File = 'update.json.sig';    Role = 'update-signature'; Label = 'Update signature (ECDSA P-256)';   Path = $sm },
     @{ File = 'update.json.pq.sig'; Role = 'update-signature'; Label = 'Update signature (ML-DSA-65)';     Path = $sm }
 )
-foreach ($r in $roles) { if (-not (Test-Path (Join-Path $dist $r.File))) { throw "missing dist\$Version\$($r.File)" } }
 # Add-ons are never published (DarkCipher0x, 2026-10-24): the hand-off holds only the files above, never dist\addons\.
 foreach ($r in $roles) { if ($r.File -match '(?i)addon|\.dcxaddon') { throw "$($r.File) looks like an add-on: add-ons are never published" } }
+# ...except the ones DarkCipher0x released (release.json publishedAddons), checked by release-check.ps1.
+foreach ($a in @($cfg.publishedAddons | Where-Object { $_ })) {
+    $roles += @{ File = "$($a.id)-$($a.version).dcxaddon"; Role = 'addon'; Label = "Add-on: $($a.id) $($a.version) (.dcxaddon, install from Add-ons)"; Path = 'downloads/addons' }
+}
+foreach ($r in $roles) { if (-not (Test-Path (Join-Path $dist $r.File))) { throw "missing dist\$Version\$($r.File)" } }
 
 # --- GitHub: filled in once the release is published ------------------------------------------------------------------
 $published = Test-ReleaseStepDone $Version 'github-release'

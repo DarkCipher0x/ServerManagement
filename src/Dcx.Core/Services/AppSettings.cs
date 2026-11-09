@@ -303,6 +303,73 @@ public sealed class AppSettings
     public bool PaletteLearn { get; set; } = true;
     /// <summary>What the command palette ran recently (keys, newest first; state).</summary>
     public List<string> PaletteRecent { get; set; } = new();
+    /// <summary>Keep history (0.6.37, ADR-116: quick connect's recents, the palette's, Toolbox runs, transfers, "last connected",
+    /// portal pages and when they were opened). Off by default: nothing is written, and what was kept is cleared
+    /// (<see cref="ActivityHistory"/>). Group Policy can set it.</summary>
+    public bool HistorySave { get; set; }
+    /// <summary>When kept history is cleared automatically: never, exit (when the app closes), or every 1, 7 or 30 days.</summary>
+    public string HistoryAutoClear { get; set; } = ActivityHistory.AutoClear.Never;
+    /// <summary>When history was last cleared (UTC; state: the automatic clear counts from here).</summary>
+    public DateTime? HistoryLastCleared { get; set; }
+    /// <summary>CipherChat built in (ADR-117): load the chat module from the next start. Off by default; Group Policy
+    /// <c>ChatFeatures</c> can force it either way (<see cref="ChatFeatures"/>).</summary>
+    public bool ChatFeatures { get; set; }
+    /// <summary>The only CipherChat servers that may be used (origins such as https://chat.example.com; empty = any
+    /// https:// server you add). Group Policy sets it for an organisation's own server.</summary>
+    public List<string> ChatAllowedServers { get; set; } = new();
+    /// <summary>CipherChat server administration from this PC (People, roles, requests, audit, server settings), behind its
+    /// own admin-only sign-in. On by default for those whose account manages a server; Group Policy can turn it off.</summary>
+    public bool ChatAdmin { get; set; } = true;
+    /// <summary>Files and pictures may be sent and saved in chats (end-to-end encrypted either way).</summary>
+    public bool ChatAllowFiles { get; set; } = true;
+    /// <summary>The largest file this PC sends in a chat, in MB (the server has its own limit too).</summary>
+    public int ChatMaxFileMB { get; set; } = 100;
+    /// <summary>Voice and video calls may be started and answered.</summary>
+    public bool ChatAllowCalls { get; set; } = true;
+    /// <summary>Terminals, the file commander, Toolbox and reports may share into chats (always shown before it's sent).</summary>
+    public bool ChatShareFromScreens { get; set; } = true;
+    /// <summary>Message text in Windows notifications. Off by default: a notification says who wrote in which room, never what.</summary>
+    public bool ChatToastPreviews { get; set; }
+    /// <summary>A Windows notification for a new chat message while its room isn't in front (0.6.39).</summary>
+    public bool ChatNotify { get; set; } = true;
+    /// <summary>An incoming call plays its ringtone (the ring window and the taskbar flash show either way).</summary>
+    public bool ChatRingSound { get; set; } = true;
+    /// <summary>Lock every chat (wipe its keys) after this many minutes without keyboard or mouse use on this PC; 0 = only
+    /// with the app lock and at exit.</summary>
+    public int ChatAutoLockMinutes { get; set; }
+    /// <summary>Terminal, Remote Desktop and VNC tabs may be shared live into a chat (an end-to-end encrypted call showing
+    /// only that tab's window; asked every time). Needs calls.</summary>
+    public bool ChatAllowSessionShare { get; set; } = true;
+    /// <summary>Windows management built in (0.6.39, ADR-119): load the module from the next start. On by default; Group
+    /// Policy <c>WinToolsFeatures</c> can force it either way (<see cref="WinToolsFeatures"/>).</summary>
+    public bool WinToolsFeatures { get; set; } = true;
+    /// <summary>Windows management may change things (start/stop services and their start-up type, end processes, run,
+    /// enable or disable scheduled tasks); off = look only. Every change is confirmed and audited.</summary>
+    public bool WinToolsAllowChanges { get; set; } = true;
+    /// <summary>Windows management may manage other Windows computers (WMI over DCOM, event logs over RPC) with the host's
+    /// saved credential or your Windows sign-in; off = this PC only.</summary>
+    public bool WinToolsAllowRemote { get; set; } = true;
+    /// <summary>The WMI console (WQL queries and wmic-style commands; reading only) is available.</summary>
+    public bool WinToolsAllowConsole { get; set; } = true;
+    /// <summary>The Security event log may be read (needs administrator rights on the computer).</summary>
+    public bool WinToolsAllowSecurityLog { get; set; } = true;
+    /// <summary>How many events an event log view reads at most (50–5000).</summary>
+    public int WinToolsEventLimit { get; set; } = 500;
+    /// <summary>The room pinned to the chat side panel ("chat:origin|user|room"), kept with the encrypted settings (state).</summary>
+    public string ChatPanelRoom { get; set; } = "";
+    /// <summary>The module side panel open at the last exit ("chat"), opened again at start (state).</summary>
+    public string SidePanelShown { get; set; } = "";
+    /// <summary>The side panel's width (state; at most 40 % of the window).</summary>
+    public double SidePanelWidth { get; set; } = 360;
+    // The stream manager's settings (ADR-118) moved into its module add-on (ADR-120, StreamSettings): an existing file's
+    // values are kept in Retired and move into the module the first time it loads.
+    /// <summary>Keyboard shortcuts changed from their defaults (0.6.36, ADR-115): one <c>command.id=Ctrl+Shift+P;F6</c> line each,
+    /// <c>command.id=</c> for a command with no keys (Settings → Keyboard; read by Services.Keys.KeyBindingList, which skips
+    /// anything malformed). Group Policy can set the whole list (REG_MULTI_SZ).</summary>
+    public List<string> KeyBindings { get; set; } = new();
+    /// <summary>Users may change keyboard shortcuts (0.6.36). Group Policy sets this off to keep the defaults (and its own
+    /// KeyBindings list, if it sets one).</summary>
+    public bool KeyBindingsAllowChange { get; set; } = true;
     /// <summary>Show multi-line, risky or control-character pastes before they reach the shell (Services/PasteGuard.cs).
     /// Hidden control characters are always removed, even when this is off.</summary>
     public bool TerminalConfirmPaste { get; set; } = true;
@@ -626,6 +693,9 @@ public sealed class AppSettings
     public List<string> AddonBlockedIds { get; set; } = new();
     /// <summary>Only add-ons whose program is Authenticode-signed (data-only add-ons have no program and are unaffected).</summary>
     public bool AddonRequireSigned { get; set; }
+    /// <summary>Module add-ons (ADR-120): signed by DarkCipher Systems, they load into the app as modules (the stream manager
+    /// for Twitch is one). Off: none is installed or loaded.</summary>
+    public bool AddonAllowModules { get; set; } = true;
 
     /// <summary>Team features built in (0.3.0 §22): the Shared library screen and the TEAM section, without an add-on.
     /// Admin-protected; a company can switch it off by policy.</summary>
@@ -720,6 +790,16 @@ public sealed class AppSettings
     /// somewhere else (a path not in this list) shows the warning again.</summary>
     public List<string> SyncWarningDismissedFor { get; set; } = new();
 
+    /// <summary>Module add-ons' own settings (ADR-120), one JSON object per module id, kept in this encrypted file. A module
+    /// reads and writes them only through <see cref="ModuleSettings"/>; Group Policy reaches them through the policies the
+    /// module registers.</summary>
+    public Dictionary<string, System.Text.Json.Nodes.JsonObject> ModuleData { get; set; } = new();
+
+    /// <summary>Settings this version doesn't know (ADR-120: e.g. those that moved into a module add-on), kept as they were so
+    /// nothing is lost; a module takes its own back the first time it loads (<see cref="ModuleSettings.Attach{T}"/>).</summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement>? Retired { get; set; }
+
     public static AppSettings Current { get; private set; } = new();
 
     public static void Load()
@@ -734,11 +814,15 @@ public sealed class AppSettings
 
     public static void Save()
     {
+        try { Saving?.Invoke(); } catch (Exception ex) { Log.Write("settings saving event", ex); }   // ADR-120: modules write their settings in
         // Group Policy values (0.3.0 §10) win over whatever was changed in memory: put them back before writing.
         if (Enforce?.Invoke(Current) is { Count: > 0 } reverted) Reverted?.Invoke(reverted);
         SecureStore.Write(FileName, Current);
         try { Saved?.Invoke(); } catch (Exception ex) { Log.Write("settings saved event", ex); }
     }
+
+    /// <summary>Just before every save (ADR-120): module add-ons put their settings into <see cref="ModuleData"/>.</summary>
+    public static event Action? Saving;
 
     /// <summary>After every save (0.5.0): screens showing settings-derived state refresh (Live.While).</summary>
     public static event Action? Saved;

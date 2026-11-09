@@ -123,7 +123,7 @@ internal static class AiSwitchTests
             if (aiOnly.Any(n => Capabilities.Find(n) == null)) throw new Exception("AI capabilities missing with the module loaded");
             Capabilities.ModuleLoaded = m => m != "ai";
             var names = Capabilities.All.Select(c => c.Name).ToList();
-            if (aiOnly.Any(names.Contains) || names.Count != 39) throw new Exception($"listed while unavailable ({names.Count})");
+            if (aiOnly.Any(names.Contains) || names.Count(n => Capabilities.Find(n)?.Module != "stream") != 39)   // the stream add-on's tools (ADR-118c) come and go with it throw new Exception($"listed while unavailable ({names.Count})");
             if (Capabilities.UnavailableBecause("terminal_run") != "ai" || Capabilities.UnavailableBecause("list_hosts") != null || Capabilities.UnavailableBecause("no_such") != null) throw new Exception("UnavailableBecause");
             var msg = await Capabilities.RunAsync("terminal_run", new System.Text.Json.Nodes.JsonObject(), new CapabilityContext((_, _, _) => Task.FromResult(false), "selftest"), CancellationToken.None)
                 .ContinueWith(t => t.IsFaulted ? t.Exception!.InnerException!.Message : "ran");
@@ -193,6 +193,7 @@ internal static class AiOffTests
             if (AppModules.NavItems.Count != 0 || AppModules.SettingsCardItems.Count != 0 || AppModules.MenuSurfaceCount("tab") + AppModules.MenuSurfaceCount("screenshot") + AppModules.MenuSurfaceCount("settings-card") != 0 || AppModules.ErrorActionCount != 0)
                 throw new Exception("contributions present");
             if (AppModules.HookCounts != (0, 0, 0) || AppModules.HasRightDock || Overview.ModuleSources.Count != 0 || PrivacyReport.Contributions.Count != 0 || HelpKb.OwnedModules.Count != 0) throw new Exception("hooks / sources present");
+            if (Services.Keys.KeyCommands.All.Any(c => c.Module != null || c.Id.StartsWith("ai.", StringComparison.Ordinal))) throw new Exception("a module's keyboard command is registered");
             var entry = AuditLog.Read(DateTime.Now.ToString("yyyy-MM")).FirstOrDefault(e => e.Target == "ai-features" && e.Action.StartsWith("AI module"));
             if (entry?.Action != "AI module not loaded" || !entry.Result.Contains("DCX_AI_FEATURES")) throw new Exception("start-up audit: " + entry?.Action + " " + entry?.Result);
             Ok("AI off: DCX_AI_FEATURES=0 decided this run, nothing of the AI module was registered (no sidebar items, settings, menus, error action, dock, shortcut, hooks, assistant, report analyst, dashboard source, privacy rows or help articles), and the start-up audit says \"AI module not loaded\"");

@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using DcxManager.Files;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 using DcxManager.Ssh;
 
 namespace DcxManager.Views;
@@ -129,7 +130,33 @@ public sealed partial class CommanderView
         };
     }
 
+    /// <summary>The command line's and both panes' folder history are in memory only; clearing all history forgets them.</summary>
+    private void OnHistoryCleared(string? id)
+    {
+        if (id != null) return;
+        Dispatcher.BeginInvoke(() => { _cmdHistory.Clear(); _cmdIndex = 0; _left.ForgetHistory(); _right.ForgetHistory(); });
+    }
+
     // ---- keys ---------------------------------------------------------------------------------------------------------
+
+    private static KeyChord C(Key k, ModifierKeys m = ModifierKeys.None) => new(k, m);
+    private const ModifierKeys Ctrl = ModifierKeys.Control, Alt = ModifierKeys.Alt, Shift = ModifierKeys.Shift;
+
+    /// <summary>The commander's own keys (Midnight Commander's, see <see cref="OnKey"/>, <see cref="McKeyAsync"/> and
+    /// FilePane.McListKey). While a pane's list has the keyboard they win over the app's shortcuts (ADR-115): F6 moves
+    /// (next pane is still Ctrl+F6), F1 opens the commander's help, Ctrl+Shift+S the filter. In its text boxes they don't.</summary>
+    public static readonly IReadOnlySet<KeyChord> OwnKeys = new HashSet<KeyChord>
+    {
+        C(Key.F1), C(Key.F2), C(Key.F3), C(Key.F4), C(Key.F5), C(Key.F6), C(Key.F7), C(Key.F8), C(Key.F9), C(Key.F10),
+        C(Key.F2, Ctrl), C(Key.F4, Ctrl), C(Key.F4, Shift), C(Key.F6, Shift),
+        C(Key.R, Ctrl), C(Key.H, Ctrl), C(Key.U, Ctrl), C(Key.X, Ctrl), C(Key.Q, Ctrl), C(Key.O, Ctrl), C(Key.S, Ctrl), C(Key.T, Ctrl),
+        C(Key.S, Ctrl | Shift), C(Key.F, Ctrl | Shift), C(Key.Space, Ctrl), C(Key.Oem5, Ctrl), C(Key.Oem102, Ctrl),
+        C(Key.Enter, Ctrl), C(Key.Enter, Ctrl | Shift), C(Key.PageUp, Ctrl), C(Key.PageDown, Ctrl),
+        C(Key.H, Alt), C(Key.Y, Alt), C(Key.I, Alt), C(Key.D1, Alt), C(Key.D2, Alt), C(Key.OemPeriod, Alt), C(Key.OemQuestion, Alt | Shift),
+    };
+
+    public bool OwnsKey(KeyChord chord) =>
+        IsKeyboardFocusWithin && Keyboard.FocusedElement is not TextBoxBase && (_ctrlX || OwnKeys.Contains(chord));
 
     private async Task<bool> McKeyAsync(KeyEventArgs e)
     {

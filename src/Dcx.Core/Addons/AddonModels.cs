@@ -3,6 +3,18 @@ namespace DcxManager.Addons;
 // The add-on records kept in the encrypted settings (moved out of AddonPackages.cs in 0.2.0 phase 6: they are stored
 // data, so they live with the store; the package code that fills them stays with the add-ons).
 
+/// <summary>The module of a module add-on (ADR-120): its assembly in the package, the type that is the app module, and the
+/// module API it was built for.</summary>
+public sealed class AddonModuleInfo
+{
+    /// <summary>The module API this app provides. A module built for another one is refused (and says so).</summary>
+    public const int CurrentApi = 1;
+
+    public string Assembly { get; set; } = "";
+    public string Type { get; set; } = "";
+    public int Api { get; set; }
+}
+
 public sealed class AddonCommand
 {
     public string Id { get; set; } = "";
@@ -27,6 +39,10 @@ public sealed class AddonManifest
     /// <summary>A library.json in the package (ADR-033): a shared library of hosts and team credentials. Data only; the
     /// encryption, sync and merging run in the app, never in an add-on process.</summary>
     public string Library { get; set; } = "";
+    /// <summary>A module add-on (ADR-120): a .NET assembly in the package that the app loads into its own load context and
+    /// registers as an app module (screens, settings, policies, commands). Only a package whose module.json is signed with
+    /// DarkCipher Systems' release keys (ECDSA P-256 + ML-DSA-65) and lists every file's SHA-256 is loaded.</summary>
+    public AddonModuleInfo? Module { get; set; }
     public int TimeoutSeconds { get; set; } = 60;
     public List<string> Permissions { get; set; } = new();
     public List<AddonCommand> Commands { get; set; } = new();

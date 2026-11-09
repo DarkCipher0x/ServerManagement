@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using DcxManager.Notes;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 
 namespace DcxManager.Views;
 
@@ -138,8 +139,8 @@ public sealed class NotesView : UserControl, IDisposable
         _list.SelectionChanged += (_, _) => { if (_list.SelectedItem is FrameworkElement { Tag: Note n } && n != _note) Open(n); };
         _body.PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.T && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) { Insert($"[{DateTime.Now:HH:mm:ss}] "); e.Handled = true; }
-            else if (e.Key == Key.S && Keyboard.Modifiers == ModifierKeys.Control) { SaveNow(snapshot: true); e.Handled = true; }
+            if (KeyCommands.Matches(e, ViewCommands.NotesTimestamp)) { Insert($"[{DateTime.Now:HH:mm:ss}] "); e.Handled = true; }
+            else if (KeyCommands.Matches(e, ViewCommands.NotesSaveVersion)) { SaveNow(snapshot: true); e.Handled = true; }
         };
         Menus.ForList(_list, this, () => _list.SelectedItem is not FrameworkElement { Tag: Note n } ? Array.Empty<object?>() : Closed(n) ? new object?[]
         {

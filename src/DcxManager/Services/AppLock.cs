@@ -88,6 +88,7 @@ public static class AppLock
         Bitwarden.BitwardenVault.Lock("the app locked");   // 0.6.14 (ADR-093): the vault's session key goes with it
         CredentialSources.Forget();   // 0.6.17 (ADR-096): and every value read from Bitwarden or Password Safe
         PasswordSafeSessions.CheckInLeases("the app locked");
+        AppLockEvents.RaiseLocking("the app locked");   // ADR-117: modules wipe their keys (CipherChat locks every chat)
         // ADR-011: nothing is broadcast or served while locked.
         try { Api.Broadcasts.StopAll("app locked"); Api.LocalServer.Sync(); } catch (Exception ex) { Log.Write("Lock: stop listener", ex); }
         var windows = Application.Current.Windows.OfType<Window>().Where(w => w.IsVisible && w is not UnlockWindow).ToList();

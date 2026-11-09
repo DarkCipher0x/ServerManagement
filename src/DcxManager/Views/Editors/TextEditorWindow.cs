@@ -6,6 +6,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using DcxManager.Files;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 using DcxManager.Views.Editors;
 
 namespace DcxManager.Views;
@@ -165,12 +166,14 @@ public static class TextEditorWindow
         w.PreviewKeyDown += async (_, e) =>
         {
             var mods = Keyboard.Modifiers;
-            if (e.Key == Key.S && mods == ModifierKeys.Control) { e.Handled = true; await DoSave(); return; }
-            if (e.Key == Key.F && mods == ModifierKeys.Control) { e.Handled = true; find.Show(replace: false); return; }
-            if (e.Key == Key.H && mods == ModifierKeys.Control) { e.Handled = true; find.Show(replace: true); return; }
-            if (e.Key == Key.G && mods == ModifierKeys.Control) { e.Handled = true; GoToLine(box); return; }
-            if (e.Key == Key.V && mods == (ModifierKeys.Control | ModifierKeys.Alt)) { e.Handled = true; vimBox.IsChecked = vimBox.IsChecked != true; return; }
-            if (e.Key == Key.F3) { e.Handled = true; find.Next(mods == ModifierKeys.Shift); return; }
+            // Keys from Settings → Keyboard (0.6.36, ADR-115).
+            if (KeyCommands.Matches(e, ViewCommands.EditorSave)) { e.Handled = true; await DoSave(); return; }
+            if (KeyCommands.Matches(e, ViewCommands.EditorFind)) { e.Handled = true; find.Show(replace: false); return; }
+            if (KeyCommands.Matches(e, ViewCommands.EditorReplace)) { e.Handled = true; find.Show(replace: true); return; }
+            if (KeyCommands.Matches(e, ViewCommands.EditorGoTo)) { e.Handled = true; GoToLine(box); return; }
+            if (KeyCommands.Matches(e, ViewCommands.EditorVim)) { e.Handled = true; vimBox.IsChecked = vimBox.IsChecked != true; return; }
+            if (KeyCommands.Matches(e, ViewCommands.EditorFindNext)) { e.Handled = true; find.Next(false); return; }
+            if (KeyCommands.Matches(e, ViewCommands.EditorFindPrevious)) { e.Handled = true; find.Next(true); return; }
             // Tab follows the profile (spaces or a tab), in insert mode or with Vim off.
             if (e.Key == Key.Tab && mods == ModifierKeys.None && box.IsKeyboardFocusWithin && (vimBox.IsChecked != true || vim.Current == VimEngine.Mode.Insert))
             { e.Handled = true; box.SelectedText = vim.Config.TabText; box.CaretIndex = box.SelectionStart + box.SelectionLength; box.SelectionLength = 0; return; }

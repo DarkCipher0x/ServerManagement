@@ -11,6 +11,28 @@ function Get-ReleaseConfig {
     $c
 }
 
+# --- published add-ons (release.json "publishedAddons", DarkCipher0x's exceptions to "add-ons are never published") ----
+function Get-PublishedAddonAssets($cfg) {
+    @($cfg.publishedAddons | Where-Object { $_ } | ForEach-Object {
+        if ("$($_.id)" -notmatch '^[a-z0-9]+(\.[a-z0-9-]+)+$' -or "$($_.version)" -notmatch '^\d+\.\d+\.\d+$') { throw "release.json publishedAddons: bad id or version '$($_.id)' '$($_.version)'" }
+        "$($_.id)-$($_.version).dcxaddon"
+    })
+}
+
+# Copies each published add-on's package (and its .sha256) from dist\addons\<id>\ into dist\<ver>\, checking the hash.
+function Copy-PublishedAddons($cfg, [string]$Version) {
+    $out = Join-Path $ReleaseRoot "dist\$Version"
+    foreach ($a in @($cfg.publishedAddons | Where-Object { $_ })) {
+        $name = "$($a.id)-$($a.version).dcxaddon"
+        $src = Join-Path $ReleaseRoot "dist\addons\$($a.id)\$name"
+        if (-not (Test-Path $src) -or -not (Test-Path "$src.sha256")) { throw "dist\addons\$($a.id)\$name (and its .sha256) is missing: pack it with samples\addons\pack.ps1" }
+        $want = ([IO.File]::ReadAllText("$src.sha256").Trim() -split '\s+')[0].ToLowerInvariant()
+        if ((Get-FileHash $src -Algorithm SHA256).Hash.ToLowerInvariant() -ne $want) { throw "$name doesn't match its .sha256" }
+        Copy-Item $src (Join-Path $out $name) -Force
+        Copy-Item "$src.sha256" (Join-Path $out "$name.sha256") -Force
+    }
+}
+
 # --- the kill switch: either form turns every public step off, for every run, without editing anything ---------------
 function Get-PublishOffReason {
     if ($env:DCX_PUBLISH_OFF -eq '1') { return 'kill switch: DCX_PUBLISH_OFF=1' }

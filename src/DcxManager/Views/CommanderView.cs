@@ -21,7 +21,7 @@ namespace DcxManager.Views;
 /// F8 delete), Tab switches panes, drag between panes or from Explorer, and every transfer goes through the shared
 /// background queue (visible below, also used by the AI operator).
 /// </summary>
-public sealed partial class CommanderView : UserControl, IDisposable
+public sealed partial class CommanderView : UserControl, IDisposable, IOwnKeys
 {
     private readonly FilePane _left, _right;
     private FilePane _active;
@@ -154,6 +154,7 @@ public sealed partial class CommanderView : UserControl, IDisposable
         Content = root;
 
         PreviewKeyDown += OnKey;
+        ActivityHistory.Cleared += OnHistoryCleared;   // ADR-116: "Clear all history" forgets the folders and commands too
         Loaded += (_, _) => { _left.FocusList(); SetActive(_left); };
     }
 
@@ -305,6 +306,7 @@ public sealed partial class CommanderView : UserControl, IDisposable
 
     public void Dispose()
     {
+        ActivityHistory.Cleared -= OnHistoryCleared;
         TransferQueue.Jobs.CollectionChanged -= OnJobsChanged;
         TransferQueue.Finished -= OnJobFinished;
         _left.Dispose(); _right.Dispose();
@@ -770,6 +772,17 @@ internal sealed partial class FilePane : Border, IDisposable
         catch (Exception ex) { Dialogs.Error("AI", ex.Message); }
     }
 
+    /// <summary>"💬 Send to a chat…" (ADR-117): the file's bytes for the chat's review (it opens the room with it attached).</summary>
+    private async Task<SendItem?> SendFileAsync(FsItem it)
+    {
+        if (SendTo.Current is not { } t || it.Length > t.MaxFileBytes) return null;
+        await using var s = await _fs.OpenReadAsync(it.FullPath);
+        using var ms = new MemoryStream();
+        await s.CopyToAsync(ms);
+        if (ms.Length > t.MaxFileBytes) { Dialogs.Info("Send to a chat", $"{it.Name} is larger than {Fmt.Bytes(t.MaxFileBytes)}."); return null; }
+        return SendItem.OfFile($"{it.Name} on {Ref.Title}", new SendFile(it.Name, ms.ToArray()));
+    }
+
     private IEnumerable<object?> BuildMenu()
     {
         var sel = Selected.Where(i => !i.IsParent).ToList();
@@ -813,6 +826,7 @@ internal sealed partial class FilePane : Border, IDisposable
             Menus.Sep(),
             one is { IsDir: false } && assist != null ? Menus.AsyncItem("✦ Explain with AI", () => ExplainAsync(assist, one), enabled: ai == null) : null,
             ai != null && one is { IsDir: false } ? new MenuItem { Header = "   " + ai, IsEnabled = false } : null,
+            one is { IsDir: false } ? Menus.SendItem("💬 Send to a chat…", () => SendFileAsync(one), enabled: !InArchive && one.Length <= (SendTo.Current?.MaxFileBytes ?? 0)) : null,
             Menus.Sep(),
             Menus.AsyncItem(_fs.IsRemote ? "Delete permanently…" : "Delete (Recycle Bin)…", DeleteAsync, "F8", enabled: any),
         };

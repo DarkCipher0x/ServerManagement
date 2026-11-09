@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using DcxManager.Files;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 using DcxManager.Ssh;
 using Microsoft.Win32;
 using Renci.SshNet;
@@ -96,7 +97,7 @@ public sealed class SftpView : UserControl, IDisposable, IHostView
             if (e.Key == Key.Enter) await OpenSelectedAsync();
             else if (e.Key == Key.Back) await GoAsync(ParentDir(_cwd));
             else if (e.Key == Key.Delete) await DeleteAsync();
-            else if (e.Key == Key.F5) await GoAsync(_cwd);
+            else if (KeyCommands.Matches(e, ViewCommands.PageRefresh)) await GoAsync(_cwd);
         };
         Menus.ForList(_list, this, () =>
         {

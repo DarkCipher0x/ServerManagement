@@ -1,8 +1,8 @@
-# Security report — ServerManagement 0.6.35 – DarkCipher Systems
+# Security report — ServerManagement 0.6.37 – DarkCipher Systems
 
-**Date:** 2026-11-08. **Version under test:** 0.6.35 (the build this report ships with), on .NET 10 (LTS, security
+**Date:** 2026-11-08. **Version under test:** 0.6.37 (the build this report ships with), on .NET 10 (LTS, security
 fixes until November 2028; ADR-092). The first public beta was 0.6.22 (2026-10-24). The 0.6.30 sweep of everything
-added since then is in §4g (0.6.31 changes only the window layout and tab groups: no new inputs or connections); 0.6.32 (start-up pass) adds none either, and 0.6.34's new OpenAI API engine, pinned portals, pop-up blocking, encrypted cache folders and the Redfish, HPE GreenLake and Sophos Central providers are in §4h (0.6.35 fixes a portal-tab error and adds no inputs or connections); the earlier 0.6.x surfaces and the pre-launch audit are in §4b–§4f and in "Live attacks".
+added since then is in §4g (0.6.31 changes only the window layout and tab groups: no new inputs or connections); 0.6.32 (start-up pass) adds none either, and 0.6.34's new OpenAI API engine, pinned portals, pop-up blocking, encrypted cache folders and the Redfish, HPE GreenLake and Sophos Central providers are in §4h (0.6.35 fixes a portal-tab error and adds no inputs or connections); 0.6.36's keyboard shortcuts and Settings → Keyboard are in §4i (0.6.36 was built but not published, so 0.6.37 ships them), and 0.6.37's history controls in §4j, its built-in CipherChat and the stream manager for Twitch in §4k; the earlier 0.6.x surfaces and the pre-launch audit are in §4b–§4f and in "Live attacks".
 The probe-by-probe list (§3) covers 0.4.0–0.5.1; later probes are described with their sweeps. **Prepared by:** the maintainers,
 from the automated suites that run on every build. **Scope:** the Windows application, its data store, every input it
 takes from outside (servers, files, policies, add-ons, web and API answers) and every connection it makes.
@@ -198,6 +198,112 @@ gates were re-checked. No finding; nothing needed fixing.
 | Theme packs (0.6.9) | colours only; environment labels (a safety signal, ADR-017) can't change; every pack meets the contrast rules in both modes | as designed |
 | Docs (0.6.12, ADR-091) | each document its own sealed file (AES-256-GCM, file name as AAD), folder paths cleaned of `..`, pins validated; the preview is our own renderer: no HTML engine, no network (images never fetched), only https / mailto links, opened after a confirmation and through offline mode; a damaged file is set aside, never overwritten | as designed |
 | Bitwarden (0.6.14, ADR-093) | only a CLI signed by Bitwarden (Authenticode with revocation) or an admin-approved SHA-256 starts, held open against writers until it runs; a copy of cmd.exe standing in for bw was refused until approved and again after one changed byte; secrets only as environment variables of that process (the self-test saw an inherited `BW_SESSION`, `NODE_OPTIONS` and `NODE_TLS_REJECT_UNAUTHORIZED` removed); no secret on any command line (checked on every scripted call); lists keep no password, key or value; option-shaped ids and searches refused before the CLI starts; the session key in memory only, dropped on idle, app lock and exit; offline mode governs sign-in, sync and Secrets Manager |
+
+## 4l. 0.6.39: module add-ons, Windows management and live session sharing (2026-11-09, ADR-117a, ADR-119, ADR-120)
+
+- **Module add-ons run only when signed by the release keys.** A module add-on's `module.json` lists every file's
+  SHA-256 and is signed with the pinned ECDSA P-256 and ML-DSA-65 release keys (the update keys, with a purpose field
+  so neither signature can stand for the other). Install refuses a changed or unlisted file, another id, version or
+  module API, a missing post-quantum signature, another key or no signature; every start checks again and disables a
+  changed package. The assembly loads from its decrypted bytes into its own load context; the files stay sealed at
+  rest. Group Policy `AddonAllowModules` = 0 turns all of them off. The self-test proves each refusal with throwaway
+  keys and that a test-signed package never loads with the pinned keys.
+- **The stream manager left the app.** Its code, settings and policies are in its module add-on; the architecture tests
+  check that the app doesn't reference or ship `Dcx.Stream` and that, when loaded, it came from its package.
+- **Windows management.** WMI with packet privacy and impersonation; a remote computer's credential is handed over as a
+  SecureString, never on a command line; the WMI console only reads (wmic `call` / `set` / `delete` / `/node:` /
+  `/user:` and non-SELECT WQL are refused); keys that reach a WMI path refuse quotes and backslashes; every change asks
+  first, is audited and is off when `WinToolsAllowChanges` is 0; the Security log needs `WinToolsAllowSecurityLog`.
+- **Live session sharing.** Only the one tab chosen is shared: it gets its own window with a fixed title, and the call
+  page's separate WebView2 environment auto-selects exactly that window, so no picker opens and no other window can be
+  chosen; new tabs never land in it while it is shared; the share ends with the call; both ends are audited; policy
+  `ChatAllowSessionShare`. Chat notifications never show a burn-after-reading message's text; the idle lock locks every
+  chat after `ChatAutoLockMinutes` without input.
+
+## 4k. 0.6.37: CipherChat built in and the stream manager for Twitch (2026-11-08, ADR-117, ADR-118 / 118a)
+
+- **Off unless chosen, and then not loaded at all.** CipherChat starts off (policy `ChatFeatures` beats the
+  administrator-protected setting); the stream manager loads only when a stream add-on is enabled and `StreamFeatures`
+  allows it (0.6.39: the stream manager is a module add-on signed by the release keys, see §4l). Off, neither module's assemblies are loaded and they contribute nothing: the self-test runs once with each
+  off and checks exactly that, and once with each on. Each module references only Dcx.Core and Dcx.Ui, and nothing
+  below the app references them (architecture tests).
+- **CipherChat's protocol is CipherChat's.** Its Crypto, Transport, Api and Engine libraries are vendored unchanged at a
+  pinned commit with every file's SHA-256 in `VENDOR.json`; the build fails on any local change. Servers are https://
+  only, over CipherChat's post-quantum TLS 1.3 transport (plain http only for a loopback test server), and
+  `ChatAllowedServers` can limit them.
+- **CipherChat secrets.** Only the device pairing token is stored (AES-256-GCM under the store key); the per-PC room-key
+  store is sealed with the store key; the chat passphrase and the password sign-in are never stored. The server admin
+  sign-in is held in memory only, never resumed from the device token, and ended by the app lock; one-time links are
+  shown only when they are the server's own and never logged. The app lock and quitting wipe every engine's keys.
+- **CipherChat input.** Message text is shown as plain text with control characters removed and capped at 20,000
+  characters; admin settings are checked against the server's own schema before they are sent. Sharing from screens
+  only fills the composer: nothing is sent until Send, and `ChatShareFromScreens` / `ChatAllowFiles` / `ChatMaxFileMB`
+  apply.
+- **Twitch.** Sign-in is Twitch's device flow with the public Client ID (no client secret exists in the app); tokens are
+  kept only in the app's encrypted store, never in logs, and revoked on sign-out. Only the scopes of the feature groups switched on
+  (`StreamFeatureGroups`) are asked for, and each action is refused when policy turns it off (checked by the self-test).
+  Chat and event text is plain text with control characters and bidirectional overrides removed and capped; the chat
+  keeps the last 500 lines in memory only.
+- **Streamer.bot.** Local-network hosts only unless `StreamerBotHosts` allows another; a server without authentication
+  is refused unless policy allows it (`StreamerBotRequireAuth`, `StreamerBotAllowNoAuth`); the password is stored
+  encrypted and used only for Streamer.bot's salted challenge, never sent. The self-test checks a correct and a wrong
+  password, a server with authentication off, and a refused non-local host.
+- **System-wide keys** are off until a key is set, run the same commands as the buttons with the same policy checks,
+  and `StreamGlobalHotkeys` = 0 removes them.
+- **Not yet tested live:** CipherChat's server, account, admin and sharing rules are checked by the self-test, but no
+  interop run against a CipherChat server has been done yet, and its calls are not built. The stream manager is tested
+  against fake Twitch (HTTP and EventSub WebSocket) and Streamer.bot servers on 127.0.0.1, not yet against Twitch or a
+  real Streamer.bot.
+- **Findings:** the stand-in tests found and fixed bidirectional-override characters passing through stream names, and
+  Streamer.bot action names reaching the screen uncleaned. None open.
+
+## 4j. 0.6.37: history, off by default (2026-11-08, ADR-116)
+
+- **Less is stored.** History (quick connect and palette recents, Toolbox runs with their reports, finished transfers,
+  "last connected" and "last opened" times, and the portal browser's page and download history) is off by default: no
+  history writes anything, and a start while it is off clears what an earlier version or a restored backup left. Every
+  history asks one gate (`ActivityHistory.MayRecord`) before writing, and every one is registered in one file
+  (`HistorySources.cs`), so the switch, the automatic clear and Group Policy cover them all; the self-test checks that
+  each is written while on and not while off.
+- **Kept history** stays where it was (the AES-256-GCM stores; the portal profile in its EFS folder) and never leaves the
+  PC: it is not in exports, and nothing new is sent anywhere.
+- **Clearing** forgets the entries in memory and rewrites the encrypted store files; the portal browser's history is
+  cleared through WebView2's own API per profile (sign-ins, cookies and site data stay). The audit log records which
+  kinds were cleared and how many entries, never the entries (checked by the self-test with a marker line).
+- **Automatic clear** runs by age (1, 7 or 30 days, checked at start-up and whenever something is remembered, so it
+  doesn't depend on the app restarting) or when the app closes.
+- **New input:** two policies, `HistorySave` (REG_DWORD) and `HistoryAutoClear` (REG_SZ, one of `never`, `exit`, `1`,
+  `7`, `30`; anything else is refused and listed).
+- **Not covered by "clear":** the audit log (a security record), which stays under its own lock and retention.
+- **Findings:** none.
+
+## 4i. 0.6.36: keyboard control and Settings → Keyboard (2026-11-08, ADR-115)
+
+- **No new connection, file or permission.** Shortcuts run the same actions as their menu items and buttons, with the
+  same locks, confirmations and admin gates; a command that can't run right now leaves the key alone. Nothing a key
+  starts is new, and add-ons can't register keys (only the app's own modules can).
+- **New input: shortcut text,** from the encrypted settings, Group Policy (`KeyBindings`, REG_MULTI_SZ, capped by the
+  policy reader at 200 lines of 260 characters) and appearance imports. It is read against an allow-list only: Ctrl,
+  Alt and Shift plus one key from a fixed list, at most 40 characters, no control characters, never the Windows key;
+  at most 400 lines of 200 characters, command ids of the form `word.word`, three keys per command. Anything else is
+  skipped and listed, never guessed at, and a line that is all wrong never turns a command's keys off. A 4,000-input fuzz
+  pass (random text with separators, symbols, non-Latin and control characters) runs every build: no exception, and
+  everything accepted reads back to itself.
+- **Keys that can't be taken.** Windows' own (Alt+F4, Alt+Tab, Ctrl+Esc, Ctrl+Shift+Esc, Ctrl+Alt+Del), focus movement
+  (Shift+Tab), the context-menu key (Shift+F10), text editing (Ctrl+C / X / V / Z / Y / A, Ctrl+Ins, Shift+Ins, Shift+Del)
+  and the terminal's copy and paste (Ctrl+Shift+C / V) are refused, and without Ctrl or Alt only F-keys and Pause, so a
+  binding can't stop you typing, copying or leaving a window.
+- **Remote sessions keep their keys.** While a terminal, VNC or Remote Desktop session has the keyboard only Ctrl+Shift,
+  Ctrl+Alt, Ctrl+Tab and Ctrl+F-key shortcuts are taken; everything else reaches the remote program, as before.
+- **Policy and storage.** The changed shortcuts are in the AES-256-GCM settings store (the self-test checks that the
+  settings file holds no readable binding) and in the audit log when changed. Group Policy can set the list or keep the
+  defaults (`KeyBindingsAllowChange`); the page then shows the lock, disables its buttons, and every change and import is
+  refused.
+- **Recording keys.** While the capture box has the keyboard no shortcut runs, so recording Ctrl+Shift+L doesn't lock the
+  app; Tab still leaves it and Esc cancels, so it never traps the keyboard.
+- **Clashes in a supplied list** (a policy's or an import's) are resolved the same way every time: the first command
+  keeps the key and the clash is listed on the page.
+- **Findings:** none.
 
 ## 4h. 0.6.34: the OpenAI API engine, pinned portals, pop-ups and sound, encrypted cache folders, Redfish / GreenLake / Sophos Central (2026-11-08, ADR-111 – ADR-114)
 

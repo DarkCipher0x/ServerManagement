@@ -1,0 +1,17 @@
+<Project>
+  <!-- The vendored CipherChat libraries (ADR-117, tools\sync-cipherchat.ps1) build with CipherChat's own settings
+       (CipherChat.Build.props, copied verbatim from the CipherChat commit in VENDOR.json), not ServerManagement's, so
+       its code is compiled exactly as CipherChat tests it. ServerManagement's supply-chain rule still applies: in a
+       release build (DCX_LOCKED_RESTORE=1) every package must match its packages.lock.json. -->
+  <Import Project="CipherChat.Build.props" />
+  <PropertyGroup>
+    <RestoreLockedMode Condition="'$(DCX_LOCKED_RESTORE)' == '1'">true</RestoreLockedMode>
+    <ContinuousIntegrationBuild Condition="'$(DCX_LOCKED_RESTORE)' == '1'">true</ContinuousIntegrationBuild>
+    <!-- Not packed or published on their own: they ship inside ServerManagement. -->
+    <IsPackable>false</IsPackable>
+    <!-- Like every ServerManagement project: no .pdb in the published app and no local paths in the binaries
+         (build.ps1 refuses a publish with a .pdb in it). The code itself is compiled as CipherChat builds it. -->
+    <DebugType>none</DebugType>
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+  </PropertyGroup>
+</Project>

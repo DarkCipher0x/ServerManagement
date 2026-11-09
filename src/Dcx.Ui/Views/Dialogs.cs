@@ -175,6 +175,7 @@ public static class Dialogs
     /// The first option is the primary (highlighted) one; Esc picks <paramref name="cancelIndex"/> when given.</summary>
     public static int Choose(string title, string message, string[] options, int cancelIndex = -1, double width = 560)
     {
+        if (TestMode.Running && ChooseForTests is { } answer) { lock (SelfTestChoices) SelfTestChoices.Add(title + ": " + message); return answer.Choice; }
         if (TestMode.Running) { RefusedInSelfTest("choice: " + title); return cancelIndex; }
         var w = MakeWindow(title, width);
         var root = new StackPanel { Margin = new Thickness(18) };

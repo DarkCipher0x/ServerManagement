@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 using DcxManager.Views;
 
 namespace DcxManager;
@@ -55,18 +56,20 @@ public static class CommandPalette
             var card = title;
             list.Add(new PaletteSearch.Item("setting:" + title, "Setting", title, "Settings → " + category, () => { main.Navigate("settings"); SettingsView.Current?.RevealCard(card); }, "⚙"));
         }
-        void A(string id, string title, string detail, Action run, string glyph = "▸") => list.Add(new PaletteSearch.Item("action:" + id, "Action", title, detail, run, glyph));
-        A("quick", "Quick connect…", "Ctrl+K · type user@host, an address, rdp://…", main.FocusQuickConnect, "⚡");
-        A("lock", "Lock the app", "Ctrl+Shift+L", main.LockNow, "🔒");
-        A("tile", "Tile all tabs", "Ctrl+Alt+T", main.Panes.Tile, "▦");
-        A("merge", "Merge all panes", "Ctrl+Alt+U", main.Panes.MergeAll, "▭");
-        A("window", "New window", "Ctrl+Shift+N · another window with a host pane", () => main.Panes.NewWindow(), "⧉");
-        A("sidebar", "Show or hide the sidebar", "Ctrl+B", main.ToggleSidebar, "☰");
-        A("screenshot", "Screenshot the active tab", "Ctrl+Shift+S", () => _ = main.ScreenshotActiveAsync(), "📷");
-        A("saveworkspace", "Save the open tabs as a workspace…", "named workspace", main.SaveNamedWorkspace, "▦");
-        A("help", "Help", "F1", () => main.ShowHelp(), "?");
+        // 0.6.36 (ADR-115): every app command of Settings → Keyboard, with its keys as they are now. Pages are listed above
+        // already, and commands that can't run right now (no tab to close) are left out.
+        foreach (var c in KeyCommands.All)
+        {
+            if (c.Scope != KeyScopes.App || !c.InPalette || c.Run is not { } run || c.Id.StartsWith("go.", StringComparison.Ordinal)) continue;
+            try { if (c.CanRun?.Invoke() == false) continue; } catch { continue; }
+            var keys = KeyCommands.Effective(c.Id);
+            var detail = (keys.Count > 0 ? string.Join(" or ", keys.Select(k => k.Shown)) : "no key") + " · " + (c.Detail ?? c.Category);
+            list.Add(new PaletteSearch.Item("action:" + c.Id, "Action", c.Title, detail, run, Glyph(c.Category)));
+        }
         return list;
     }
+
+    private static string Glyph(string category) => category switch { "Tabs" => "▭", "Panes and windows" => "▦", "Moving around" => "☰", _ => "▸" };
 
     private static IEnumerable<(string, Action)> HostMore(MainWindow main, HostEntry h)
     {
@@ -89,7 +92,7 @@ public static class CommandPalette
         if (TestMode.Running) { Dialogs.RefusedInSelfTest("command palette"); return; }
         if (_open != null) { _open.Activate(); return; }
         var items = Items(main);
-        var recent = AppSettings.Current.PaletteLearn ? AppSettings.Current.PaletteRecent : new List<string>();
+        var recent = AppSettings.Current.PaletteLearn && ActivityHistory.Saving ? AppSettings.Current.PaletteRecent : new List<string>();
         var w = Dialogs.MakeWindow("Command palette", 700, 500);
         w.Owner = Window.GetWindow(main.Panes.ActiveTab) ?? main;
         var box = Hint.Set(new TextBox { Padding = new Thickness(8, 6, 8, 6), Margin = new Thickness(12, 12, 12, 6) }, "Hosts, tabs, workspaces, snippets, pages, settings, actions…");
@@ -109,7 +112,7 @@ public static class CommandPalette
         }
         void Run(PaletteSearch.Item it, Action? action = null)
         {
-            if (AppSettings.Current.PaletteLearn) { PaletteSearch.Remember(AppSettings.Current.PaletteRecent, it.Key); try { AppSettings.Save(); } catch { } }
+            if (AppSettings.Current.PaletteLearn && ActivityHistory.MayRecord()) { PaletteSearch.Remember(AppSettings.Current.PaletteRecent, it.Key); try { AppSettings.Save(); } catch { } }
             w.Close();
             try { (action ?? it.Run)(); } catch (Exception ex) { App.Log("Command palette", ex); Dialogs.Error("Command palette", ex.Message); }
         }

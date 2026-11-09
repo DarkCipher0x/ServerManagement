@@ -30,6 +30,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         Instance = this;
+        ModuleTabs.Open = (key, header, make) => OpenSingleton(key, header, make);   // ADR-117: modules' tabs (chat rooms)
+        ModuleTabs.Isolate = (tab, title) => IsolateTab(tab as TabItem, title);       // 0.6.39: live session sharing
         StartupTrace.Mark("MainWindow: fields (PaneHost)");
         InitializeComponent();
         StartupTrace.Mark("MainWindow: InitializeComponent (window XAML)");
@@ -38,11 +40,16 @@ public partial class MainWindow : Window
         DocArea.Child = Panes;
         InitHostPane();   // 0.6.31: the hosts panel beside every tab (Shell/MainWindow.HostPane.cs)
         RightDock = AppModules.CreateRightDock(this, DockCol, DockSplitter, DockHost);
+        InitSidePanels();   // ADR-117: modules' side panels (the chat panel), after the XAML made the panel column
         StartupTrace.Mark("MainWindow: pane host, host-pane strip, right dock");
         Panes.ActiveTabChanged += OnActiveTab;
         Activated += (_, _) => Panes.ActivateMain();   // 0.6.4: new tabs open in the window you're in
         Panes.TabMenu = TabMenu;
         Panes.CloseRequested = t => { if ((t.Tag as string) != "fixed") CloseTab(t); };
+        RegisterCommands();   // 0.6.36 (ADR-115): every shortcut is a command in KeyCommands (Shell/MainWindow.Keyboard.cs)
+        ApplyKeyTips();
+        Services.Keys.KeyCommands.Changed += () => Dispatcher.BeginInvoke(ApplyKeyTips);   // the main window lives as long as the app
+        Nav.PreviewKeyDown += OnNavKey;
         VersionText.Text = "v" + App.DisplayVersion;
         _defaultLogo = HeaderLogo.Source;
         ApplyBranding();
@@ -78,6 +85,7 @@ public partial class MainWindow : Window
             TabGroups.Changed += SaveWorkspace;
             // Modules' window-ready hooks (0.2.0 phase 3): the AI module reports Foundry Local's set-up steps in the status line.
             AppModules.OnWindowReady(this);
+            RestoreSidePanel();      // ADR-117: the side panel open at the last exit (the chat's pinned room)
             RestoreExtraWindows();   // 0.6.4: the extra windows come back on their monitors (before crash recovery fills them)
             OfferRestore();
             // Local API (ADR-011): only if switched on in Settings; broadcasts are never restored.
@@ -207,47 +215,7 @@ public partial class MainWindow : Window
         Title = t?.ProductName ?? DefaultTitle;
     }
 
-    // ---- keyboard -----------------------------------------------------------------------------------------------
-
-    private void OnPreviewKey(object sender, KeyEventArgs e) => HandleShortcut(e);
-
-    /// <summary>
-    /// App shortcuts. Inside a terminal, plain Ctrl+letter and F-keys belong to the remote program (Ctrl+W deletes a word,
-    /// Ctrl+B is the tmux prefix, F1 is htop's help…), so there only Ctrl+Shift / Ctrl+Alt / Ctrl+Tab combos are taken.
-    /// </summary>
-    public void HandleShortcut(KeyEventArgs e)
-    {
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        var mods = Keyboard.Modifiers;
-        bool inTerminal = Keyboard.FocusedElement is DependencyObject d && Menus.Ancestor<TerminalView>(d) != null
-                          || e.OriginalSource is DependencyObject o && Menus.Ancestor<TerminalView>(o) != null;
-        bool ctrl = mods == ModifierKeys.Control, ctrlShift = mods == (ModifierKeys.Control | ModifierKeys.Shift), ctrlAlt = mods == (ModifierKeys.Control | ModifierKeys.Alt);
-        // Modules' shortcuts first (0.2.0 phase 3): Ctrl+Shift+A toggles the AI Engineer sidebar. They are Ctrl+Shift /
-        // Ctrl+Alt combos, so they work in terminals too.
-        if (AppModules.RunShortcut(key, mods)) { e.Handled = true; return; }
-        bool handled = true;
-        switch (key)
-        {
-            case Key.W when ctrlShift || ctrl && !inTerminal: if (Panes.ActiveTab is { } t && (t.Tag as string) != "fixed") CloseTab(t); break;
-            case Key.K when ctrlShift || ctrl && !inTerminal: FocusQuickConnect(); break;
-            case Key.B when ctrlShift || ctrl && !inTerminal: ToggleSidebar(); break;
-            case Key.F1 when mods == ModifierKeys.None && !inTerminal || ctrl: ShowHelp(); break;
-            case Key.F6 when mods == ModifierKeys.None && !inTerminal || ctrl: Panes.FocusNextPane(); break;
-            case Key.Tab when ctrl: Panes.NextTab(+1); break;
-            case Key.Tab when ctrlShift: Panes.NextTab(-1); break;
-            case Key.Right when ctrlAlt: if (Panes.ActiveTab is { } r) Panes.Split(r, Orientation.Horizontal); break;
-            case Key.Down when ctrlAlt: if (Panes.ActiveTab is { } dn) Panes.Split(dn, Orientation.Vertical); break;
-            case Key.L when ctrlShift: LockNow(); break;
-            case Key.P when ctrlShift: CommandPalette.Show(this); break;   // 0.6.29: the command palette (ADR-104)
-            case Key.S when ctrlShift: _ = ScreenshotActiveAsync(); break;
-            case Key.T when ctrlAlt: Panes.Tile(); break;
-            case Key.U when ctrlAlt: Panes.MergeAll(); break;
-            case Key.O when ctrlAlt: if (Panes.ActiveTab is { } p) { if (Panes.IsFloating(p)) Panes.DockBack(p); else Panes.PopOut(p); } break;
-            case Key.N when ctrlShift && !inTerminal: Panes.NewWindow(); break;   // 0.6.4: a window with a host pane for another monitor
-            default: handled = false; break;
-        }
-        if (handled) e.Handled = true;
-    }
+    // ---- keyboard: Shell/MainWindow.Keyboard.cs (0.6.36, ADR-115) -------------------------------------------------
 
     // ---- header -------------------------------------------------------------------------------------------------
 
@@ -262,12 +230,12 @@ public partial class MainWindow : Window
                         + (Profiles.Current is { } pr && Profiles.LoadWithDefault().Profiles.Count > 1 ? $" · profile {pr.Name}" : "")
                         + (Profiles.ReadOnly ? " · read-only (viewer)" : "");
         LockText.Cursor = Cursors.Hand;
-        LockText.ToolTip = "Click for security options · Ctrl+Shift+L locks the app";
+        LockText.ToolTip = "Click for security options" + (Services.Keys.KeyCommands.Text("app.lock") is { } lockKey ? $" · {lockKey} locks the app" : "");
         if (LockText.ContextMenu == null)
         {
             IEnumerable<object?> Items() => new object?[]
             {
-                Menus.Item("🔒 Lock now", LockNow, "Ctrl+Shift+L", AppLock.CanLock),
+                Menus.Item("🔒 Lock now", LockNow, Services.Keys.KeyCommands.Text("app.lock"), AppLock.CanLock),
                 Menus.Item("Security settings…", () => Navigate("settings")),
                 Menus.Item(Offline.On ? "⛔ Turn offline mode off" : "⛔ Turn offline mode on (block everything outside your network)", async () => await ProtectedSettings.ChangeAsync(Offline.On ? "turn offline mode off" : "turn offline mode on", "net.offline", !Offline.On)),   // admin-protected (0.3.0 §1)
                 Menus.Item("Encrypted backup / export…", () => BackupDialogs.ExportFull(this)),
@@ -368,12 +336,14 @@ public partial class MainWindow : Window
             if (t.Content is IDisposable d) { try { d.Dispose(); } catch { } }
         Panes.ShutDown();
         RightDock?.ShutDown();
+        CloseSidePanelAtExit();
         AppModules.OnShutdown();
         TunnelManager.StopAll();
         VpnManager.StopAll();
         SshPool.DisposeAll();
         // Unsaved editor drafts and unfinished transfers survive a normal exit too: shutdown can't wait for them (ADR-022).
         Recovery.FlushAtExit();
+        ActivityHistory.AtExit();   // ADR-116: "clear when the app closes"
         Workspace.EndSessionCleanly();
     }
 }

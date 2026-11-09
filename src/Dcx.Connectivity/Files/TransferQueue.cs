@@ -393,8 +393,22 @@ public static class TransferHistory
 
     internal static void Reset() { lock (Gate) _all = null; }
 
+    /// <summary>How many finished transfers are kept (history, ADR-116).</summary>
+    public static int Count { get { lock (Gate) return (_all ??= Load()).Count; } }
+
+    /// <summary>Forgets every finished transfer (the encrypted file is rewritten empty).</summary>
+    public static void Clear()
+    {
+        lock (Gate)
+        {
+            _all = new();
+            if (SecureStore.IsUnlocked) SecureStore.Write(FileName, _all);
+        }
+    }
+
     public static void Add(TransferJob j, TimeSpan took)
     {
+        if (!ActivityHistory.MayRecord()) return;   // ADR-116: transfer history is off by default
         try
         {
             lock (Gate)

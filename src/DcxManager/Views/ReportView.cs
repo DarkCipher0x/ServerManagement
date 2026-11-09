@@ -355,6 +355,7 @@ public sealed class ReportView : UserControl, IDisposable
             IncidentUi.AddText(Incidents.ItemKind.Report, _report.Title, ReportEngine.Markdown(_report), host, reportId: _report.Id);
         }, enabled: _report != null);
         yield return Menus.Item("Share HTML report…", Share, enabled: _report != null && ShareService.Supported);
+        yield return Menus.SendItem("💬 Send report to a chat…", () => _report is { } r ? SendItem.OfFile(r.Title, new SendFile(r.Title + ".md", Encoding.UTF8.GetBytes(ReportEngine.Markdown(r)), "text/markdown")) : null, enabled: _report != null);
         if (Assist.Current != null) yield return Menus.Item("Discuss with AI operator", Discuss, enabled: _report != null);
         foreach (var act in ReportAnalysis.Current?.Actions ?? Array.Empty<ReportAction>())
             yield return Menus.Item(act.MenuLabel, () => { if (_report != null) act.Run(_report); }, enabled: _report != null);
@@ -363,6 +364,7 @@ public sealed class ReportView : UserControl, IDisposable
     private IEnumerable<object?> TextAiItems(string sel, string hostName)
     {
         var text = sel.Length > 0 ? sel : "";
+        yield return Menus.SendItem("💬 Send selection to a chat…", () => SendItem.OfText($"{hostName}: report", $"{hostName}:\n{text}"), enabled: text.Length > 0);
         yield return Menus.AssistItem("✦ Explain selection with AI", a => { a.AskOperator($"Explain this from {hostName} and say if it needs action:\n```\n{text}\n```"); return Task.CompletedTask; }, enabled: text.Length > 0, use: AssistUse.LogAnalysis);
     }
 

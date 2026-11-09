@@ -153,6 +153,7 @@ public sealed partial class TerminalView
                 assist != null ? Menus.Item("✦ Summarise recent output with AI", () => Post(new { t = "buffer", purpose = "ai" }), enabled: ai) : null,
                 Menus.Item("⌗ Digest selection (offline)", () => CommandText.ShowDigest(_target.Title, sel), enabled: sel.Length > 0),
                 Menus.Item("✎ Add selection to notes", () => AddToNotes(sel), enabled: sel.Length > 0, tip: "Appends it as a timestamped code block to this session's log note (encrypted)"),
+                Menus.SendItem("💬 Send selection to a chat…", () => SendItem.OfText($"{_target.Title}: terminal output", $"{_target.Title}:\n{sel.TrimEnd()}"), enabled: sel.Length > 0),
                 Menus.AsyncItem("Share selection to Microsoft Teams…", () => TeamsUi.ShareAsync(Window.GetWindow(this), $"{_target.Title}: terminal output", sel.TrimEnd(), null), enabled: sel.Length > 0),
                 Menus.Item("⚑ Add selection to incident", () => IncidentUi.AddText(ItemKindTerminal, $"{_target.Title}: {FirstLine(sel)}", $"{_target.Endpoint}\n```\n{sel.TrimEnd()}\n```", _target.Host),
                     enabled: sel.Length > 0, tip: Incidents.IncidentStore.Active is { } ai2 ? $"Goes to the active incident “{ai2.Title}”" : "Asks which incident (or starts one)"),
@@ -162,6 +163,7 @@ public sealed partial class TerminalView
                     Menus.Item("Copy all output", () => Post(new { t = "buffer", purpose = "copy" })),
                     Menus.Item("Save output as…", () => Post(new { t = "buffer", purpose = "save" })),
                     Menus.Item("Share output…", () => Post(new { t = "buffer", purpose = "share" })),
+                    SendTo.Current is { } chat ? Menus.Item("💬 Send output to a chat…", () => Post(new { t = "buffer", purpose = "chat" }), enabled: chat.WhyNot() == null, tip: chat.WhyNot()) : null,
                     Menus.Item("⌗ Digest output into patterns (offline)", () => Post(new { t = "buffer", purpose = "digest" })),
                     Menus.Sep(),
                     Menus.Item("Scroll to top", () => Post(new { t = "top" })),
@@ -214,9 +216,9 @@ public sealed partial class TerminalView
                 Menus.Item("Smaller text", () => SetFont(_fontSize - 1), "A−"),
                 Menus.Item("Reset text size", () => SetFont(AppSettings.Current.TerminalFontSize)),
                 Menus.Sep(),
-                tab == null ? null : Menus.Item("Split right", () => MainWindow.Instance.Panes.Split(tab, Orientation.Horizontal), "Ctrl+Alt+→"),
-                tab == null ? null : Menus.Item("Split down", () => MainWindow.Instance.Panes.Split(tab, Orientation.Vertical), "Ctrl+Alt+↓"),
-                tab == null ? null : Menus.Item("Tile all tabs", MainWindow.Instance.Panes.Tile, "Ctrl+Alt+T"),
+                tab == null ? null : Menus.Item("Split right", () => MainWindow.Instance.Panes.Split(tab, Orientation.Horizontal), Services.Keys.KeyCommands.Text("pane.split-right")),
+                tab == null ? null : Menus.Item("Split down", () => MainWindow.Instance.Panes.Split(tab, Orientation.Vertical), Services.Keys.KeyCommands.Text("pane.split-down")),
+                tab == null ? null : Menus.Item("Tile all tabs", MainWindow.Instance.Panes.Tile, Services.Keys.KeyCommands.Text("pane.tile")),
                 tab == null ? null : MainWindow.Instance.Panes.IsFloating(tab) ? Menus.Item("Dock back", () => MainWindow.Instance.Panes.DockBack(tab)) : Menus.Item("Pop out to a window", () => MainWindow.Instance.Panes.PopOut(tab), "Ctrl+Alt+O"),
                 Menus.Sep(),
                 Menus.Item(menuMode ? "Right-click: menu (Shift+right-click pastes) — switch to PuTTY style" : "Right-click: PuTTY copy/paste — switch to menu", () => { AppSettings.Current.TerminalRightClick = menuMode ? "paste" : "menu"; try { AppSettings.Save(); } catch { } })),
@@ -276,6 +278,18 @@ public sealed partial class TerminalView
         if (_transport is not ISerialControl sc || !IsConnected) { SetStatus("Not connected."); return; }
         try { sc.SendBreak(); SetStatus($"● {_target.Endpoint} · BREAK sent"); AuditLog.Write("you", _target.Title, "serial BREAK sent"); }
         catch (Exception ex) { OnDrop("break failed: " + ex.Message); }
+    }
+
+    /// <summary>"💬 Send output to a chat…" (ADR-117): the scrollback as a .log file, reviewed in the room before sending.</summary>
+    private async Task SendOutputAsync(ISendTarget chat, string buf)
+    {
+        try
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(buf);
+            if (bytes.LongLength > chat.MaxFileBytes) bytes = System.Text.Encoding.UTF8.GetBytes(buf[^(int)Math.Min(buf.Length, chat.MaxFileBytes / 4)..]);   // the newest output when it's too big
+            await chat.SendAsync(SendItem.OfFile($"Terminal — {_target.Title}", new SendFile($"{FileSafe(_target.Title)}-{DateTime.Now:yyyyMMdd-HHmm}.log", bytes, "text/plain")));
+        }
+        catch (Exception ex) { App.Log("Send output to a chat", ex); Dialogs.Error("Send to a chat", ex.Message); }
     }
 
     private static string FileSafe(string s) => string.Concat(s.Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) || c == ' ' ? '-' : c));

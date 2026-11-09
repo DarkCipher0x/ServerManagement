@@ -30,7 +30,21 @@ public static class HelpKb
     /// <summary>A module owns the articles tagged with <paramref name="module"/> (called when it registers); the index is rebuilt on next use.</summary>
     public static void OwnModule(string module) { lock (Gate) { if (Owned.Add(module)) _articles = null; } }
     public static IReadOnlyCollection<string> OwnedModules { get { lock (Gate) return Owned.ToList(); } }
-    internal static void ResetOwnersForTest() { lock (Gate) { Owned.Clear(); _articles = null; } }
+    internal static void ResetOwnersForTest() { lock (Gate) { Owned.Clear(); Supplied.Clear(); _articles = null; } }
+
+    private static readonly Dictionary<string, string> Supplied = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A module add-on's own help (ADR-120): markdown in the help file's format, carried by the module, not the
+    /// app. Its articles are in the help (tagged with the module) while the module is loaded.</summary>
+    public static void AddModuleHelp(string module, string markdown)
+    {
+        lock (Gate) { Supplied[module] = markdown; Owned.Add(module); _articles = null; }
+    }
+
+    /// <summary>The articles modules supplied in this run (self-test).</summary>
+    internal static List<HelpArticle> SuppliedForTest() { lock (Gate) return Supplied.SelectMany(kv => Tag(Parse(kv.Value, null), kv.Key)).ToList(); }
+
+    private static IEnumerable<HelpArticle> Tag(List<HelpArticle> list, string module) => list.Select(a => a with { Module = module });
 
     /// <summary>Every article in the help file, with no module filter (self-test).</summary>
     internal static List<HelpArticle> AllInFile() => Parse(ReadHelp(), null);
@@ -68,6 +82,7 @@ public static class HelpKb
     private static List<HelpArticle> Load()
     {
         var list = Parse(ReadHelp(), Owned);
+        foreach (var (module, md) in Supplied) list.AddRange(Tag(Parse(md, null), module));
         // Index: title ×3, keywords ×3, body ×1.
         _tf = list.Select(a =>
         {

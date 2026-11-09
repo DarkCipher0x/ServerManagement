@@ -105,8 +105,8 @@ public sealed class DocPane : TabControl
                     Menus.Item("Split down", () => { if (t != null) h.Split(t, Orientation.Vertical); }, "Ctrl+Alt+↓", t != null && many),
                     Menus.Item("Move to next pane", () => { if (t != null) h.MoveToNextPane(t); }, enabled: t != null && panesHere > 1),
                     Menus.Sep(),
-                    Menus.Item("Tile all tabs", h.Tile, "Ctrl+Alt+T", !inWindow),
-                    Menus.Item("Merge all panes", h.MergeAll, "Ctrl+Alt+U", !inWindow && h.PaneCount > 1),
+                    Menus.Item("Tile all tabs", h.Tile, Services.Keys.KeyCommands.Text("pane.tile"), !inWindow),
+                    Menus.Item("Merge all panes", h.MergeAll, Services.Keys.KeyCommands.Text("pane.merge"), !inWindow && h.PaneCount > 1),
                     Menus.Sep(),
                 }.Concat(h.WindowMenuItems(t)).ToArray());
             };
@@ -198,6 +198,8 @@ public sealed class PaneHost : Border
     private readonly List<FloatWindow> _floats = new();
     private readonly HashSet<TabItem> _wired = new();
     private bool _shuttingDown;
+    /// <summary>The app is exiting (its windows close without moving their tabs).</summary>
+    internal bool ShuttingDown => _shuttingDown;
 
     public DocPane ActivePane { get; private set; }
     public event Action<TabItem?>? ActiveTabChanged;
@@ -261,6 +263,8 @@ public sealed class PaneHost : Border
         {
             pane = (session ? TakeSessionTarget() : null) ?? ActivePane;
             if (!session && EmbeddedOf(pane) is { } e) pane = OuterPane(e) ?? MainPanes.First();
+            // 0.6.39: a window shared live into a chat call shows only its tab; nothing else opens into it.
+            if (FloatOf(pane) is { FixedTitle: not null }) pane = MainPanes.Contains(_mainLast) ? _mainLast : MainPanes.First();
         }
         Wire(tab);
         pane.Items.Add(tab);
@@ -651,7 +655,7 @@ public sealed class PaneHost : Border
     {
         var here = t == null ? null : WindowOf(t);
         if (t != null)
-            yield return here != null ? Menus.Item("Dock back into the main window", () => DockBack(t)) : Menus.Item("Pop out to a window", () => PopOut(t), "Ctrl+Alt+O");
+            yield return here != null ? Menus.Item("Dock back into the main window", () => DockBack(t)) : Menus.Item("Pop out to a window", () => PopOut(t), Services.Keys.KeyCommands.Text("pane.pop-out"));
         var others = _floats.Where(f => f != here).ToList();
         if (t != null && (others.Count > 0 || here != null))
         {
@@ -662,7 +666,7 @@ public sealed class PaneHost : Border
             items.Add(Menus.Item("New window", () => { var w = NewWindow(); MoveToWindow(t, w); }));
             yield return Menus.Sub("Move to window", items.ToArray());
         }
-        yield return Menus.Item("New window (with a host pane, for another monitor)", () => NewWindow(), "Ctrl+Shift+N");
+        yield return Menus.Item("New window (with a host pane, for another monitor)", () => NewWindow(), Services.Keys.KeyCommands.Text("window.new"));
     }
 
     /// <summary>The user closes an extra window that still has tabs: move them to the main window (default), close them,
@@ -695,6 +699,27 @@ public sealed class PaneHost : Border
             }
         SetActive(target);
     }
+
+    /// <summary>
+    /// 0.6.38: an extra window has closed. A tab still in it (one that reached it while it was closing, after its tabs were
+    /// moved) would otherwise live on in a closed window: never shown, never closed, its browser still playing. It moves to
+    /// the main window instead (at exit the app closes everything anyway).
+    /// </summary>
+    internal void FloatClosed(FloatWindow fw)
+    {
+        _floats.Remove(fw);
+        var left = new List<TabItem>();
+        foreach (var p in PanesOf(fw).ToList())
+            foreach (var t in p.Items.OfType<TabItem>().ToList()) { p.Items.Remove(t); left.Add(t); }
+        if (left.Count == 0 || _shuttingDown) return;
+        LateTabsRescued += left.Count;
+        var target = MainPanes.Contains(_mainLast) ? _mainLast : MainPanes.First();
+        foreach (var t in left) { target.Items.Add(t); target.SelectedItem = t; }
+        SetActive(target);
+    }
+
+    /// <summary>Tabs moved out of a window after it closed (self-test).</summary>
+    internal int LateTabsRescued { get; private set; }
 
     /// <summary>The window became active (or its host pane is used): new tabs go to the pane last used in it.</summary>
     internal void ActivateWindow(FloatWindow w)

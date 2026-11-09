@@ -19,7 +19,7 @@ $cfg = Get-ReleaseConfig
 $out = Join-Path $ReleaseRoot "dist\$Version"
 $tag = "v$Version"
 $api = $cfg.publicApi
-$files = $cfg.releaseAssets | ForEach-Object { Join-Path $out $_.Replace('{ver}', $Version) }
+$files = @($cfg.releaseAssets | ForEach-Object { Join-Path $out $_.Replace('{ver}', $Version) }) + @(Get-PublishedAddonAssets $cfg | ForEach-Object { Join-Path $out $_ })
 foreach ($f in $files) { if (-not (Test-Path $f)) { throw "missing $f - run build.ps1 first" } }
 $local = @{}
 foreach ($f in $files) { $local[(Split-Path $f -Leaf)] = (Get-FileHash $f -Algorithm SHA256).Hash.ToLowerInvariant() }

@@ -94,7 +94,7 @@ public static class SessionAlerts
     private static WeakReference<TabItem>? _lastTab;
     private static System.Windows.Threading.DispatcherTimer? _hide;
 
-    private static void ShowDesktop(string title, string text, TabItem tab)
+    private static void ShowDesktop(string title, string text, TabItem? tab)
     {
         try
         {
@@ -112,7 +112,7 @@ public static class SessionAlerts
             }
             var name = Application.Current.MainWindow?.Title is { Length: > 0 } t ? t : "ServerManagement";
             _icon.Text = name.Length > 63 ? name[..63] : name;
-            _lastTab = new WeakReference<TabItem>(tab);
+            _lastTab = tab != null ? new WeakReference<TabItem>(tab) : null;
             _icon.Visible = true;
             _icon.ShowBalloonTip(8000, Trim(title, 63), Trim(text, 255), System.Windows.Forms.ToolTipIcon.Info);
             _hide!.Stop(); _hide.Start();
@@ -120,11 +120,21 @@ public static class SessionAlerts
         catch (Exception ex) { App.Log("Alert notification", ex); }
     }
 
+    /// <summary>A Windows notification not tied to a tab (<see cref="DesktopToast"/>: the stream manager's key feedback).
+    /// Clicking it brings the app back. The self-test records it and shows nothing.</summary>
+    public static void Toast(string title, string text)
+    {
+        lock (Recent) { Recent.Add(new Alert(DateTime.Now, "toast", title, text, !TestMode.Running)); if (Recent.Count > 200) Recent.RemoveAt(0); }
+        if (TestMode.Running || Application.Current?.Dispatcher is not { } d) return;
+        d.BeginInvoke(() => ShowDesktop(title, text, null));
+    }
+
     private static string Trim(string s, int max) => s.Length > max ? s[..(max - 1)] + "…" : s;
 
     private static void BringBack()
     {
         if (_icon != null) _icon.Visible = false;
+        if (_lastTab == null && MainWindow.Instance is { } only) { if (only.WindowState == WindowState.Minimized) only.WindowState = WindowState.Normal; only.Activate(); return; }
         if (_lastTab?.TryGetTarget(out var tab) != true || tab == null || MainWindow.Instance is not { } main) return;
         if (!main.Panes.AllTabs.Contains(tab)) return;
         main.Panes.Select(tab);

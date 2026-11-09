@@ -366,6 +366,89 @@ public static class PortalTests
             catch (Exception ex) { fail("portal tab (local HTTP)", ex); }
             finally { Dialogs.ConfirmForTests = confirmWas; }
 
+            // ---- 4c. a popped-out portal stops when its window closes (0.6.38, DarkCipher0x: a video in a popped-out portal
+            // window kept playing after the window was closed, until the app was killed) -----------------------------------
+            var chooseWas = Dialogs.ChooseForTests;
+            var soundSite = $"http://127.0.0.1:{http!.Port}";
+            try
+            {
+                var sb = new PortalBookmark { Title = "Sound (self-test)", Url = soundSite + "/sound", Environment = Envs.Lab };
+                Portals.Upsert(sb); addedBookmarks.Add(sb);
+                // The test tone is never heard: a muted page still reports that it plays audio.
+                Portals.SetSiteMuted(soundSite, true);
+                int heard = 0;
+                async Task<(BrowserView V, FloatWindow W)> PlayingInWindow()
+                {
+                    var v = PortalUi.Open(sb, window: true) ?? throw new Exception("not opened");
+                    if (!await Until(() => v.Core != null || v.InitError != null)) throw new Exception("browser did not start");
+                    if (v.InitError != null) throw new Exception("init: " + v.InitError);
+                    if (!await Until(() => v.Core!.DocumentTitle == "DCX sound")) throw new Exception("sound page not loaded: " + v.Core!.Source);
+                    if (!await Until(() => v.IsMuted)) throw new Exception("the test page isn't muted");
+                    await v.Core!.ExecuteScriptAsync("go()");
+                    if (!await Until(() => v.Core.IsDocumentPlayingAudio, 1500))
+                    {
+                        // An AudioContext may wait for a click on the page (autoplay rules): one click on its button, through DevTools.
+                        foreach (var type in new[] { "mousePressed", "mouseReleased" })
+                            await v.Core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent", $$"""{"type":"{{type}}","x":40,"y":30,"button":"left","clickCount":1}""");
+                        await Until(() => v.Core.IsDocumentPlayingAudio, 4000);
+                    }
+                    if (v.Core.IsDocumentPlayingAudio) heard++;
+                    var w = v.Tab != null ? main.Panes.WindowOf(v.Tab) : null;
+                    return (v, w ?? throw new Exception("not in a pop-out window"));
+                }
+                void NoOrphans(string when)
+                {
+                    if (BrowserView.Live.FirstOrDefault(x => x.Tab != null && !main.Panes.Contains(x.Tab)) is { } o)
+                        throw new Exception($"{when}: a portal browser is still running without a tab ({o.Core?.Source})");
+                }
+
+                // The window's close button, "Close them": the browser is closed with its tab.
+                var (v1, w1) = await PlayingInWindow();
+                Dialogs.ChooseForTests = (1, false);
+                w1.Close();
+                if (!await Until(() => !BrowserView.Live.Contains(v1))) throw new Exception("closing the window (Close them) left its browser running");
+                if (main.Panes.Floats.Contains(w1)) throw new Exception("the closed window is still listed");
+                NoOrphans("Close them");
+
+                // The window's close button, "Move them to the main window": the same tab, still playing, in the main window; then closed.
+                var (v2, w2) = await PlayingInWindow();
+                Dialogs.ChooseForTests = (0, false);
+                w2.Close(); await Settle(300);
+                if (main.Panes.Floats.Contains(w2) || v2.Tab == null || !main.Panes.Contains(v2.Tab) || main.Panes.IsFloating(v2.Tab) || !BrowserView.Live.Contains(v2))
+                    throw new Exception("Move them to the main window didn't bring the tab back");
+                main.CloseTab(v2.Tab);
+                if (!await Until(() => !BrowserView.Live.Contains(v2))) throw new Exception("the moved tab's browser kept running after the tab was closed");
+                NoOrphans("Move them");
+
+                // The tab's own close inside the window: the browser goes, and the emptied window with it.
+                var (v3, w3) = await PlayingInWindow();
+                main.CloseTab(v3.Tab!); await Settle(300);
+                if (BrowserView.Live.Contains(v3) || main.Panes.Floats.Contains(w3)) throw new Exception("closing the tab in its window left the browser or the window");
+                NoOrphans("tab close");
+
+                // A tab that reaches a window while it closes (after its tabs were moved) comes back to the main window.
+                var (v5, w5) = await PlayingInWindow();
+                var late = new System.Windows.Controls.TabItem { Header = "late (self-test)", Content = new System.Windows.Controls.TextBlock() };
+                w5.Closing += (_, _) => w5.Frame.Pane.Items.Add(late);   // runs after the window's own handler moved its tabs
+                Dialogs.ChooseForTests = (0, false);
+                w5.Close(); await Settle(300);
+                if (!main.Panes.Contains(late) || main.Panes.IsFloating(late) || main.Panes.LateTabsRescued < 1) throw new Exception("a tab that reached a closing window was left in it");
+                main.CloseTab(late);
+                main.CloseTab(v5.Tab!);
+                NoOrphans("late tab");
+
+                // The safety net: a tab taken out of every pane without being closed (any path) has its browser closed.
+                var (v4, _) = await PlayingInWindow();
+                int orphansWas = BrowserView.Orphans;
+                main.Panes.Remove(v4.Tab!);
+                if (!await Until(() => !BrowserView.Live.Contains(v4))) throw new Exception("a portal tab taken out of every pane kept its browser running");
+                if (BrowserView.Orphans != orphansWas + 1) throw new Exception("the orphaned browser wasn't counted");
+                NoOrphans("orphan");
+                ok($"popped-out portal playing sound (muted test tone, playing in {heard}/5): the window's ✕ with “Close them” closes its browser; “Move them to the main window” brings the same tab back, closed with its tab; the tab's ✕ in the window closes browser and window; a tab reaching a closing window comes back to the main window; a portal tab taken out of every pane without being closed has its browser closed (and logged); no browser left without a tab");
+            }
+            catch (Exception ex) { fail("popped-out portal closes its browser", ex); }
+            finally { Dialogs.ChooseForTests = chooseWas; Portals.SetSiteMuted(soundSite, false); }
+
             // ---- 4b. restored portal tabs (0.6.35, DarkCipher0x's screenshot: a restored portal tab stayed blank and ↻ raised
             // WebView2's "requires its CoreWebView2 prior to the CoreWebView2 being initialized") ----------------------------
             var restoredTabs = new List<System.Windows.Controls.TabItem>();
@@ -600,6 +683,12 @@ internal sealed class TestWeb : IDisposable
     private static (string Type, string Body, string Extra) Route(string path) => path switch
     {
         "/popup" => ("text/html; charset=utf-8", "<!doctype html><title>DCX popup</title><p>popup</p>", ""),
+        // 0.6.38: a page that plays a tone on go() or a click on its button (the test mutes it first).
+        "/sound" => ("text/html; charset=utf-8", """
+            <!doctype html><title>DCX sound</title>
+            <button id=b onclick="go()" style="position:fixed;left:0;top:0;width:200px;height:100px">Play</button>
+            <script>let ctx;function go(){if(!ctx){ctx=new AudioContext();const o=ctx.createOscillator(),g=ctx.createGain();g.gain.value=0.02;o.connect(g).connect(ctx.destination);o.start();}ctx.resume();}</script>
+            """, ""),
         "/login" => ("text/html; charset=utf-8", "<!doctype html><title>DCX login</title><form><input type=text id=u name=u><input type=password id=p name=p><button>Sign in</button></form>", ""),
         // 0.6.20: a sign-in in steps (user name, then password, then a code, as Synology DSM asks), one inside a shadow
         // root, and a page with no form at all.

@@ -5,7 +5,7 @@
 param([Parameter(Mandatory)][string]$Version)
 $ErrorActionPreference = 'Stop'
 $dist = Join-Path (Join-Path (Split-Path $PSScriptRoot -Parent) 'dist') $Version
-$files = Get-ChildItem $dist -File | Where-Object { ($_.Name -like "DarkCipherServerManagement-$Version-*" -and $_.Name -notlike '*-test.msix' -and ($_.Extension -in '.msi', '.zip', '.pdf', '.msix' -or $_.Name -like '*-sbom.cdx.json' -or $_.Name -like '*-Setup.exe')) -or $_.Name -in 'update.json', 'update.json.sig', 'update.json.pq.sig' } | Sort-Object Name
+$files = Get-ChildItem $dist -File | Where-Object { ($_.Name -like "DarkCipherServerManagement-$Version-*" -and $_.Name -notlike '*-test.msix' -and ($_.Extension -in '.msi', '.zip', '.pdf', '.msix' -or $_.Name -like '*-sbom.cdx.json' -or $_.Name -like '*-Setup.exe')) -or $_.Name -in 'update.json', 'update.json.sig', 'update.json.pq.sig' -or $_.Extension -eq '.dcxaddon' } | Sort-Object Name   # .dcxaddon: only the published ones are copied here (release.json publishedAddons)
 if (-not $files) { throw "no release files for $Version in $dist" }
 $enc = New-Object Text.UTF8Encoding $false
 $lines = foreach ($f in $files) {

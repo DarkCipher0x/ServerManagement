@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
 namespace DcxManager.Services;
@@ -25,6 +26,9 @@ public static class PolicySettings
     public static readonly IReadOnlyDictionary<string, string> Excluded = new Dictionary<string, string>
     {
         [nameof(AppSettings.HostsOpenIn)] = "retired in 0.6.31: sessions always open in the main tab bar",
+        [nameof(AppSettings.ModuleData)] = "module add-ons' own settings (each module registers its policies, ADR-120)",
+        [nameof(AppSettings.Retired)] = "settings this version doesn't know, kept unchanged (ADR-120)",
+        [nameof(AppSettings.HistoryLastCleared)] = "state: when this PC's history was last cleared (the automatic clear counts from it)",
         [nameof(AppSettings.VultrAccounts)] = "per-user cloud accounts with their API keys (secrets never go in the registry)",
         [nameof(AppSettings.ContaboAccounts)] = "per-user cloud accounts with their credentials",
         [nameof(AppSettings.HetznerAccounts)] = "per-user cloud projects with their tokens",
@@ -60,6 +64,9 @@ public static class PolicySettings
         [nameof(AppSettings.AiPanelWidth)] = "the AI panel's width right now",
         [nameof(AppSettings.HostsDockWidth)] = "the folder pane's width right now",
         [nameof(AppSettings.WindowHostPaneWidth)] = "the extra windows' host pane width right now",
+        [nameof(AppSettings.SidePanelWidth)] = "the side panel's width right now",
+        [nameof(AppSettings.SidePanelShown)] = "whether a side panel is open right now",
+        [nameof(AppSettings.ChatPanelRoom)] = "the chat room pinned to the side panel (one of your own rooms)",
         [nameof(AppSettings.WorkspaceWindows)] = "the extra windows open at the last exit (state)",
         [nameof(AppSettings.TmuxConfig)] = "your own tmux config (free text, often longer than a policy value)",
         [nameof(AppSettings.CollapsedNavSections)] = "replaced by ExpandedNavSections (kept to read old settings)",
@@ -103,7 +110,11 @@ public static class PolicySettings
         ("BeyondTrust", Array.Empty<string>(), new[] { "BeyondTrust" }),
         ("Bitwarden", Array.Empty<string>(), new[] { "Bitwarden" }),
         ("Locks and access", new[] { nameof(AppSettings.LockAuditLog), nameof(AppSettings.LockedCategories), nameof(AppSettings.LockPolicyMode), nameof(AppSettings.AllowUserLocks), nameof(AppSettings.AllowItemLocks), nameof(AppSettings.LockOpenMinutes) }, Array.Empty<string>()),
-        ("Add-ons", new[] { nameof(AppSettings.AllowAddonInstall), nameof(AppSettings.AddonsNeedApproval), nameof(AppSettings.AddonAllowedIds), nameof(AppSettings.AddonBlockedIds), nameof(AppSettings.AddonRequireSigned) }, Array.Empty<string>()),
+        ("Keyboard shortcuts", Array.Empty<string>(), new[] { "KeyBindings" }),
+        ("History", new[] { nameof(AppSettings.HistorySave), nameof(AppSettings.HistoryAutoClear) }, Array.Empty<string>()),
+        ("CipherChat", Array.Empty<string>(), new[] { "Chat" }),
+        ("Windows management", Array.Empty<string>(), new[] { "WinTools" }),
+        ("Add-ons", new[] { nameof(AppSettings.AllowAddonInstall), nameof(AppSettings.AddonsNeedApproval), nameof(AppSettings.AddonAllowedIds), nameof(AppSettings.AddonBlockedIds), nameof(AppSettings.AddonRequireSigned), nameof(AppSettings.AddonAllowModules) }, Array.Empty<string>()),
         ("What users may add and change", Array.Empty<string>(), new[] { "Allow" }),
     };
 
@@ -115,6 +126,7 @@ public static class PolicySettings
         [nameof(AppSettings.SessionsOnExit)] = new[] { "ask", "save", "never" },
         [nameof(AppSettings.WindowHostPane)] = new[] { "pinned", "auto" },
         [nameof(AppSettings.UpdateSource)] = new[] { "github", "url" },
+        [nameof(AppSettings.HistoryAutoClear)] = ActivityHistory.AutoClear.All,
         [nameof(AppSettings.UpdateCheckInterval)] = new[] { "weekly", "daily" },
         [nameof(AppSettings.ThemePreset)] = new[] { "darkcipher", "graphite", "teal", "highcontrast", "neutral", "slate", "arctic" },
         [nameof(AppSettings.StatusIntensity)] = new[] { "subtle", "standard", "strong" },
@@ -134,7 +146,8 @@ public static class PolicySettings
     /// <summary>Ranges of numeric settings (anything else: 0 or more).</summary>
     private static readonly Dictionary<string, (double Min, double Max)> Ranges = new()
     {
-        [nameof(AppSettings.TerminalFontSize)] = (6, 40), [nameof(AppSettings.Scrollback)] = (100, 1_000_000), [nameof(AppSettings.TerminalAlertSeconds)] = (0, 86_400),
+        [nameof(AppSettings.ChatMaxFileMB)] = (1, 100), [nameof(AppSettings.ChatAutoLockMinutes)] = (0, 1440), [nameof(AppSettings.WinToolsEventLimit)] = (50, 5000),
+        [nameof(AppSettings.TerminalFontSize)] = (6, 40),[nameof(AppSettings.Scrollback)] = (100, 1_000_000), [nameof(AppSettings.TerminalAlertSeconds)] = (0, 86_400),
         [nameof(AppSettings.ConnectTimeoutSeconds)] = (1, 600), [nameof(AppSettings.AutoReconnectMaxSeconds)] = (1, 3600),
         [nameof(AppSettings.AiCommandTimeoutMinutes)] = (1, 120), [nameof(AppSettings.AiContext)] = (512, 1_048_576),
         [nameof(AppSettings.AiCpuThreads)] = (0, 256), [nameof(AppSettings.AiMaxSteps)] = (1, 100), [nameof(AppSettings.AiKeepWarmMinutes)] = (0, 1440),
@@ -152,6 +165,9 @@ public static class PolicySettings
     /// <summary>One policy: the setting, its registry type, category and what it accepts.</summary>
     public sealed record Entry(string Name, Kind Kind, string Category, PropertyInfo Property, (double Min, double Max)? Range, string[]? Choices)
     {
+        /// <summary>The module whose settings object holds this setting (ADR-120), or null for the app's own settings.</summary>
+        public string? Module { get; init; }
+
         /// <summary>"Offline mode" from "OfflineMode" (the name shown in templates and Settings).</summary>
         public string Title => ProtectedSettings.Items.FirstOrDefault(i => i.Setting == Name)?.Title
                                ?? (Restrictions.All.FirstOrDefault(a => a.Setting == Name) is { Action: not null } r ? "Allow " + r.What : null)
@@ -166,8 +182,16 @@ public static class PolicySettings
     private static string? CategoryOf(string name) =>
         Categories.FirstOrDefault(c => c.Names.Contains(name) || c.Prefixes.Any(p => name.StartsWith(p, StringComparison.Ordinal))).Category;
 
-    /// <summary>Every policy, in category order.</summary>
-    public static readonly IReadOnlyList<Entry> Catalog = typeof(AppSettings)
+    /// <summary>Every policy, in category order: the app's own, then those of the module add-ons loaded in this run
+    /// (ADR-120, <see cref="RegisterModule"/>).</summary>
+    public static IReadOnlyList<Entry> Catalog => _catalog;
+
+    private static IReadOnlyList<Entry> _catalog = CoreCatalog();
+    private static readonly List<Entry> ModuleEntries = new();
+    private static readonly Dictionary<string, Func<object>> ModuleTargets = new(StringComparer.Ordinal);
+    private static readonly List<string> ModuleCategories = new();
+
+    private static IReadOnlyList<Entry> CoreCatalog() => typeof(AppSettings)
         .GetProperties(BindingFlags.Public | BindingFlags.Instance)
         .Where(p => p.CanRead && p.CanWrite && !Excluded.ContainsKey(p.Name) && KindOf(p.PropertyType) != null && CategoryOf(p.Name) != null)
         .Select(p => new Entry(p.Name, KindOf(p.PropertyType)!.Value, CategoryOf(p.Name)!, p,
@@ -175,7 +199,56 @@ public static class PolicySettings
         .OrderBy(e => Array.FindIndex(Categories, c => c.Category == e.Category)).ThenBy(e => e.Name, StringComparer.Ordinal)
         .ToList();
 
-    public static IEnumerable<string> CategoryNames => Categories.Select(c => c.Category);
+    public static IEnumerable<string> CategoryNames => Categories.Select(c => c.Category).Concat(ModuleCategories);
+
+    /// <summary>
+    /// A module add-on's settings become policies (ADR-120): every public bool, int, double, string or List&lt;string&gt;
+    /// property of its settings object whose name starts with <paramref name="prefix"/>, under <paramref name="category"/>,
+    /// with the titles and ranges given. Names must not clash with the app's own settings or another module's, and names
+    /// that hold secrets (…Key, …Token, …Password, …Secret, …Accounts) are refused; <paramref name="notPolicies"/> are the user's own
+    /// choices that are never policies. The policy keys are read again, so a
+    /// value set for the module before it loaded is in force at once.
+    /// </summary>
+    public static void RegisterModule(string module, string category, string prefix, Type settingsType, Func<object> target,
+        IReadOnlyDictionary<string, string> titles, IReadOnlyDictionary<string, (double Min, double Max)>? ranges = null, IReadOnlyDictionary<string, string[]>? choices = null, IReadOnlyCollection<string>? notPolicies = null)
+    {
+        if (prefix.Length < 3 || !char.IsUpper(prefix[0])) throw new ArgumentException("a module's policy prefix is a capitalised word of 3+ letters");
+        lock (ModuleEntries)
+        {
+            if (ModuleTargets.ContainsKey(module)) return;
+            var added = new List<Entry>();
+            foreach (var p in settingsType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!p.CanRead || !p.CanWrite || !p.Name.StartsWith(prefix, StringComparison.Ordinal) || notPolicies?.Contains(p.Name) == true || KindOf(p.PropertyType) is not { } kind) continue;
+                if (Regex.IsMatch(p.Name, "(Key|Keys|Token|Password|Secret|Accounts)$")) throw new ArgumentException($"{module}: {p.Name} looks like a secret and can't be a policy");
+                if (_catalog.Any(e => e.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase))) throw new ArgumentException($"{module}: {p.Name} is already a policy");
+                if (titles.TryGetValue(p.Name, out var t)) Titles[p.Name] = t;
+                added.Add(new Entry(p.Name, kind, category, p, ranges?.TryGetValue(p.Name, out var r) == true ? r : null, choices?.GetValueOrDefault(p.Name)) { Module = module });
+            }
+            ModuleTargets[module] = target;
+            if (!ModuleCategories.Contains(category) && !Categories.Any(c => c.Category == category)) ModuleCategories.Add(category);
+            ModuleEntries.AddRange(added);
+            _catalog = CoreCatalog().Concat(ModuleEntries.OrderBy(e => e.Category, StringComparer.Ordinal).ThenBy(e => e.Name, StringComparer.Ordinal)).ToList();
+        }
+        Reload();
+        ApplyToModule(module);
+    }
+
+    /// <summary>Puts the policy values over a module's settings object; returns the settings it had to change.</summary>
+    public static IReadOnlyList<string> ApplyToModule(string module)
+    {
+        Func<object>? target;
+        lock (ModuleEntries) target = ModuleTargets.GetValueOrDefault(module);
+        if (target?.Invoke() is not { } obj) return [];
+        return Apply(obj, v => v.Entry.Module == module);
+    }
+
+    /// <summary>The settings object a policy entry belongs to (the app's settings, or its module's).</summary>
+    public static object? TargetOf(Entry e)
+    {
+        if (e.Module is null) return AppSettings.Current;
+        lock (ModuleEntries) return ModuleTargets.GetValueOrDefault(e.Module)?.Invoke();
+    }
 
     /// <summary>Settings that are neither in the catalog nor excluded (the self-test wants none).</summary>
     public static IReadOnlyList<string> Unaccounted => typeof(AppSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -304,10 +377,12 @@ public static class PolicySettings
     }
 
     /// <summary>Puts every policy value over <paramref name="s"/>. Returns the settings it had to change.</summary>
-    public static IReadOnlyList<string> ApplyTo(AppSettings s)
+    public static IReadOnlyList<string> ApplyTo(AppSettings s) => Apply(s, v => v.Entry.Module is null);
+
+    private static IReadOnlyList<string> Apply(object s, Func<Value, bool> which)
     {
         var changed = new List<string>();
-        foreach (var v in _values.Values)
+        foreach (var v in _values.Values.Where(which))
         {
             var cur = v.Entry.Property.GetValue(s);
             // A bool? with a value boxes as a bool, so Equals covers AiFeatures too.
@@ -322,8 +397,31 @@ public static class PolicySettings
     /// <summary>Titles where the property name doesn't read well on its own (0.5.1).</summary>
     private static readonly Dictionary<string, string> Titles = new()
     {
+        [nameof(AppSettings.KeyBindings)] = "Keyboard shortcuts: one command.id=keys line each, e.g. tab.close=Ctrl+Shift+W or app.lock= for none (the command ids are listed in Settings → Keyboard)",
+        [nameof(AppSettings.KeyBindingsAllowChange)] = "Users may change keyboard shortcuts",
+        [nameof(AppSettings.ChatFeatures)] = "CipherChat built in (end-to-end encrypted chat and calls); 0 = never loaded, 1 = on (applies at the next start)",
+        [nameof(AppSettings.ChatAdmin)] = "CipherChat server administration (people, roles, requests, audit, server settings) behind its own admin sign-in; 0 = no admin pane",
+        [nameof(AppSettings.ChatAllowFiles)] = "Files and pictures in CipherChat chats (send and save); 0 = text only",
+        [nameof(AppSettings.ChatMaxFileMB)] = "The largest file this PC sends in a CipherChat chat, in MB (1–100)",
+        [nameof(AppSettings.ChatAllowCalls)] = "CipherChat voice and video calls; 0 = no calls",
+        [nameof(AppSettings.ChatShareFromScreens)] = "Share into CipherChat from terminals, the file commander, Toolbox and reports (always shown before sending); 0 = off",
+        [nameof(AppSettings.ChatToastPreviews)] = "Message text in CipherChat notifications; 0 = who and where only (default)",
+        [nameof(AppSettings.ChatNotify)] = "Windows notifications for new CipherChat messages while their room isn't in front; 0 = none",
+        [nameof(AppSettings.ChatRingSound)] = "The ringtone for incoming CipherChat calls; 0 = silent ring (the ring window still shows)",
+        [nameof(AppSettings.ChatAutoLockMinutes)] = "Lock every CipherChat chat (wipe its keys) after this many idle minutes on the PC (0–1440); 0 = only with the app lock and at exit",
+        [nameof(AppSettings.ChatAllowSessionShare)] = "Share a terminal, Remote Desktop or VNC tab live into a CipherChat room (an end-to-end encrypted call showing only that tab, asked every time); 0 = off",
+        [nameof(AppSettings.WinToolsFeatures)] = "Windows management built in (services, processes, event logs, storage, users and groups, shares, tasks, network, WMI console); 0 = never loaded, 1 = on (applies at the next start)",
+        [nameof(AppSettings.WinToolsAllowChanges)] = "Windows management may change things (services, processes, scheduled tasks; each confirmed and audited); 0 = look only",
+        [nameof(AppSettings.WinToolsAllowRemote)] = "Windows management may manage other Windows computers (WMI / event logs with the host's saved credential or your Windows sign-in); 0 = this PC only",
+        [nameof(AppSettings.WinToolsAllowConsole)] = "The WMI console in Windows management (WQL and wmic-style commands, reading only); 0 = no console",
+        [nameof(AppSettings.WinToolsAllowSecurityLog)] = "Reading the Security event log in Windows management (needs administrator rights there); 0 = not shown",
+        [nameof(AppSettings.WinToolsEventLimit)] = "The most events Windows management reads per event log view (50–5000)",
+        [nameof(AppSettings.ChatAllowedServers)] = "The only CipherChat servers that may be used (https:// origins); empty = any https:// server",
+        [nameof(AppSettings.HistorySave)] = "Keep history (quick connect and palette recents, Toolbox runs, transfers, last connected, portal pages); off = nothing is kept",
+        [nameof(AppSettings.HistoryAutoClear)] = "When kept history is cleared automatically (never, exit = when the app closes, or every 1, 7 or 30 days)",
         [nameof(AppSettings.AddonAllowedIds)] = "Only these add-on ids may be installed (empty = any that passes the other checks)",
         [nameof(AppSettings.AddonBlockedIds)] = "Add-on ids that may never be installed or run",
+        [nameof(AppSettings.AddonAllowModules)] = "Module add-ons signed by DarkCipher Systems load into the app as modules (e.g. the stream manager for Twitch); 0 = none is installed or loaded",
         [nameof(AppSettings.LockedCategories)] = "Categories locked by your organisation (audit, credentials, hosts, …)",
         [nameof(AppSettings.CommanderRestoreLast)] = "File commander reconnects to its last places when it opens",
         [nameof(AppSettings.HostsDock)] = "The hosts panel beside every tab of the main window: pinned open or auto-collapsing (pinned or auto)",

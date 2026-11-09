@@ -66,6 +66,19 @@ src/DcxManager/Assets/web/*.js
 src/DcxManager/Assets/web/*.css
 src/DcxManager/Assets/web/*.html
 src/DcxManager/Assets/web/xterm-LICENSE.txt
+# the vendored CipherChat libraries (ADR-117; public MIT code from github.com/DarkCipher0x/CipherChat, pinned in VENDOR.json)
+src/Vendor/CipherChat/*.props
+src/Vendor/CipherChat/LICENSE
+src/Vendor/CipherChat/README.md
+src/Vendor/CipherChat/VENDOR.json
+src/Vendor/CipherChat/*/*.csproj
+src/Vendor/CipherChat/*/packages.lock.json
+# CipherChat's own call page (0.6.38; web/callhost + its call engine and libraries, unchanged), embedded in Dcx.Chat
+src/Vendor/CipherChat/CallHost/**/*.html
+src/Vendor/CipherChat/CallHost/**/*.js
+src/Vendor/CipherChat/CallHost/**/*.css
+src/Vendor/CipherChat/CallHost/**/*.json
+src/Vendor/CipherChat/CallHost/**/LICENSE
 
 # --- build and release tools ---
 tools/*.ps1
@@ -94,3 +107,5 @@ tools/msix/packages.lock.json
 !.selftest*/**
 !dist/**
 !publish/**
+# Add-ons are never published (ADR-120): the stream manager add-on, its source included.
+!samples/addons/stream/**

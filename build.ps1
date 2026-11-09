@@ -39,6 +39,8 @@ $out = "dist\$version"
 if ((Test-Path "$out\DarkCipherServerManagement-$version-x64.msi") -or (Test-Path "dist\DarkCipherServerManagement-$version-x64.msi")) { throw "dist already has the $version MSI - bump <Version> in $proj first (older MSIs are kept)" }
 # The README's version badge and Release history entry come from the version and its release notes, never by hand.
 & "$PSScriptRoot\tools\write-readme-version.ps1" -Version $version
+# ADR-117: the vendored CipherChat must be exactly the pinned copy (fixes go to CipherChat, then sync-cipherchat.ps1).
+& "$PSScriptRoot\tools\sync-cipherchat.ps1" -Check
 
 # 1. self-test against a throwaway data folder. The solution is built (0.2.0: it grows to several projects); the
 #    version and the publish still come from the exe project.
@@ -50,8 +52,14 @@ $env:DCX_DATA_DIR = Join-Path $tmp 'data'
 New-Item -ItemType Directory $env:DCX_DATA_DIR | Out-Null
 $exe = Get-ChildItem src\DcxManager\bin\Debug -Recurse -Filter DcxServerManager.exe | Select-Object -First 1
 # 0.2.0: a fresh store is a new install, where AI features start off. Run 1 turns them on (the full suite); run 2 starts
-# with them off and checks that no AI exists anywhere (the AI-off suite).
+# with them off and checks that no AI exists anywhere (the AI-off suite). 0.6.37: CipherChat (ADR-117) and the stream
+# manager (ADR-118a) follow the same pattern: on in run 1, off (never loaded) in run 2 and in the published-exe run.
 $env:DCX_AI_FEATURES = '1'
+$env:DCX_CHAT_FEATURES = '1'
+# ADR-120: the stream manager is a module add-on now: packed and signed (release keys) into the scratch folder and
+# installed into run 1's store; runs 2 and 3 have none and check nothing of it exists.
+& .\samples\addons\pack.ps1 .\samples\addons\stream -OutDir (Join-Path $tmp 'addons') | Out-Host
+$env:DCX_SELFTEST_ADDONS = (Get-ChildItem (Join-Path $tmp 'addons') -Filter *.dcxaddon | Select-Object -First 1).FullName
 $p = Start-Process $exe.FullName -ArgumentList '--selftest', "$tmp\report.txt" -PassThru
 $null = $p.Handle   # keep the handle, or Windows PowerShell can lose the real exit code
 # The full suite takes about 5 minutes since s30 (stability tests); allow 10.
@@ -61,6 +69,10 @@ if ($p.ExitCode -ne 0) { Get-Content "$tmp\report.txt" -Encoding UTF8 | Select-S
 $env:DCX_DATA_DIR = Join-Path $tmp 'data-ai-off'
 New-Item -ItemType Directory $env:DCX_DATA_DIR | Out-Null
 $env:DCX_AI_FEATURES = '0'
+$env:DCX_CHAT_FEATURES = '0'
+# ADR-119: Windows management is a built-in module too; the AI-off run checks the app with no module at all.
+$env:DCX_WINTOOLS_FEATURES = '0'
+$env:DCX_SELFTEST_ADDONS = $null
 $p = Start-Process $exe.FullName -ArgumentList '--selftest', "$tmp\report-ai-off.txt" -PassThru
 $null = $p.Handle
 if (-not $p.WaitForExit(300000)) { $p | Stop-Process -Force; throw 'AI-off self-test timed out' }
@@ -110,6 +122,7 @@ $null = $p.Handle
 if (-not $p.WaitForExit(300000)) { $p | Stop-Process -Force; Remove-Item Env:\DCX_DATA_DIR; Remove-Item Env:\DCX_AI_FEATURES; throw 'published-exe self-test timed out' }
 Remove-Item Env:\DCX_DATA_DIR
 Remove-Item Env:\DCX_AI_FEATURES
+Remove-Item Env:\DCX_CHAT_FEATURES, Env:\DCX_WINTOOLS_FEATURES, Env:\DCX_SELFTEST_ADDONS -ErrorAction SilentlyContinue
 Get-Content "$tmp\report-published.txt" -Encoding UTF8 | Select-Object -First 1
 if ($p.ExitCode -ne 0) { Get-Content "$tmp\report-published.txt" -Encoding UTF8 | Select-String 'FAIL '; throw 'published-exe self-test failed' }
 for ($i = 0; $i -lt 10 -and (Test-Path $tmp); $i++) { try { Remove-Item $tmp -Recurse -Force -ErrorAction Stop } catch { Start-Sleep -Seconds 2 } }

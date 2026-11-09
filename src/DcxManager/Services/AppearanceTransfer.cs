@@ -40,6 +40,8 @@ public static class AppearanceTransfer
             ["hiddenSections"] = new JsonArray(s.HiddenNavSections.Select(x => (JsonNode)x).ToArray()),
             ["hiddenPages"] = new JsonArray(s.HiddenNavItems.Select(x => (JsonNode)x).ToArray()),
             ["rememberExpandedSections"] = s.RememberNavExpansion,
+            // 0.6.36 (ADR-115): the changed keyboard shortcuts, as stored ("command.id=Ctrl+Shift+P").
+            ["shortcuts"] = new JsonArray(s.KeyBindings.Select(x => (JsonNode)x).ToArray()),
         };
         return o.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
@@ -148,7 +150,20 @@ public static class AppearanceTransfer
         }
         if (List("hiddenPages", k => IsPage(k) && k != NavLayout.AlwaysShownPage, max: 64) is { } hiddenPages) AddList("Hidden pages", current.HiddenNavItems, hiddenPages, (s, v) => s.HiddenNavItems = v.ToList());
         AddV("Remember expanded sections", current.RememberNavExpansion, Bool("rememberExpandedSections"), (s, v) => s.RememberNavExpansion = v);
+        KeyBindings();
         return new Plan(changes, skipped);
+
+        // Keyboard shortcuts: every line through the same checks as the stored list (anything malformed is left out).
+        void KeyBindings()
+        {
+            if (o["shortcuts"] is not { } n) return;
+            if (n is not JsonArray a || a.Count > Keys.KeyBindingList.MaxEntries || a.Any(x => x?.GetValueKind() != JsonValueKind.String)) { skipped.Add("shortcuts: not a list of shortcut lines"); return; }
+            if (Keys.KeyCommands.WhyLocked is { } locked) { skipped.Add("shortcuts: " + locked); return; }
+            var parsed = Keys.KeyBindingList.Parse(a.Select(x => x!.GetValue<string>()));
+            skipped.AddRange(parsed.Problems.Take(20).Select(p => "shortcuts: " + p));
+            var lines = Keys.KeyBindingList.Lines(parsed.Overrides);
+            AddList("Keyboard shortcuts", current.KeyBindings, lines, (s, v) => s.KeyBindings = v.ToList());
+        }
 
         // Lists compare by content.
         void AddList(string name, List<string> from, List<string> to, Action<AppSettings, List<string>> apply)

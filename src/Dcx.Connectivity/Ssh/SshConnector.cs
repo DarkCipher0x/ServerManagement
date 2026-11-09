@@ -114,9 +114,9 @@ public static class SshConnector
             throw Friendly(ex, host);
         }
 
-        if (!host.IsAdHoc)
+        if (!host.IsAdHoc && ActivityHistory.Saving)   // ADR-116: "last connected" is history
         {
-            host.LastConnected = DateTime.Now;
+            ActivityHistory.NoteConnected(host);
             try { AppData.SaveSoon(); } catch { }   // 0.6.29: not an encrypted write + every screen's reload on the connect thread
         }
         var s = new SshSession<T> { Client = client, Host = host };

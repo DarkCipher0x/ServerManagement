@@ -185,6 +185,17 @@ it out:
 
 Environment label colours (PRODUCTION, TEST, LAB, DEV, LOCAL) are never themable: they are a safety signal.
 
+**Keyboard shortcuts (0.6.36).** Users change them in Settings → Keyboard. To give everyone the same keys, set
+`KeyBindings` (REG_MULTI_SZ, one `command.id=keys` line each, e.g. `tab.close=Ctrl+Shift+W`, `app.lock=` for no key; the
+ids are on the Keyboard page and in *Copy the list*); to keep the defaults, set `KeyBindingsAllowChange` = 0. Lines that
+fail the checks (unknown keys, keys Windows or text editing need, more than three keys) are skipped and listed on the
+page, never half-applied.
+
+**History (0.6.37).** Off by default: the app remembers nothing about what users did (quick connect and palette
+recents, Toolbox runs, transfers, last connected / last opened, pages visited in portal tabs). `HistorySave` = 1 keeps
+it; `HistoryAutoClear` sets when kept history clears itself (`never`, `exit` = when the app closes, `1`, `7` or `30`
+days). Clearing is audited (kinds and counts only). The audit log is not history and is never cleared by these.
+
 ## 10. Data, encryption and backups
 
 | What | Where (0.4.0) |

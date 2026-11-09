@@ -16,7 +16,7 @@ namespace DcxManager.Views;
 /// 1:1, view only, Ctrl+Alt+Del, the Windows key as ⌘ / Super, clipboard to the remote side on request (from it only when
 /// the host allows it), screenshot, reconnect.
 /// </summary>
-public sealed class VncView : UserControl, IHostView, IDisposable
+public sealed class VncView : UserControl, IHostView, IDisposable, IRemoteKeyboard
 {
     private readonly HostEntry _host;
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };

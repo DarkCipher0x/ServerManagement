@@ -70,6 +70,7 @@ public sealed class SnippetsView : UserControl, IDisposable
             Menus.Item("Rename…", () => { if (Dialogs.Prompt("Rename snippet", "Name:", s.Name) is { Length: > 0 } n) { s.Name = n; AppData.Save(); } }),
             Menus.Item("Save as .sh…", () => Menus.SaveText(Script(s), SafeName(s) + ".sh", "Shell script|*.sh|All files|*.*")),
             Menus.Item("Share as .sh…", () => ShareService.ShareText(Window.GetWindow(this), $"Snippet — {s.Name}", Script(s), SafeName(s) + ".sh"), enabled: ShareService.Supported),
+            Menus.SendItem("💬 Send to a chat…", () => SendItem.OfText("snippet " + s.Name, $"{s.Name}{(s.Sudo ? " (sudo)" : "")}:\n{s.Command}")),
             Menus.Sep(),
             Menus.AssistItem("✦ Explain this command with AI", a => a.AskAsync("snippet " + s.Name,
                 $"{(s.Sudo ? "(runs with sudo)\n" : "")}{s.Command}",

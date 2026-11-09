@@ -76,6 +76,8 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition x:Name="PanelCol" Width="0"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition x:Name="DockCol" Width="0"/>
             </Grid.ColumnDefinitions>
             <!-- Sidebar (drag the edge to resize, Ctrl+B to hide) -->
@@ -104,10 +106,14 @@
                               Background="Transparent" ToolTip="Drag to resize the hosts panel" Visibility="Collapsed"/>
                 <Border x:Name="DocArea" Grid.Column="2"/>
             </Grid>
+            <!-- Side panels (ADR-117): a module's pinned panel (the chat's room panel) beside the documents, before the AI dock (Shell/MainWindow.SidePanels.cs) -->
+            <GridSplitter x:Name="PanelSplitter" Grid.Column="3" Width="4" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                          Background="Transparent" ToolTip="Drag to resize the panel" Visibility="Collapsed"/>
+            <Border x:Name="PanelHost" Grid.Column="4" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0" Visibility="Collapsed"/>
             <!-- Right dock region: filled by a module (0.2.0 phase 3) — the AI Engineer sidebar (Views/AiDock.cs, Ctrl+Shift+A): docked / collapsed / hidden / detached -->
-            <GridSplitter x:Name="DockSplitter" Grid.Column="3" Width="4" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+            <GridSplitter x:Name="DockSplitter" Grid.Column="5" Width="4" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
                           Background="Transparent" ToolTip="Drag to resize the sidebar · double-click to collapse it" Visibility="Collapsed"/>
-            <Border x:Name="DockHost" Grid.Column="4" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0" Visibility="Collapsed"/>
+            <Border x:Name="DockHost" Grid.Column="6" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0" Visibility="Collapsed"/>
         </Grid>
     </DockPanel>
 </Window>

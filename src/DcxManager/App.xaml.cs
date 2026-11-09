@@ -109,6 +109,8 @@ public partial class App : Application
             json => Browser.BrowserPack.Parse(json), Browser.PortalBrowser.Notify));
         Addons.AddonPackages.RegisterKind(new("library", Library.SharedLibraries.IsLibrary, m => m.Library, Library.LibraryProfile.MaxBytes,
             json => Library.LibraryProfile.Parse(json), Library.SharedLibraries.Notify));
+        DesktopToast.Show = SessionAlerts.Toast;
+        AppLockEvents.IsLocked = () => AppLock.IsLocked;
         Addons.AddonHost.SharedHosts = () => Library.SharedLibraries.Hosts;
         Addons.AddonHost.SharedCredentials = () => Library.SharedLibraries.Credentials;
         Addons.AddonHost.SharedCredentialGiven = (c, addonId) =>
@@ -143,6 +145,15 @@ public partial class App : Application
     /// caller doesn't touch the AI's types, so with AI features off the AI assembly (Dcx.Ai) is never loaded.</summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static void LoadAiModule() => AppModules.Add(new AiModule());
+
+    /// <summary>The only place the app names the CipherChat module (ADR-117), never inlined for the same reason: with
+    /// CipherChat off, neither Dcx.Chat nor CipherChat's libraries are loaded.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void LoadChatModule() => AppModules.Add(new DcxManager.Chat.ChatModule());
+
+    /// <summary>The only place the app names Windows management (ADR-119), never inlined: with it off, Dcx.WinTools is never loaded.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void LoadWinToolsModule() => AppModules.Add(new DcxManager.WinTools.WinToolsModule());
 
     /// <summary>What <see cref="AppInfo.MigrateLegacyFolders"/> moved at this start (written to the audit log once the store is open).</summary>
     private List<string>? _migrated;
@@ -233,6 +244,7 @@ public partial class App : Application
         // (9 = the guard let it through, which the test reports as a failure).
         bool probe = e.Args.Length > 0 && e.Args[0] == "--selftest-second";
         bool selfTestRun = e.Args.Length >= 2 && e.Args[0] == "--selftest";
+        _selfTestStarting = selfTestRun;
         // 0.3.0 §23: which profile (store) opens — chosen before the single-instance guard keys itself on the store path,
         // so each profile has its own instance. Never in the self-test (its scratch store is the only profile).
         if (!selfTestRun && !probe && Environment.GetEnvironmentVariable("DCX_DATA_DIR") is not { Length: > 0 })
@@ -340,11 +352,20 @@ public partial class App : Application
         StartupTrace.Mark("protected settings, admin gate");
         if (!selfTest && !StartupFlow.DirectoryGate()) { SecureStore.Forget(); Shutdown(0); return; }
         if (AiFeatures.DecideAtStartup().On) LoadAiModule();
-        StartupTrace.Mark("directory gate, AI module");
+        if (ChatFeatures.DecideAtStartup().On) LoadChatModule();
+        if (WinToolsFeatures.DecideAtStartup().On) LoadWinToolsModule();
+        // Module add-ons (ADR-120): signed packages whose code is a module of its own; none of it is in the app.
+        // The self-test's module add-ons (run-selftest-watch -Addon / build.ps1): installed into its scratch store first.
+        if (selfTest && Environment.GetEnvironmentVariable("DCX_DATA_DIR") is { Length: > 0 } && Environment.GetEnvironmentVariable("DCX_SELFTEST_ADDONS") is { Length: > 0 } testAddons)
+            ModuleAddons.InstallForSelfTest(testAddons.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        ModuleAddons.LoadAll();
+        StartupTrace.Mark("directory gate, AI, chat, Windows management and module add-ons");
         try { Addons.AddonPackages.SealExisting(); } catch (Exception ex) { Log("Seal add-ons", ex); }   // ADR-035: data-only add-ons encrypted at rest
         StartupTrace.Mark("add-ons sealed");
         AppData.Load();
         StartupTrace.Mark("app data loaded");
+        HistorySources.Register();   // ADR-116: every history, then off = nothing kept, on = due automatic clears done
+        ActivityHistory.AtStart();
         if (_migrated is { Count: > 0 } mv) AuditLog.Write("app", "data folders", "moved to the DarkCipher Systems folder (0.4.0)", string.Join("; ", mv));
         Workspace.BeginSession();
         Recovery.LoadPrevious();   // ADR-022: unsaved drafts / unfinished transfers left by the previous run
@@ -462,6 +483,9 @@ public partial class App : Application
     }
 
     private static int _shown;
+    /// <summary>A --selftest launch, before the suite sets <see cref="TestMode.Running"/>: an error then must not open a box
+    /// on the user's screen (ADR-117: a start-up failure once did); it is logged and the run ends with exit code 3.</summary>
+    private static bool _selfTestStarting;
 
     private void OnUiException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
@@ -489,6 +513,7 @@ public partial class App : Application
         }
         // The self-test never shows this box (it once covered the user's screen, s26); its own handler records a failure.
         if (SelfTest.Running) { Dialogs.RefusedInSelfTest("unhandled UI exception: " + e.Exception.Message); return; }
+        if (_selfTestStarting) { Log("Self-test start-up", e.Exception); Shutdown(3); return; }
         if (verdict == UiErrorGuard.Verdict.LogOnly) return;
         var ex = e.Exception;
         UiErrorGuard.WhenIdle(Dispatcher, () =>

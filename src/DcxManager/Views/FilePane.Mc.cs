@@ -27,6 +27,9 @@ internal sealed partial class FilePane
     public bool InArchive => _arc != null;
     public bool QuickView => _quick?.Visibility == Visibility.Visible;
     public IReadOnlyList<string> History => _history;
+
+    /// <summary>Forgets the folders visited (history cleared, ADR-116).</summary>
+    internal void ForgetHistory() => _history.Clear();
     public IReadOnlyList<FsItem>? Panel => _panel;
     /// <summary>The marked items (Midnight Commander's "tagged" files); empty when nothing is marked.</summary>
     public IReadOnlyList<FsItem> Marked => _marking ? Selected.Where(i => !i.IsParent).ToList() : [];

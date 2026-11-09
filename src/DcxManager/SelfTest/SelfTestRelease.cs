@@ -358,7 +358,8 @@ public static class ReleaseTests
             var telnetHits = sv.VisibleCardsForTest.Where(c => c != "Admin protection").ToList();
             if (telnetHits.FirstOrDefault() != "Terminal & connections" || telnetHits.Any(c => SettingsView.CategoryOfForTest(c) != "Terminals & connections")) throw new Exception("search telnet: " + string.Join(", ", sv.VisibleCardsForTest));
             sv.SearchForTest("ctrl+shift+s");
-            if (!sv.VisibleCardsForTest.SequenceEqual(new[] { "Screenshots & recovery" })) throw new Exception("search ctrl+shift+s: " + string.Join(", ", sv.VisibleCardsForTest));
+            // 0.6.36: the Keyboard page lists the key too.
+            if (!sv.VisibleCardsForTest.OrderBy(c => c).SequenceEqual(new[] { "Keyboard shortcuts", "Screenshots & recovery" })) throw new Exception("search ctrl+shift+s: " + string.Join(", ", sv.VisibleCardsForTest));
             if (sv.SelectedTabForTest != null) throw new Exception("a tab stays selected during a search");
             sv.SearchForTest("zzqqxx-nothing");
             if (sv.VisibleCardsForTest.Count != 0) throw new Exception("nonsense search shows cards");

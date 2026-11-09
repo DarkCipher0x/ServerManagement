@@ -237,7 +237,20 @@ error (`$ErrorActionPreference = 'Stop'`).
    - **Signed twice** by `tools\sign-update.ps1 -Path`: `update.json.sig` (ECDSA P-256, the CNG release key, ADR-079) and,
      since 0.6.12, `update.json.pq.sig` (ML-DSA-65, the post-quantum release key, ADR-090; its seed is DPAPI-protected in
      `%LOCALAPPDATA%\DarkCipher\keys`). The app pins both public keys and needs both signatures. Without either key the
-     build stops rather than ship unsigned. Escrow both keys.
+     build stops rather than ship unsigned.
+   - **Escrow both keys (since 2026-11-08).** From a PowerShell 7 window opened from the Start menu (the Store's
+     PowerShell is fine; not a terminal inside another app): `pwsh -File tools\sign-update.ps1 -Escrow <file>` writes both keys in one password-encrypted file
+     (`servermanagement-update-keys-escrow-v1`: PBKDF2-HMAC-SHA256 600,000 rounds → AES-256-CBC + HMAC-SHA256; password
+     16+ characters, typed twice, kept apart from the file). It checks both keys are the pinned ones first and never
+     overwrites a file. `-RestoreEscrow <file>` puts them back for a new PC or Windows account. It checks the password
+     and the pins before writing anything, never replaces a key that's there, and brings the ECDSA key back as a named
+     key with the same rules (AllowExport, signing). `tools\test-key-escrow.ps1` tests the round trip with throwaway keys.
+   - **Packaged hosts.** A PowerShell started from inside an MSIX-packaged app (such as the Claude desktop app) has
+     `%LOCALAPPDATA%` writes redirected into that app's private folder, and they're deleted with that app. That's how
+     0.6.12's ML-DSA seed ended up only in the app's storage (copied to the real folder 2026-11-08). `-NewPqKey` and
+     `-RestoreEscrow` refuse to run in a process whose package redirects file writes (its manifest doesn't set
+     `desktop6:FileSystemWriteVirtualization` to `disabled`), or with LOCALAPPDATA pointed into a package's folder. The
+     Store's PowerShell 7 is packaged but turns write virtualisation off, so it passes.
    - Copies `docs\release-notes\<ver>.md` to `dist\<ver>\DarkCipherServerManagement-<ver>-release-notes.md`.
    - **Portable zip:** `Compress-Archive publish\*` → `DarkCipherServerManagement-<ver>-x64-portable.zip`.
    - **SBOM (0.2.0 phase 7):** `tools\write-sbom.ps1` writes `DarkCipherServerManagement-<ver>-sbom.cdx.json`

@@ -16,6 +16,22 @@ public partial class MainWindow
 {
     // ---- documents ----------------------------------------------------------------------------------------------
 
+    /// <summary>Live session sharing (0.6.39, ADR-117; <see cref="ModuleTabs.Isolate"/>): the tab gets a window of its
+    /// own (popped out unless it is already alone in one) with a fixed title the call captures by; nothing else opens in
+    /// it while shared. Disposing the result gives the window its normal title back.</summary>
+    internal IDisposable? IsolateTab(TabItem? tab, string title)
+    {
+        if (tab is null || !Panes.AllTabs.Contains(tab)) return null;
+        var w = Window.GetWindow(tab) as FloatWindow;
+        if (w is null || PaneHost.FramesIn(w.DocRoot.Child as FrameworkElement).Sum(f => f.Pane.Items.Count) > 1) w = Panes.PopOut(tab);
+        if (w is null) return null;
+        w.FixedTitle = title;
+        if (!TestMode.Running) w.Activate();
+        return new Restore(() => { if (w.IsLoaded) w.FixedTitle = null; });
+    }
+
+    private sealed class Restore(Action undo) : IDisposable { public void Dispose() => undo(); }
+
     public TabItem OpenSingleton(string key, string header, Func<FrameworkElement> factory, bool closable = true)
     {
         if (_singletons.TryGetValue(key, out var existing) && Panes.Contains(existing)) { Panes.Select(existing); return existing; }
@@ -71,7 +87,7 @@ public partial class MainWindow
         var siblings = pane?.Items.OfType<TabItem>().ToList() ?? new();
         bool floating = Panes.IsFloating(tab);
 
-        yield return Menus.Item("Close", () => CloseTab(tab), "Ctrl+W", !fixedTab);
+        yield return Menus.Item("Close", () => CloseTab(tab), Services.Keys.KeyCommands.Text("tab.close"), !fixedTab);
         yield return Menus.Item("Rename tab…", () => { if (Dialogs.Prompt("Rename tab", "Tab title:", tab.Header as string ?? "") is { Length: > 0 } n) tab.Header = n; });
         yield return Menus.Group("Close tabs",
             Menus.Item("Close other tabs in this pane", () => CloseMany(siblings.Where(t => t != tab)), enabled: siblings.Count > 1),
@@ -105,11 +121,11 @@ public partial class MainWindow
         int panesHere = Panes.WindowOf(tab) is { } win ? PaneHost.PanesOf(win).Count() : Panes.PaneCount;
         yield return Menus.Group("Layout", new object?[]
         {
-            Menus.Item("Split right", () => Panes.Split(tab, Orientation.Horizontal), "Ctrl+Alt+→", siblings.Count > 1),
-            Menus.Item("Split down", () => Panes.Split(tab, Orientation.Vertical), "Ctrl+Alt+↓", siblings.Count > 1),
+            Menus.Item("Split right", () => Panes.Split(tab, Orientation.Horizontal), Services.Keys.KeyCommands.Text("pane.split-right"), siblings.Count > 1),
+            Menus.Item("Split down", () => Panes.Split(tab, Orientation.Vertical), Services.Keys.KeyCommands.Text("pane.split-down"), siblings.Count > 1),
             Menus.Item("Move to next pane", () => Panes.MoveToNextPane(tab), enabled: panesHere > 1),
-            Menus.Item("Tile all tabs", Panes.Tile, "Ctrl+Alt+T", !floating),
-            Menus.Item("Merge all panes", Panes.MergeAll, "Ctrl+Alt+U", !floating && Panes.PaneCount > 1),
+            Menus.Item("Tile all tabs", Panes.Tile, Services.Keys.KeyCommands.Text("pane.tile"), !floating),
+            Menus.Item("Merge all panes", Panes.MergeAll, Services.Keys.KeyCommands.Text("pane.merge"), !floating && Panes.PaneCount > 1),
         }.Concat(Panes.WindowMenuItems(tab)).ToArray());
 
         if (tab.Content is TerminalView { Host: null } local)

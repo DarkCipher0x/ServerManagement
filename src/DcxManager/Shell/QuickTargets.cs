@@ -101,9 +101,17 @@ public static class QuickTargets
         return pinned;
     }
 
+    /// <summary>Forgets one recent line (Shift+Delete in the dropdown).</summary>
+    public static void Forget(string line)
+    {
+        if (AppData.Current.RecentAdHoc.RemoveAll(x => x.Equals(line, StringComparison.OrdinalIgnoreCase)) == 0) return;
+        try { AppData.Save(); } catch (Exception ex) { Log.Write("Quick connect history", ex); }
+    }
+
     /// <summary>Adds a line to Recent (most recent first, at most <see cref="MaxRecent"/>).</summary>
     public static void Remember(string line)
     {
+        if (!ActivityHistory.MayRecord()) return;   // ADR-116: history is off (the default)
         var r = AppData.Current.RecentAdHoc;
         r.RemoveAll(x => x.Equals(line, StringComparison.OrdinalIgnoreCase));
         r.Insert(0, line);

@@ -61,7 +61,7 @@ public static class AddonUi
         var facts = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0),
-            Text = (m.Library.Length > 0 ? $"Shared library: {m.Library} · no program" : m.Browser.Length > 0 ? $"Portal browser: {m.Browser} · no program" : m.Entry.Length == 0 ? $"Theme: {m.Theme} · no program" : $"Program: {m.Entry} · {info.Signature}") + $"\nPackage SHA-256: {info.Sha256}\n{info.FileCount} file(s), {info.Bytes / 1024.0:N0} KB · timeout {m.TimeoutSeconds} s · commands: {string.Join(", ", m.Commands.Select(c => $"{c.Title} [{c.Context}]"))}",
+            Text = (m.Library.Length > 0 ? $"Shared library: {m.Library} · no program" : m.Module is { } mod ? $"Module: {mod.Assembly} ({mod.Type}, API {mod.Api}) · {info.Signature}" : m.Browser.Length > 0 ? $"Portal browser: {m.Browser} · no program" : m.Entry.Length == 0 ? $"Theme: {m.Theme} · no program" : $"Program: {m.Entry} · {info.Signature}") + $"\nPackage SHA-256: {info.Sha256}\n{info.FileCount} file(s), {info.Bytes / 1024.0:N0} KB · timeout {m.TimeoutSeconds} s · commands: {string.Join(", ", m.Commands.Select(c => $"{c.Title} [{c.Context}]"))}",
         }.Fs(FontStep.Meta).Mono();
         facts.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         p.Children.Add(facts);
@@ -73,6 +73,9 @@ public static class AddonUi
             Text = m.Library.Length > 0
                 ? "⇄ This connects the app to a shared library of hosts and team credentials (ADR-033). The package holds no secret and no program: only the library's id, its folder and the owner's key fingerprint. " +
                   "After installing, open Shared library → Join a library…: your keys are made on this PC, and an admin approves you after you read them your fingerprint. Disable or Remove hides the library; your member keys stay sealed in your store until you Forget them."
+                : m.Module is not null
+                ? "▣ This is a module add-on: code that runs inside the app with the app's rights, adding its own screens, settings and help (from the next start). The app installs and loads one only when DarkCipher Systems signed it with the release keys (ECDSA and ML-DSA) and every file matches that signature, checked again at every start. " +
+                  "It never sees your vault's master key; what it stores goes in your encrypted store. Disable or Remove switches it off at the next start; Group Policy AddonAllowModules = 0 turns all module add-ons off."
                 : m.Browser.Length > 0
                 ? "🌐 This turns on the portal browser: web UIs (routers, NAS, Proxmox/Unraid, provider portals) in tabs inside the app. The browser is part of the app, not a program in the package: nothing in the package runs, and it gets no access to your data, cookies or vault. It may offer starter bookmarks, which you add yourself on the Portals screen. Disable or Remove hides Portals again; your bookmarks stay in your encrypted store."
                 : m.Entry.Length == 0
@@ -284,6 +287,39 @@ public sealed class AddonsView : UserControl, IDisposable
         _detail.Children.Add(open);
     }
 
+    /// <summary>MODULE (ADR-120): a module add-on signed by DarkCipher Systems: whether this run loaded it (or why not), a
+    /// restart when it was installed, updated, enabled or disabled since, and where its screens are. The module itself is
+    /// never named here.</summary>
+    private void ModuleSection(InstalledAddon a)
+    {
+        _detail.Children.Add(new TextBlock { Text = "MODULE", Style = (Style)FindResource("Label"), Margin = new Thickness(0, 10, 0, 4) });
+        var loaded = ModuleAddons.All.FirstOrDefault(l => l.Addon.Id == a.Id);
+        var why = ModuleAddons.Check(a, out _);
+        bool restart = (loaded != null) != (why == null) || (loaded != null && loaded.Addon.Manifest.Version != a.Manifest.Version);
+        var skipped = ModuleAddons.NotLoaded.FirstOrDefault(n => n.Id == a.Id);
+        var status = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = restart ? (why == null ? "▣ Ready: the module loads after a restart." : "The module stops after a restart: " + why + ".")
+                : loaded != null ? $"▣ Loaded in this run ({a.Manifest.Module!.Type}, module API {a.Manifest.Module.Api}). Its screens, settings and help are in the app while it is enabled; its settings stay in your encrypted store when it is disabled or removed."
+                : "Not loaded: " + (skipped?.Why ?? why ?? "unknown") + ".",
+        };
+        status.SetResourceReference(TextBlock.ForegroundProperty, loaded != null && !restart ? "Good" : "Muted");
+        _detail.Children.Add(status);
+        if (restart)
+        {
+            var restartBtn = new Button { Content = "Restart now", Style = (Style)FindResource("PrimaryButton"), Margin = new Thickness(0, 6, 0, 4), HorizontalAlignment = HorizontalAlignment.Left };
+            restartBtn.Click += (_, _) =>
+            {
+                if (!Dialogs.Confirm("Restart now", "Restart the app now so the module change applies? Open terminals and sessions close; the workspace reopens them disconnected.", "Restart")) return;
+                App.RestartRequested = true;
+                MainWindow.Instance?.Close();
+                if (MainWindow.Instance?.IsVisible == true) App.RestartRequested = false;
+            };
+            _detail.Children.Add(restartBtn);
+        }
+    }
+
     /// <summary>SHARED LIBRARY (ADR-033): joined or not, this PC's role and sync state, and the way to the Shared library screen.</summary>
     private void LibrarySection(InstalledAddon a)
     {
@@ -318,6 +354,8 @@ public sealed class AddonsView : UserControl, IDisposable
             TextWrapping = TextWrapping.Wrap,
             Text = a.Manifest.Library.Length > 0 ? $"id {a.Id} · library {a.Manifest.Library} · {a.Signature}\n" +
                    $"installed {a.Installed:yyyy-MM-dd} · updated {a.Updated:yyyy-MM-dd HH:mm} · package SHA-256 {a.PackageSha256[..16]}… · {a.Files.Count} file(s) verified whenever the library is loaded\nfolder {a.Folder}" :
+                   a.Manifest.Module is { } mod ? $"id {a.Id} · module {mod.Assembly} · {a.Signature}\n" +
+                   $"installed {a.Installed:yyyy-MM-dd} · updated {a.Updated:yyyy-MM-dd HH:mm} · package SHA-256 {a.PackageSha256[..16]}… · {a.Files.Count} file(s) checked against the signed module.json at every start\nfolder {a.Folder}" :
                    a.Manifest.Browser.Length > 0 ? $"id {a.Id} · browser {a.Manifest.Browser} · {a.Signature}\n" +
                    $"installed {a.Installed:yyyy-MM-dd} · updated {a.Updated:yyyy-MM-dd HH:mm} · package SHA-256 {a.PackageSha256[..16]}… · {a.Files.Count} file(s) verified whenever the add-on's file is read\nfolder {a.Folder}" :
                    a.Manifest.Entry.Length == 0 ? $"id {a.Id} · theme {a.Manifest.Theme} · {a.Signature}\n" +
@@ -353,6 +391,7 @@ public sealed class AddonsView : UserControl, IDisposable
         if (ThemeAddons.IsTheme(a.Manifest)) ThemeSection(a);
         if (Browser.PortalBrowser.IsBrowser(a.Manifest)) BrowserSection(a);
         if (Library.SharedLibraries.IsLibrary(a.Manifest)) LibrarySection(a);
+        if (a.Manifest.Module is not null) ModuleSection(a);
         if (a.Manifest.Entry.Length == 0) return;   // theme only: no permissions, commands or runs
 
         _detail.Children.Add(new TextBlock { Text = "PERMISSIONS (untick to revoke — takes effect on the next call)", Style = (Style)FindResource("Label"), Margin = new Thickness(0, 10, 0, 4) });

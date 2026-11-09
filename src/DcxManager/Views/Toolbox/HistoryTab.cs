@@ -17,10 +17,12 @@ public sealed class HistoryTab : DockPanel
     public HistoryTab()
     {
         var head = new StackPanel();
-        head.Children.Add(ToolboxUi.Hint($"The last {ToolboxRun.Max} runs, kept in the encrypted store on this PC (never exported). Select one to read its report."));
+        head.Children.Add(ToolboxUi.Hint(ActivityHistory.Saving
+            ? $"The last {ToolboxRun.Max} runs, kept in the encrypted store on this PC (never exported). Select one to read its report."
+            : "History is off, so runs aren't kept (Settings → Security & privacy → History turns it on)."));
         var copy = ToolboxUi.Button("Copy report"); copy.Click += (_, _) => { if (_list.SelectedItem is ToolboxRun r) Menus.Clip($"{r.Line}\n\n{r.Report}"); };
         var del = ToolboxUi.Button("✕ Delete"); del.Click += (_, _) => { if (_list.SelectedItem is ToolboxRun r) { AppData.Current.ToolboxHistory.Remove(r); AppData.Save(); Reload(); } };
-        var clear = ToolboxUi.Button("Clear history"); clear.Click += (_, _) => { if (AppData.Current.ToolboxHistory.Count > 0 && Dialogs.Confirm("Toolbox history", "Delete every toolbox result?", "Delete", danger: true)) { AppData.Current.ToolboxHistory.Clear(); AppData.Save(); Reload(); } };
+        var clear = ToolboxUi.Button("Clear history"); clear.Click += (_, _) => { if (AppData.Current.ToolboxHistory.Count > 0 && Dialogs.Confirm("Toolbox history", "Delete every toolbox result?", "Delete", danger: true)) { ActivityHistory.Clear("toolbox"); Reload(); } };
         _filter.TextChanged += (_, _) => Reload();
         head.Children.Add(ToolboxUi.Bar(ToolboxUi.Label("filter"), _filter, copy, del, clear));
         head.Children.Add(_status);

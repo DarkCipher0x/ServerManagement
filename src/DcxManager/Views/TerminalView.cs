@@ -25,7 +25,7 @@ namespace DcxManager.Views;
 /// reconnect task all released); and every backend callback is isolated so one session failing never affects the app
 /// or other tabs.
 /// </summary>
-public sealed partial class TerminalView : UserControl, IDisposable, IActivatable, IHostView, ITerminal
+public sealed partial class TerminalView : UserControl, IDisposable, IActivatable, IHostView, ITerminal, IRemoteKeyboard
 {
     // Output pipeline bounds. SSH data arrives in small chunks (≤ max packet), so a flush is a handful of chunks.
     private const int MaxFlushChars = 200_000;     // cap per message posted to the page (bounds JSON cost)

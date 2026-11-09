@@ -220,7 +220,7 @@ public static class WaveATests
 
         var all = CommandPalette.Items(MainWindow.Instance);
         Expect(all.Any(i => i.Kind == "Page" && i.Key == "page:hosts") && all.Any(i => i.Key == "setting:Alerts") && all.Any(i => i.Key == "setting:Highlighting & button bar"), "pages and the new settings cards");
-        Expect(all.Any(i => i.Key == "action:lock") && PaletteSearch.Search(all, "lock app").FirstOrDefault()?.Key == "action:lock", "actions");
+        Expect(all.Any(i => i.Key == "action:pane.tile") && PaletteSearch.Search(all, "tile all tabs").FirstOrDefault()?.Key == "action:pane.tile", "actions (from the keyboard commands, 0.6.36)");
         Expect(AppData.Current.Hosts.Count == 0 || all.Count(i => i.Kind == "Host") == AppData.Current.Hosts.Count, "every host");
         return Task.CompletedTask;
     }

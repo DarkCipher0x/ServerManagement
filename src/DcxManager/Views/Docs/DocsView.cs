@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using DcxManager.Docs;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 
 namespace DcxManager.Views;
 
@@ -18,7 +19,7 @@ namespace DcxManager.Views;
 /// and shortcuts, smart lists, an outline, revisions, import and export. Every document is its own encrypted file
 /// (<see cref="DocStore"/>); autosave runs 1 s after typing stops and whenever you leave the document.
 /// </summary>
-public sealed class DocsView : UserControl, IDisposable
+public sealed class DocsView : UserControl, IDisposable, IOwnKeys
 {
     public static DocsView? Current { get; private set; }
 
@@ -505,6 +506,16 @@ public sealed class DocsView : UserControl, IDisposable
         if (e < 0) e = t.Length;
         return (s, t[s..e].TrimEnd('\r'));
     }
+
+    /// <summary>While the text has the keyboard, its formatting keys win over the app's shortcuts (ADR-115): Ctrl+B bold
+    /// (the sidebar is still Ctrl+Shift+B), Ctrl+K link (quick connect is still Ctrl+Shift+K), Ctrl+I, Ctrl+S, Ctrl+Enter.</summary>
+    public static readonly IReadOnlySet<KeyChord> EditorKeys = new HashSet<KeyChord>
+    {
+        new(Key.B, ModifierKeys.Control), new(Key.I, ModifierKeys.Control), new(Key.K, ModifierKeys.Control),
+        new(Key.S, ModifierKeys.Control), new(Key.Enter, ModifierKeys.Control),
+    };
+
+    public bool OwnsKey(KeyChord chord) => _body.IsKeyboardFocusWithin && EditorKeys.Contains(chord);
 
     private void OnEditorKey(object sender, KeyEventArgs e)
     {

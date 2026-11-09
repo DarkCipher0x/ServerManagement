@@ -81,6 +81,10 @@ public static class ProtectedSettings
     public static readonly IReadOnlyList<Item> Items = new[]
     {
         Bool("ai.features", nameof(AppSettings.AiFeatures), "AI features", "AI", s => s.AiFeatures == true, (s, v) => s.AiFeatures = v, safeValue: false),
+        Bool("chat.features", nameof(AppSettings.ChatFeatures), "CipherChat built in", "Chat", s => s.ChatFeatures, (s, v) => s.ChatFeatures = v, safeValue: false),
+        Bool("wintools.features", nameof(AppSettings.WinToolsFeatures), "Windows management built in", "Windows management", s => s.WinToolsFeatures, (s, v) => s.WinToolsFeatures = v, safeValue: false),
+        Bool("wintools.changes", nameof(AppSettings.WinToolsAllowChanges), "Windows management may change services, processes and tasks", "Windows management", s => s.WinToolsAllowChanges, (s, v) => s.WinToolsAllowChanges = v, safeValue: false),
+        Bool("chat.admin", nameof(AppSettings.ChatAdmin), "CipherChat server administration", "Chat", s => s.ChatAdmin, (s, v) => s.ChatAdmin = v, safeValue: false),
         Bool("ai.allowCloud", nameof(AppSettings.AiAllowCloud), "Allow internet AI providers", "AI", s => s.AiAllowCloud, (s, v) => s.AiAllowCloud = v, safeValue: false),
         Bool("ai.redactSecrets", nameof(AppSettings.AiRedactSecrets), "Mask secrets before anything is sent to a model", "AI", s => s.AiRedactSecrets, (s, v) => s.AiRedactSecrets = v, safeValue: true),
         Bool("ai.autoRunReadOnly", nameof(AppSettings.AiAutoRunReadOnlyTarget), "Let the AI run read-only commands in its target terminal without asking", "AI", s => s.AiAutoRunReadOnlyTarget, (s, v) => s.AiAutoRunReadOnlyTarget = v, safeValue: false),

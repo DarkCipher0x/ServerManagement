@@ -147,8 +147,8 @@ public static class PolicyTemplates
         sb.Append($"Registry: `HKLM\\{PolicySettings.Key}` (computer, wins) and `HKCU\\{PolicySettings.Key}` (user). ");
         sb.Append("Templates: `policy\\DarkCipherServerManagement.admx` and `policy\\en-US\\DarkCipherServerManagement.adml` in each release folder. ");
         sb.Append("A managed setting can't be changed in the app; an invalid value is ignored and listed in Settings → Security & privacy → Managed by your organisation.\n\n");
-        sb.Append($"{PolicySettings.Catalog.Count} policies, plus {MachineFlags.Length} computer-only ones (below). Not available as policies: {string.Join(", ", PolicySettings.Excluded.Keys.Order(StringComparer.Ordinal))} (accounts, secrets and per-PC state).\n");
-        foreach (var g in PolicySettings.Catalog.GroupBy(e => e.Category))
+        sb.Append($"{PolicySettings.Catalog.Count(e => e.Module == null)} policies, plus {MachineFlags.Length} computer-only ones (below). Not available as policies: {string.Join(", ", PolicySettings.Excluded.Keys.Order(StringComparer.Ordinal))} (accounts, secrets and per-PC state).\n");
+        foreach (var g in PolicySettings.Catalog.Where(e => e.Module == null).GroupBy(e => e.Category))   // the app's own; module add-ons document theirs (ADR-120)
         {
             sb.Append($"\n## {g.Key}\n\n| Value name | Setting | Type | Accepted | App default |\n|---|---|---|---|---|\n");
             foreach (var e in g) sb.Append($"| `{e.Name}` | {e.Title} | {e.RegistryType} | {Accepted(e)} | {Shown(Default(e))} |\n");
@@ -172,7 +172,7 @@ public static class PolicyTemplates
         _ => "one entry per line (up to 200)",
     };
 
-    private static object? Default(PolicySettings.Entry e) => e.Property.GetValue(new AppSettings());
+    private static object? Default(PolicySettings.Entry e) => e.Property.GetValue(e.Module is null ? new AppSettings() : Activator.CreateInstance(e.Property.DeclaringType!));
 
     private static string Shown(object? v) => v switch
     {

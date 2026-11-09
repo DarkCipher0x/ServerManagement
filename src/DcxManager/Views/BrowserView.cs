@@ -5,6 +5,7 @@ using System.Windows.Input;
 using DcxManager.Browser;
 using DcxManager.Infra;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
@@ -159,13 +160,15 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         UpdateFill();
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.F5) { Reload(); e.Handled = true; }
-            else if (e.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { _addr.Focus(); _addr.SelectAll(); e.Handled = true; }
-            else if (e.SystemKey == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt) { if (_web.CanGoBack) _web.GoBack(); e.Handled = true; }
-            else if (e.SystemKey == Key.Right && Keyboard.Modifiers == ModifierKeys.Alt) { if (_web.CanGoForward) _web.GoForward(); e.Handled = true; }
+            // Keys from Settings → Keyboard (0.6.36, ADR-115).
+            if (KeyCommands.Matches(e, ViewCommands.PortalReload)) { ReloadOrStop(); e.Handled = true; }
+            else if (KeyCommands.Matches(e, ViewCommands.PortalAddress)) { _addr.Focus(); _addr.SelectAll(); e.Handled = true; }
+            else if (KeyCommands.Matches(e, ViewCommands.PortalBack)) { if (_web.CanGoBack) _web.GoBack(); e.Handled = true; }
+            else if (KeyCommands.Matches(e, ViewCommands.PortalForward)) { if (_web.CanGoForward) _web.GoForward(); e.Handled = true; }
         };
         Live.Add(this);
         Loaded += OnLoaded;
+        Unloaded += (_, _) => Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, CloseIfOrphaned);
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -186,6 +189,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
             if (_disposed) return;
             if (starting) HideBanner();
             var core = _web.CoreWebView2;
+            _ = PortalHistory.OnStartedAsync(core, ProfileName);   // ADR-116: while history is off, earlier runs' pages go
             var s = core.Settings;
             // No password saving or form autofill: sign-in comes from the vault on request ("Fill sign-in"), never the browser.
             core.Profile.IsPasswordAutosaveEnabled = false;
@@ -679,7 +683,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
             yield return Menus.Sep();
             yield return MainWindow.Instance.Panes.IsFloating(Tab)
                 ? Menus.Item("Dock back into the main window", () => MainWindow.Instance.Panes.DockBack(Tab))
-                : Menus.Item("Pop out to a window", () => MainWindow.Instance.Panes.PopOut(Tab), "Ctrl+Alt+O");
+                : Menus.Item("Pop out to a window", () => MainWindow.Instance.Panes.PopOut(Tab), KeyCommands.Text("pane.pop-out"));
         }
     }
 
@@ -701,6 +705,25 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
     }
 
     private void HideBanner() => _banner.Visibility = Visibility.Collapsed;
+
+    /// <summary>
+    /// 0.6.38 (DarkCipher0x: a video in a popped-out portal window kept playing after the window was closed, until the app
+    /// was killed). WebView2 doesn't stop when its window goes: WPF parks the browser out of sight and it keeps running —
+    /// sound included — until it is disposed. So a portal browser that has left the screen and whose tab is in no pane any
+    /// more (whatever path took it away) is closed here, and the path is logged so it can be fixed. Moves between panes and
+    /// windows are synchronous, so by Background priority a moved tab is in its new pane and this does nothing.
+    /// </summary>
+    private void CloseIfOrphaned()
+    {
+        if (_disposed || IsLoaded || Tab == null) return;
+        if (MainWindow.Instance?.Panes is not { } panes || panes.ShuttingDown || panes.Contains(Tab)) return;
+        Orphans++;
+        App.Log("Portal browser", new InvalidOperationException("a portal tab left every pane without being closed; its browser is closed now"));
+        Dispose();
+    }
+
+    /// <summary>Portal browsers closed by <see cref="CloseIfOrphaned"/> (self-test).</summary>
+    internal static int Orphans { get; private set; }
 
     public void Dispose()
     {

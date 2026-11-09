@@ -38,6 +38,22 @@ public static class Menus
     public static MenuItem? AssistItem(string header, Func<Services.IAssistant, Task> run, bool enabled = true, Services.AssistUse use = Services.AssistUse.Files) =>
         Services.Assist.Current is { } a ? AsyncItem(header, () => run(a), enabled: enabled && a.WhyNot(use) == null) : null;
 
+    /// <summary>"💬 Send … to a chat" (ADR-117): only when a send target is registered (the chat module) — otherwise null,
+    /// so the menu has no such item — and enabled when <paramref name="enabled"/> and the target may be used now. The
+    /// material is built only on click; <paramref name="build"/> returns null to send nothing.</summary>
+    public static MenuItem? SendItem(string header, Func<Task<Services.SendItem?>> build, bool enabled = true)
+    {
+        if (Services.SendTo.Current is not { } t) return null;
+        var why = t.WhyNot();
+        var m = AsyncItem(header, async () => { if (await build() is { } item) await t.SendAsync(item); }, enabled: enabled && why == null);
+        if (why != null) m.ToolTip = why;
+        return m;
+    }
+
+    /// <summary><see cref="SendItem(string, Func{Task{Services.SendItem}}, bool)"/> for material that is at hand.</summary>
+    public static MenuItem? SendItem(string header, Func<Services.SendItem?> build, bool enabled = true) =>
+        SendItem(header, () => Task.FromResult(build()), enabled);
+
     private static async Task Guard(string header, Func<Task> f)
     {
         try { await f(); }

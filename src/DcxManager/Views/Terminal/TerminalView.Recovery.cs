@@ -235,6 +235,8 @@ public sealed partial class TerminalView
                     else if (purpose == "save") Menus.SaveText(buf, $"{FileSafe(_target.Title)}-{DateTime.Now:yyyyMMdd-HHmm}.log", "Log|*.log;*.txt|All files|*.*");
                     else if (purpose == "digest") CommandText.ShowDigest(_target.Title, buf);
                     else if (purpose == "share") ShareService.ShareText(Window.GetWindow(this), $"Terminal — {_target.Title}", buf, $"{FileSafe(_target.Title)}-{DateTime.Now:yyyyMMdd-HHmm}.log");
+                    else if (purpose == "chat" && SendTo.Current is { } chat)
+                        _ = SendOutputAsync(chat, buf);
                     else if (purpose == "ai") { Assist.Current?.AskOperator($"Here is the recent terminal output from {_target.Endpoint}. Summarise what happened and flag anything that needs action:\n```\n{(buf.Length > 8000 ? buf[^8000..] : buf)}\n```"); }
                     break;
                 }

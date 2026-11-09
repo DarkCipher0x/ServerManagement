@@ -14,7 +14,7 @@ namespace DcxManager.Views;
 /// session. The password is handed to the control in memory only. Device redirection follows the host's settings with
 /// conservative defaults (no drives, printers, smart cards, ports, POS, microphone, camera).
 /// </summary>
-public sealed class RdpView : UserControl, IHostView, IDisposable
+public sealed class RdpView : UserControl, IHostView, IDisposable, IRemoteKeyboard
 {
     private readonly HostEntry _host;
     private readonly RdpAxHost _ax;
@@ -384,8 +384,8 @@ public sealed class RdpView : UserControl, IHostView, IDisposable
             case RdpEvent.LoginComplete:
                 State = "signed in"; _loggedIn = true;
                 SetStatus($"● {Endpoint} · signed in as {_host.Username}");
-                _host.LastConnected = DateTime.Now;
-                if (!_host.IsAdHoc) { try { AppData.SaveSoon(); } catch { } }
+                ActivityHistory.NoteConnected(_host);   // ADR-116: only while history is kept
+                if (!_host.IsAdHoc && ActivityHistory.Saving) { try { AppData.SaveSoon(); } catch { } }
                 AuditLog.Write("you", _host.Display, "opened Remote Desktop (embedded)", Endpoint);
                 Incidents.IncidentStore.RecordConnection(_host, "Remote Desktop");
                 if (Fit == "resize") { _resize.Stop(); _resize.Start(); }

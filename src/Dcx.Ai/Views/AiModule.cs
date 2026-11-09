@@ -29,7 +29,7 @@ public sealed class AiModule : IAppModule
                         ? Menus.Item("Reattach to the main window", () => dock.Apply(AiDockState.Docked))
                         : Menus.Item("Detach into a window", () => dock.Apply(AiDockState.Detached)),
                     Menus.Item("Collapse", () => dock.Apply(AiDockState.Collapsed), enabled: dock.State != AiDockState.Collapsed),
-                    Menus.Item("Hide", () => dock.Apply(AiDockState.Hidden), "Ctrl+Shift+A", dock.State != AiDockState.Hidden),
+                    Menus.Item("Hide", () => dock.Apply(AiDockState.Hidden), Services.Keys.KeyCommands.Text("ai.sidebar"), dock.State != AiDockState.Hidden),
                 };
             });
         host.NavItem("AI", "assistant", "✦  AI operator", "Chat with the local AI; it can look things up and asks before any change",
@@ -79,7 +79,7 @@ public sealed class AiModule : IAppModule
 
         // The right dock column is the AI Engineer sidebar; Ctrl+Shift+A toggles it.
         host.RightDock((owner, col, splitter, dockHost) => new AiDock(owner, col, splitter, dockHost));
-        host.Shortcut(System.Windows.Input.Key.A, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, "Ctrl+Shift+A", () => Dock.Toggle());
+        host.Command("ai.sidebar", "Show or hide the AI Engineer sidebar", "General", () => Dock.Toggle(), "Ctrl+Shift+A");
 
         // The dashboard's "AI engine" source and tile, and the AI's rows in Privacy & network.
         host.DashboardSource("ai", "AI engine", Ai.AiOverview.DashboardHost, Ai.AiOverview.CheckAsync, Ai.AiOverview.Tile);

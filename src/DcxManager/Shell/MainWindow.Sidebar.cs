@@ -21,15 +21,19 @@ public partial class MainWindow
     /// providers" workspace instead of a section each.</summary>
     /// 0.6.16 (DarkCipher0x: "separate the tools into their own section of TOOLS", "put the documents and notes into a
     /// DOCUMENTS section", "a bit better organised"): TOOLS and DOCUMENTS sections; Help moved to SYSTEM.
-    private static readonly string[] AllNavSections = { "OVERVIEW", "SERVERS", "TOOLS", "DOCUMENTS", "AUTOMATION", "LOCAL", "VAULT", "TEAM", "AI", "LOGS", "SYSTEM" };
+    private static readonly string[] AllNavSections = { "OVERVIEW", "SERVERS", "TOOLS", "DOCUMENTS", "AUTOMATION", "LOCAL", "WINDOWS", "VAULT", "TEAM", "CHAT", "STREAM", "AI", "LOGS", "SYSTEM" };
 
     /// <summary>The sections that exist now, in their default order; the user's order and hidden set come from settings
     /// (NavLayout). TEAM (shared library, team hosts and credentials) exists only while a library add-on is enabled; AI only
-    /// while the AI module is loaded (since 0.6.16 Reports and Help live in DOCUMENTS and SYSTEM, so it would be empty).</summary>
-    public static string[] NavSections => AllNavSections.Where(n => (n != "TEAM" || Library.SharedLibraries.Enabled) && (n != "AI" || AppModules.NavItemsIn("AI").Any())).ToArray();
+    /// while the AI module is loaded (since 0.6.16 Reports and Help live in DOCUMENTS and SYSTEM, so it would be empty);
+    /// CHAT only while the CipherChat module is loaded (ADR-117), STREAM only while the stream manager is (ADR-118). Module sections exist only when a module fills them.</summary>
+    public static string[] NavSections => AllNavSections.Where(n => (n != "TEAM" || Library.SharedLibraries.Enabled) && (!ModuleSections.Contains(n) || AppModules.NavItemsIn(n).Any())).ToArray();
+
+    /// <summary>Sections filled only by modules: they exist while a loaded module contributes items to them.</summary>
+    private static readonly string[] ModuleSections = { "WINDOWS", "CHAT", "STREAM", "AI" };
 
     /// <summary>The glyph in front of a section header (the same family as the items' glyphs).</summary>
-    public static string SectionGlyph(string key) => key switch { "OVERVIEW" => "◈", "SERVERS" => "▣", "TOOLS" => "🧰", "DOCUMENTS" => "📄", "AUTOMATION" => "⟐", "LOCAL" => "⌨", "VAULT" => "⚿", "TEAM" => "⇄", "LOGS" => "☷", "AI" => "✦", "SYSTEM" => "⚙", _ => "•" };
+    public static string SectionGlyph(string key) => key switch { "OVERVIEW" => "◈", "SERVERS" => "▣", "TOOLS" => "🧰", "DOCUMENTS" => "📄", "AUTOMATION" => "⟐", "LOCAL" => "⌨", "WINDOWS" => "🪟", "VAULT" => "⚿", "TEAM" => "⇄", "CHAT" => "💬", "STREAM" => "📺", "LOGS" => "☷", "AI" => "✦", "SYSTEM" => "⚙", _ => "•" };
 
     /// <summary>A section's title (its key).</summary>
     public static string SectionTitle(string key) => key;
@@ -353,11 +357,13 @@ public partial class MainWindow
             Item("team:credentials", "⚿  Team credentials", "Credentials shared through your libraries (Credentials, shared only)");
         }
         // Cloud providers (ADR-020) are one workspace since 0.1.11 (ADR-028): Item "cloud" above, not a section each.
-        if (AppModules.NavItemsIn("AI").Any())
+        // Modules contribute their items (0.2.0 phase 3): the CipherChat module adds Chats and Server admin (ADR-117), the
+        // AI module the AI Engineer sidebar and the AI operator.
+        foreach (var section in ModuleSections)
         {
-            Header("AI");
-            // Modules contribute their items (0.2.0 phase 3): the AI module adds the AI Engineer sidebar and the AI operator.
-            foreach (var c in AppModules.NavItemsIn("AI")) Item(c.Key, c.Text, c.Tip);
+            if (!AppModules.NavItemsIn(section).Any()) continue;
+            Header(section);
+            foreach (var c in AppModules.NavItemsIn(section)) Item(c.Key, c.Text, c.Tip);
         }
         // 0.5.1 #8 (DarkCipher0x): every log in one section. The Audit log is locked by default (Group Policy: LockAuditLog); the
         // others can be locked from their right-click menu or Settings → Security & privacy → Locks.
@@ -396,6 +402,7 @@ public partial class MainWindow
         if (s.SidebarStyle == "icons") BuildIconRail(items, visible, pinned);
         else BuildSections(items, order, visible, pinned);
         ApplySidebarWidth();
+        RegisterPageCommands();   // 0.6.36: a "Go to …" keyboard command per page (Shell/MainWindow.Keyboard.cs)
         // Keep the open screen highlighted after a rebuild.
         if (Panes.ActiveTab is { } active) OnActiveTab(active);
     }
@@ -614,7 +621,7 @@ public partial class MainWindow
         if (key != NavLayout.AlwaysShownPage)
             yield return Menus.Item($"Hide “{title}” from the sidebar", () => SetNavHidden(key, true), tip: "It still opens from links and menus; Settings → Navigation → Shown pages brings it back");
         yield return Menus.Item($"Help: {title}", () => ShowHelp(title));
-        yield return Menus.Item(AppSettings.Current.SidebarCollapsed ? "Show sidebar" : "Hide sidebar", ToggleSidebar, "Ctrl+B");
+        yield return Menus.Item(AppSettings.Current.SidebarCollapsed ? "Show sidebar" : "Hide sidebar", ToggleSidebar, Services.Keys.KeyCommands.Text("nav.sidebar"));
     }
 
     private void OpenInPane(string key, Orientation o)

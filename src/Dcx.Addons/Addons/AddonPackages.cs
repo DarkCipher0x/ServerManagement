@@ -129,7 +129,7 @@ public static class AddonPackages
                 else if (vNew == vOld) refusal = $"Version {m.Version} is already installed.";
             }
             // The entry program's Authenticode state, checked on a temporary copy (shown on the approval screen).
-            string signature = m.Entry.Length == 0 ? (m.Library.Length > 0 ? "shared library (no program)" : m.Browser.Length > 0 ? "portal browser (no program)" : "theme only (no program)") : "script (no signature check)";
+            string signature = m.Entry.Length == 0 ? (m.Library.Length > 0 ? "shared library (no program)" : m.Module is not null ? "module (checked below)" : m.Browser.Length > 0 ? "portal browser (no program)" : "theme only (no program)") : "script (no signature check)";
             if (m.Entry.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             {
                 var tmp = Path.Combine(Path.GetTempPath(), "dcx-addon-" + Guid.NewGuid().ToString("N") + ".exe");
@@ -140,6 +140,20 @@ public static class AddonPackages
                     signature = v.Signer is { Length: > 0 } who && v.Verdict == UpdateVerdict.UntrustedPublisher ? $"Signed by {who} (signature valid)" : v.Verdict == UpdateVerdict.NotSigned ? "NOT signed" : "Signature INVALID — " + v.Message;
                 }
                 finally { try { File.Delete(tmp); } catch { } }
+            }
+            if (m.Module is not null)
+            {
+                // ADR-120: the module's signature and every file's hash, checked before the approval screen opens.
+                var rels = entries.Select(e => SafeRelative(e.FullName)!).ToList();
+                byte[]? Read(string rel)
+                {
+                    var e = entries.FirstOrDefault(x => string.Equals(SafeRelative(x.FullName), rel, StringComparison.OrdinalIgnoreCase));
+                    if (e is null) return null;
+                    using var es = e.Open(); using var ms = new MemoryStream(); es.CopyTo(ms); return ms.ToArray();
+                }
+                var problem2 = ModuleSignature.Problem(m, rels, Read);
+                signature = problem2 is null ? "Signed by DarkCipher Systems (release keys, module)" : "Module NOT trusted — " + problem2;
+                refusal ??= problem2;
             }
             refusal ??= PolicyRefusal(m, signature);   // 0.5.1 #7: Group Policy says no before the approval screen opens
             return new(path, m, sha, size, entries.Count, signature, existing, newPerms, refusal);
@@ -162,6 +176,18 @@ public static class AddonPackages
         if (string.IsNullOrWhiteSpace(m.Publisher) || m.Publisher.Length > 80) return "A publisher of 1–80 characters is required.";
         if ((m.Description ?? "").Length > 1000) return "The description is longer than 1000 characters.";
         m.Entry ??= ""; m.Theme ??= ""; m.Browser ??= ""; m.Library ??= ""; m.Permissions ??= new(); m.Commands ??= new();
+        if (m.Module is { } mod)
+        {
+            // Module add-on (ADR-120): an assembly the app loads as a module, only when its module.json is signed with the
+            // release keys (checked in Inspect, again before every load). It has no program, theme or permissions of its own.
+            if (SafeRelative(mod.Assembly ?? "") is not { } af || !files.Contains(af) || !af.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) return "The module must be a .dll file in the package.";
+            if (!Regex.IsMatch(mod.Type ?? "", @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$")) return "The module's type must be a full type name (Namespace.Type).";
+            if (mod.Api != AddonModuleInfo.CurrentApi) return $"The module is made for module API {mod.Api}; this app provides module API {AddonModuleInfo.CurrentApi}. Get the add-on's version for this app.";
+            if (!files.Contains(ModuleSignature.ManifestFile) || !files.Contains(ModuleSignature.SigFile)) return "A module add-on must carry its signed module.json (module.json, module.json.sig, module.json.pq.sig).";
+            if (m.Entry.Length > 0 || m.Theme.Length > 0 || m.Browser.Length > 0 || m.Library.Length > 0 || m.Permissions.Count > 0 || m.Commands.Count > 0)
+                return "A module add-on can't also have an entry program, a theme, a browser, a library, permissions or commands.";
+            return null;
+        }
         if (m.Library.Length > 0)
         {
             // Shared library (ADR-033): data only; the library engine is app code, so nothing in the package runs or asks for anything.
@@ -320,7 +346,11 @@ public static class AddonPackages
     /// <summary>Why Group Policy (or this PC's settings) refuses installing this package, or null. AllowAddonInstall,
     /// AddonBlockedIds, AddonAllowedIds and AddonRequireSigned (program add-ons only: data-only ones have no program).</summary>
     public static string? PolicyRefusal(AddonManifest m, string signature) =>
-        Restrictions.Why("addon.install") ?? UseRefusal(m.Id, m.Entry.Length > 0, signature);
+        Restrictions.Why("addon.install") ?? ModuleRefusal(m) ?? UseRefusal(m.Id, m.Entry.Length > 0, signature);
+
+    /// <summary>Why a module add-on may not be installed or loaded here (AddonAllowModules off), or null.</summary>
+    public static string? ModuleRefusal(AddonManifest m) =>
+        m.Module is not null && !AppSettings.Current.AddonAllowModules ? $"Module add-ons are turned off on this PC (AddonAllowModules); {m.Id} is one." : null;
 
     /// <summary>Why an installed add-on may not run or be applied now (blocked, not on the allowed list, or unsigned while
     /// signing is required), or null. Not a tamper verdict: it is not disabled, so lifting the policy brings it back.</summary>

@@ -32,7 +32,7 @@ public static class PortalUi
         var tab = MainWindow.Instance.AddTab("🌐 " + (b.Title.Length > 36 ? b.Title[..36] + "…" : b.Title), view);
         view.Tab = tab;
         if (window ?? AppSettings.Current.PortalOpenIn == "window") MainWindow.Instance.Panes.PopOut(tab);
-        if (Portals.Find(b.Id) != null) { b.LastOpened = DateTime.Now; Portals.Save(); }
+        if (Portals.Find(b.Id) != null && ActivityHistory.MayRecord()) { b.LastOpened = DateTime.Now; Portals.Save(); }   // ADR-116: history
         return view;
     }
 

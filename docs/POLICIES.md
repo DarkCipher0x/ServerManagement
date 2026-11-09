@@ -4,7 +4,7 @@ Generated from the app's policy catalog (`PolicySettings.Catalog`, ADR-040) by e
 
 Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer, wins) and `HKCU\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (user). Templates: `policy\DarkCipherServerManagement.admx` and `policy\en-US\DarkCipherServerManagement.adml` in each release folder. A managed setting can't be changed in the app; an invalid value is ignored and listed in Settings → Security & privacy → Managed by your organisation.
 
-268 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HostsDockWidth, HostsOpenIn, LastUpdateCheck, LocalSshKeysSeen, ObserveSecrets, OllamaTunnelHostId, OpenAiApiKey, OpenAiKey, PaletteRecent, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, SetupDone, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalHighlightRules, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
+291 policies, plus 2 computer-only ones (below). Not available as policies: ActiveAzureAccountId, ActiveContaboAccountId, ActiveGcpAccountId, ActiveHetznerAccountId, ActiveIncidentId, ActiveVultrAccountId, Addons, AiDefaultChosen, AiDefaultRevision, AiLockSet, AiPanelState, AiPanelWidth, AnthropicKey, ApiTokens, AzureAccounts, BackupLastError, BackupLastUtc, BrandingLogoPng, ChatPanelRoom, CollapsedNavSections, CollapsedSettingsCards, CommanderLeft, CommanderRight, ContaboAccounts, DefaultKeyCredentialId, DefaultTerminalProfileId, EditorVimProfiles, ExpandedNavSections, GcpAccounts, HetznerAccounts, HistoryLastCleared, HostsDockWidth, HostsOpenIn, LastUpdateCheck, LocalSshKeysSeen, ModuleData, ObserveSecrets, OllamaTunnelHostId, OpenAiApiKey, OpenAiKey, PaletteRecent, PendingUpdateFrom, PendingUpdateVersion, PreviousDataDir, PuppetDbHostId, PuppetServerHostId, Retired, SetupDone, SidePanelShown, SidePanelWidth, SidebarCollapsed, SmtpPassword, SyncWarningDismissedFor, TerminalHighlightRules, TerminalProfiles, TmuxConfig, UpdateGitHubToken, UserLocks, VultrAccounts, WindowHostPaneWidth, WorkspaceWindows (accounts, secrets and per-PC state).
 
 ## Security and sign-in
 
@@ -344,10 +344,53 @@ Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer
 | `LockPolicyMode` | How locked categories open (uac / signin) | REG_SZ | `uac` / `signin` | `uac` |
 | `LockedCategories` | Categories locked by your organisation (audit, credentials, hosts, …) | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 
+## Keyboard shortcuts
+
+| Value name | Setting | Type | Accepted | App default |
+|---|---|---|---|---|
+| `KeyBindings` | Keyboard shortcuts: one command.id=keys line each, e.g. tab.close=Ctrl+Shift+W or app.lock= for none (the command ids are listed in Settings → Keyboard) | REG_MULTI_SZ | one entry per line (up to 200) | empty |
+| `KeyBindingsAllowChange` | Users may change keyboard shortcuts | REG_DWORD | 1 = on, 0 = off | on |
+
+## History
+
+| Value name | Setting | Type | Accepted | App default |
+|---|---|---|---|---|
+| `HistoryAutoClear` | When kept history is cleared automatically (never, exit = when the app closes, or every 1, 7 or 30 days) | REG_SZ | `never` / `exit` / `1` / `7` / `30` | `never` |
+| `HistorySave` | Keep history (quick connect and palette recents, Toolbox runs, transfers, last connected, portal pages); off = nothing is kept | REG_DWORD | 1 = on, 0 = off | off |
+
+## CipherChat
+
+| Value name | Setting | Type | Accepted | App default |
+|---|---|---|---|---|
+| `ChatAdmin` | CipherChat server administration | REG_DWORD | 1 = on, 0 = off | on |
+| `ChatAllowCalls` | CipherChat voice and video calls; 0 = no calls | REG_DWORD | 1 = on, 0 = off | on |
+| `ChatAllowFiles` | Files and pictures in CipherChat chats (send and save); 0 = text only | REG_DWORD | 1 = on, 0 = off | on |
+| `ChatAllowSessionShare` | Share a terminal, Remote Desktop or VNC tab live into a CipherChat room (an end-to-end encrypted call showing only that tab, asked every time); 0 = off | REG_DWORD | 1 = on, 0 = off | on |
+| `ChatAllowedServers` | The only CipherChat servers that may be used (https:// origins); empty = any https:// server | REG_MULTI_SZ | one entry per line (up to 200) | empty |
+| `ChatAutoLockMinutes` | Lock every CipherChat chat (wipe its keys) after this many idle minutes on the PC (0–1440); 0 = only with the app lock and at exit | REG_DWORD | 0–1440 | 0 |
+| `ChatFeatures` | CipherChat built in | REG_DWORD | 1 = on, 0 = off | off |
+| `ChatMaxFileMB` | The largest file this PC sends in a CipherChat chat, in MB (1–100) | REG_DWORD | 1–100 | 100 |
+| `ChatNotify` | Windows notifications for new CipherChat messages while their room isn't in front; 0 = none | REG_DWORD | 1 = on, 0 = off | on |
+| `ChatRingSound` | The ringtone for incoming CipherChat calls; 0 = silent ring (the ring window still shows) | REG_DWORD | 1 = on, 0 = off | on |
+| `ChatShareFromScreens` | Share into CipherChat from terminals, the file commander, Toolbox and reports (always shown before sending); 0 = off | REG_DWORD | 1 = on, 0 = off | on |
+| `ChatToastPreviews` | Message text in CipherChat notifications; 0 = who and where only (default) | REG_DWORD | 1 = on, 0 = off | off |
+
+## Windows management
+
+| Value name | Setting | Type | Accepted | App default |
+|---|---|---|---|---|
+| `WinToolsAllowChanges` | Windows management may change services, processes and tasks | REG_DWORD | 1 = on, 0 = off | on |
+| `WinToolsAllowConsole` | The WMI console in Windows management (WQL and wmic-style commands, reading only); 0 = no console | REG_DWORD | 1 = on, 0 = off | on |
+| `WinToolsAllowRemote` | Windows management may manage other Windows computers (WMI / event logs with the host's saved credential or your Windows sign-in); 0 = this PC only | REG_DWORD | 1 = on, 0 = off | on |
+| `WinToolsAllowSecurityLog` | Reading the Security event log in Windows management (needs administrator rights there); 0 = not shown | REG_DWORD | 1 = on, 0 = off | on |
+| `WinToolsEventLimit` | The most events Windows management reads per event log view (50–5000) | REG_DWORD | 50–5000 | 500 |
+| `WinToolsFeatures` | Windows management built in | REG_DWORD | 1 = on, 0 = off | on |
+
 ## Add-ons
 
 | Value name | Setting | Type | Accepted | App default |
 |---|---|---|---|---|
+| `AddonAllowModules` | Module add-ons signed by DarkCipher Systems load into the app as modules (e.g. the stream manager for Twitch); 0 = none is installed or loaded | REG_DWORD | 1 = on, 0 = off | on |
 | `AddonAllowedIds` | Only these add-on ids may be installed (empty = any that passes the other checks) | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `AddonBlockedIds` | Add-on ids that may never be installed or run | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `AddonRequireSigned` | Only add-ons with a signed program | REG_DWORD | 1 = on, 0 = off | off |

@@ -130,7 +130,12 @@ public static class ArchitectureTests
         try
         {
             var mods = AppModules.All;
-            if (mods.Count != 1 || mods[0].Id != "ai") throw new Exception("modules: " + string.Join(", ", mods.Select(m => m.Id)));
+            // The AI first; CipherChat (ADR-117) and the stream manager (ADR-118) after it only when their switches loaded them.
+            bool streamOn = AppModules.IsLoaded("stream");   // the stream manager is a module add-on now (ADR-120)
+            var wantMods = new[] { "ai" }.Concat(ChatFeatures.Current.On ? new[] { "chat" } : Array.Empty<string>()).Concat(streamOn ? new[] { "stream" } : Array.Empty<string>()).ToArray();
+            // Windows management (ADR-119) loads after the chat and before the stream manager; it has no privacy rows.
+            var wantLoaded = new[] { "ai" }.Concat(ChatFeatures.Current.On ? new[] { "chat" } : Array.Empty<string>()).Concat(WinToolsFeatures.Current.On ? new[] { "wintools" } : Array.Empty<string>()).Concat(streamOn ? new[] { "stream" } : Array.Empty<string>()).ToArray();
+            if (!mods.Select(m => m.Id).SequenceEqual(wantLoaded)) throw new Exception("modules: " + string.Join(", ", mods.Select(m => m.Id)));
             var ai = AppModules.NavItemsIn("AI").ToList();
             if (ai.Select(n => n.Key).SequenceEqual(new[] { "aipanel", "assistant" }) == false) throw new Exception("AI nav items: " + string.Join(", ", ai.Select(n => n.Key)));
             if (ai[0].Open == null || ai[0].Menu == null || ai[1].Screen == null || ai[1].Header != "✦ AI operator") throw new Exception("AI nav contributions incomplete");
@@ -146,7 +151,8 @@ public static class ArchitectureTests
             // Settings (slice 2): the AI's category sits after Cloud providers as before; its three cards are contributions
             // and render in Settings with their scope; CategoryOf knows them.
             var cats = SettingsView.Categories.Select(c => c.Name).ToList();
-            var expectedCats = new[] { "Security & privacy", "Identity & directory", "Cloud providers", "AI & models", "Terminals & connections", "Appearance", "Navigation", "Data & backups", "Integrations", "Import & export", "About" };
+            var expectedCats = new[] { "Security & privacy", "Identity & directory", "Cloud providers", "AI & models", "CipherChat", "Windows management", "Terminals & connections", "Appearance", "Navigation", "Keyboard", "Data & backups", "Integrations", "Import & export", "About" }.ToList();
+            if (AppModules.IsLoaded("stream")) expectedCats.Insert(expectedCats.IndexOf("Integrations") + 1, "Stream manager");   // ADR-118
             if (!cats.SequenceEqual(expectedCats)) throw new Exception("settings categories: " + string.Join(", ", cats));
             var aiCards = AppModules.SettingsCardsIn("AI & models").Select(c => c.Title).ToList();
             if (!aiCards.SequenceEqual(new[] { "AI engine", "AI speed, agents & memory", "AI permissions & safety" })) throw new Exception("AI cards: " + string.Join(", ", aiCards));
@@ -158,7 +164,7 @@ public static class ArchitectureTests
             if (!sv.VisibleCardsForTest.ToHashSet().SetEquals(aiCards)) throw new Exception("AI & models shows: " + string.Join(", ", sv.VisibleCardsForTest));
             if (main.Panes.AllTabs.FirstOrDefault(t => t.Content == sv) is { } st) main.CloseTab(st);
             // Context menus and the error box (slice 3): the tab menu's AI item and the error box's AI action are contributions.
-            if (AppModules.MenuSurfaceCount("tab") != 1 || AppModules.ErrorActionCount != 1) throw new Exception($"menu / error contributions: {AppModules.MenuSurfaceCount("tab")} / {AppModules.ErrorActionCount}");
+            if (AppModules.MenuSurfaceCount("tab") != (ChatFeatures.Current.On ? 2 : 1) || AppModules.ErrorActionCount != 1) throw new Exception($"menu / error contributions: {AppModules.MenuSurfaceCount("tab")} / {AppModules.ErrorActionCount}");
             var dashTab = main.Panes.AllTabs.FirstOrDefault(t => t.Content is DashboardView) ?? throw new Exception("no dashboard tab");
             var tabItems = AppModules.MenuItems("tab", new TabMenuContext(dashTab, MainWindow.ScreenName(dashTab))).OfType<System.Windows.Controls.MenuItem>().ToList();
             if (tabItems.Count != 1 || tabItems[0].Header as string != "✦ Ask AI about this screen…") throw new Exception("tab menu items: " + string.Join(", ", tabItems.Select(i => i.Header)));
@@ -169,18 +175,28 @@ public static class ArchitectureTests
             if (aiAllowed ? errAction?.Label != "✦ Explain this error with AI" : errAction != null) throw new Exception("error-box action: " + (errAction?.Label ?? "none") + " while AI " + (aiAllowed ? "allowed" : "blocked"));
             // Slice 4: the right dock, the Ctrl+Shift+A shortcut and the window / start-up / shutdown hooks are contributions.
             if (!AppModules.HasRightDock || main.RightDock is not AiDock dock) throw new Exception("the right dock is not the AI module's");
-            if (AppModules.ShortcutGesture(System.Windows.Input.Key.A, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift) != "Ctrl+Shift+A") throw new Exception("Ctrl+Shift+A not registered");
+            // 0.6.36 (ADR-115): the module's shortcut is a command in the shared registry, owned by the module.
+            if (Services.Keys.KeyCommands.Find("ai.sidebar") is not { Module: not null } aiCmd || Services.Keys.KeyCommands.Text("ai.sidebar") is not { } aiKey) throw new Exception("the AI sidebar command is not registered by its module");
+            if (aiCmd.Defaults.SingleOrDefault() != new Services.Keys.KeyChord(System.Windows.Input.Key.A, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift)) throw new Exception("the AI sidebar's default is not Ctrl+Shift+A");
             var dockWas = dock.State;
-            if (!AppModules.RunShortcut(System.Windows.Input.Key.A, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift)) throw new Exception("shortcut did not run");
-            if (dock.State == dockWas) throw new Exception("Ctrl+Shift+A did not toggle the dock");
-            AppModules.RunShortcut(System.Windows.Input.Key.A, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift);
+            var aiChord = Services.Keys.KeyCommands.Effective("ai.sidebar")[0];
+            if (!Services.Keys.KeyCommands.TryRun(aiChord, remoteHasKeyboard: true)) throw new Exception(aiKey + " did not run");
+            if (dock.State == dockWas) throw new Exception(aiKey + " did not toggle the dock");
+            Services.Keys.KeyCommands.TryRun(aiChord, remoteHasKeyboard: false);
             if (dock.State != AiDockState.Docked && dockWas == AiDockState.Docked) throw new Exception("dock not back after the second toggle: " + dock.State);
-            if (AppModules.RunShortcut(System.Windows.Input.Key.A, System.Windows.Input.ModifierKeys.Control)) throw new Exception("Ctrl+A ran a module shortcut");
+            if (Services.Keys.KeyCommands.TryRun(new Services.Keys.KeyChord(System.Windows.Input.Key.A, System.Windows.Input.ModifierKeys.Control), false)) throw new Exception("Ctrl+A ran a shortcut");
             var hooks = AppModules.HookCounts;
-            if (hooks.WindowReady != 1 || hooks.Startup != 1) throw new Exception($"hooks: window-ready {hooks.WindowReady}, start-up {hooks.Startup}");
+            // The AI's window-ready and start-up hooks; CipherChat (ADR-117) adds its start-up resume when it is loaded, the
+            // stream manager (ADR-118) its connections and its system-wide keys.
+            if (hooks.WindowReady != (streamOn ? 2 : 1) || hooks.Startup != 1 + (ChatFeatures.Current.On ? 1 : 0) + (streamOn ? 1 : 0)) throw new Exception($"hooks: window-ready {hooks.WindowReady}, start-up {hooks.Startup}");
             // Slice 5: the dashboard's AI source + tile and the privacy report's AI rows are contributions, in their 0.1.20 places.
             var srcs = Overview.ModuleSources;
-            if (srcs.Count != 1 || srcs[0].Module != "ai" || srcs[0].Id != "ai" || srcs[0].Title != "AI engine") throw new Exception("dashboard sources: " + string.Join(", ", srcs.Select(x => x.Module + "/" + x.Id)));
+            // CipherChat (ADR-117) adds its sources after the AI's when it is loaded (unread; 0.6.38: contacts and the server
+            // you administer), the stream manager (ADR-118) its own last.
+            var chatSrcs = ChatFeatures.Current.On ? new[] { "chat", "chat-people", "chat-admin" } : Array.Empty<string>();
+            if (srcs.Count != 1 + chatSrcs.Length + (streamOn ? 1 : 0) || srcs[0].Module != "ai" || srcs[0].Id != "ai" || srcs[0].Title != "AI engine"
+                || !srcs.Skip(1).Take(chatSrcs.Length).Select(x => x.Module + "/" + x.Id).SequenceEqual(chatSrcs.Select(id => "chat/" + id))
+                || (streamOn && srcs[^1] is not { Module: "stream", Id: "stream" })) throw new Exception("dashboard sources: " + string.Join(", ", srcs.Select(x => x.Module + "/" + x.Id)));
             bool engineOn = Ai.AiClient.Engine != "off";
             if (Overview.Sources().Any(x => x.Id == "ai") != engineOn) throw new Exception("AI source listed while the engine is " + Ai.AiClient.Engine);
             if (srcs[0].Tile(null, "w").Value != (engineOn ? Ai.AiClient.Engine : "off") || (engineOn && srcs[0].Tile(new(null, "e"), "w") is not { Value: "offline", Alert: true }) || (engineOn && srcs[0].Tile(new("t", null), "w").Value != "online"))
@@ -190,10 +206,15 @@ public static class ArchitectureTests
             int At(string title) => dv.SummaryText.IndexOf(title, StringComparison.OrdinalIgnoreCase);
             if (At("AI engine") < 0 || At("Saved hosts") > At("AI engine") || At("AI engine") > At("Encrypted store"))
                 throw new Exception("summary tiles: " + dv.SummaryText.Replace("\n", " | "));
-            if (PrivacyReport.Contributions.Count != 1 || PrivacyReport.Contributions[0].Module != "ai") throw new Exception("privacy contributions");
+            // CipherChat (ADR-117) adds its rows after the AI's when it is loaded, the stream manager (ADR-118) after those.
+            if (!PrivacyReport.Contributions.Select(c => c.Module).SequenceEqual(wantMods)) throw new Exception("privacy contributions: " + string.Join(", ", PrivacyReport.Contributions.Select(c => c.Module)));
             var postureNames = PrivacyReport.PostureItems().Select(p => p.Name).ToList();
             int dl = postureNames.IndexOf("Data location");
-            if (dl < 0 || postureNames.ElementAtOrDefault(dl + 1) != "External AI" || postureNames.ElementAtOrDefault(dl + 2) != "Secret masking for AI" || postureNames.ElementAtOrDefault(dl + 3) != "Paste protection")
+            int chatRows = ChatFeatures.Current.On ? 2 : 0;   // "CipherChat" and "CipherChat administration" after the AI's rows
+            int streamRows = streamOn ? 2 : 0;                // then "Stream manager (Twitch)" and "Streamer.bot"
+            if (dl < 0 || postureNames.ElementAtOrDefault(dl + 1) != "External AI" || postureNames.ElementAtOrDefault(dl + 2) != "Secret masking for AI" || postureNames.ElementAtOrDefault(dl + 3 + chatRows + streamRows) != "Paste protection"
+                || (chatRows > 0 && (postureNames.ElementAtOrDefault(dl + 3) != "CipherChat" || postureNames.ElementAtOrDefault(dl + 4) != "CipherChat administration"))
+                || (streamRows > 0 && (postureNames.ElementAtOrDefault(dl + 3 + chatRows) != "Stream manager (Twitch)" || postureNames.ElementAtOrDefault(dl + 4 + chatRows) != "Streamer.bot")))
                 throw new Exception("posture order: " + string.Join(", ", postureNames));
             var firstEndpoint = PrivacyReport.Endpoints().FirstOrDefault()?.Service ?? "";
             if (!firstEndpoint.StartsWith("AI engine")) throw new Exception("first endpoint: " + firstEndpoint);
@@ -201,8 +222,17 @@ public static class ArchitectureTests
             // Slice 6: help articles tagged "module: ai" exist because the AI module owns them; the tag lines never reach a body.
             var inFile = HelpKb.AllInFile();
             var aiArticles = inFile.Where(a => a.Module == "ai").Select(a => a.Title).ToList();
-            if (aiArticles.Count != 15 || inFile.Any(a => a.Module != null && a.Module != "ai")) throw new Exception($"tagged help articles: {aiArticles.Count} ai, others: " + string.Join(", ", inFile.Where(a => a.Module is not (null or "ai")).Select(a => a.Module)));
-            if (!HelpKb.OwnedModules.Contains("ai") || HelpKb.Articles.Count != inFile.Count || !aiArticles.All(t => HelpKb.Articles.Any(a => a.Title == t))) throw new Exception($"help with the AI module: {HelpKb.Articles.Count} of {inFile.Count}");
+            int chatArticles = inFile.Count(a => a.Module == "chat");
+            int streamArticles = inFile.Count(a => a.Module == "stream");
+            int winArticles = inFile.Count(a => a.Module == "wintools");
+            if (aiArticles.Count != 15 || chatArticles != 2 || streamArticles != 0 || winArticles != 1 || inFile.Any(a => a.Module is not (null or "ai" or "chat" or "stream" or "wintools"))) throw new Exception($"tagged help articles: {aiArticles.Count} ai, {chatArticles} chat, {streamArticles} stream, {winArticles} wintools, others: " + string.Join(", ", inFile.Where(a => a.Module is not (null or "ai" or "chat" or "stream" or "wintools")).Select(a => a.Module)));
+            // The chat articles (ADR-117), the stream article (ADR-118) and the Windows management article (ADR-119) are in the help only while their modules are loaded.
+            bool winOn = WinToolsFeatures.Current.On;
+            // The stream manager's article is in its add-on's help.md (ADR-120), never in the app's help file.
+            int supplied = HelpKb.SuppliedForTest().Count;
+            if (streamOn != (supplied > 0)) throw new Exception($"module-supplied help: {supplied} article(s) with the stream module {(streamOn ? "loaded" : "not loaded")}");
+            int expected = inFile.Count - (ChatFeatures.Current.On ? 0 : chatArticles) - (winOn ? 0 : winArticles) + supplied;
+            if (!HelpKb.OwnedModules.Contains("ai") || HelpKb.OwnedModules.Contains("chat") != ChatFeatures.Current.On || HelpKb.OwnedModules.Contains("wintools") != winOn || HelpKb.OwnedModules.Contains("stream") != streamOn || HelpKb.Articles.Count != expected || !aiArticles.All(t => HelpKb.Articles.Any(a => a.Title == t))) throw new Exception($"help with the AI module: {HelpKb.Articles.Count} of {inFile.Count} (expected {expected})");
             if (inFile.Any(a => a.Body.StartsWith("module:") || a.Body.StartsWith("keywords:") || a.Keywords.Contains("module:"))) throw new Exception("a tag line leaked into an article");
             if (HelpKb.Search("foundry local npu", 1).FirstOrDefault().Article?.Module != "ai") throw new Exception("AI article not found by search");
             var sample = HelpKb.Parse("## A\nkeywords: k\nmodule: x\nbody a\n## B\nmodule: y\nkeywords: kk\nbody b\n## C\nbody c\n", new HashSet<string> { "y" });
@@ -213,7 +243,8 @@ public static class ArchitectureTests
             try {
             if (Assist.Current is not Ai.AiAssistant assistant) throw new Exception("assistant: " + (Assist.Current?.GetType().Name ?? "none"));
             if (assistant.WhyNot() != Ai.AiActions.Why(Ai.AiFeature.Files) || assistant.WhyNot(AssistUse.Helper) != Ai.AiActions.Why(Ai.AiFeature.Helper)) throw new Exception("assistant availability differs from the AI's");
-            if (AppModules.MenuSurfaceCount("screenshot") != 1 || AppModules.MenuSurfaceCount("settings-card") != 1) throw new Exception("screenshot / settings-card contributions");
+            // The AI's 📷 item; CipherChat (ADR-117) adds "Send screenshot to a chat…" when it is loaded.
+            if (AppModules.MenuSurfaceCount("screenshot") != (ChatFeatures.Current.On ? 2 : 1) || AppModules.MenuSurfaceCount("settings-card") != 1) throw new Exception("screenshot / settings-card contributions");
             var shotItems = Screenshot.MenuItems(() => Task.FromResult<System.Windows.Media.Imaging.BitmapSource>(null!), "probe").OfType<System.Windows.Controls.MenuItem>().Select(m => m.Header as string).ToList();
             if (!shotItems.Contains("✦ Analyse with AI (vision model)…") || shotItems.Last() != "Open screenshots folder") throw new Exception("screenshot menu: " + string.Join(" | ", shotItems));
             var cardItems = AppModules.MenuItems("settings-card", new SettingsCardMenuContext("Offline mode", "hint", "Block internet", "Block internet", "on", null, () => new[] { "a" })).OfType<System.Windows.Controls.MenuItem>().Select(m => m.Header as string).ToList();
@@ -276,6 +307,30 @@ public static class ArchitectureTests
             var aiUsers = below.Keys.Where(k => k != "Dcx.Ai").Select(k => { try { return System.Reflection.Assembly.Load(k); } catch (FileNotFoundException) { return null; } })
                 .Where(a => a != null && a.GetReferencedAssemblies().Any(r => r.Name == "Dcx.Ai")).Select(a => a!.GetName().Name).ToList();
             if (aiUsers.Count > 0) throw new Exception("these reference Dcx.Ai: " + string.Join(", ", aiUsers));
+            // CipherChat (ADR-117): nothing below the app references the chat module or CipherChat's libraries; the module
+            // itself references only Core and Ui (checked only when it is loaded: with chat off it must never be).
+            var chatUsers = below.Keys.Select(k => { try { return System.Reflection.Assembly.Load(k); } catch (FileNotFoundException) { return null; } })
+                .Where(a => a != null && a.GetReferencedAssemblies().Any(r => r.Name == "Dcx.Chat" || r.Name?.StartsWith("CipherChat.", StringComparison.Ordinal) == true)).Select(a => a!.GetName().Name).ToList();
+            if (chatUsers.Count > 0) throw new Exception("these reference the chat: " + string.Join(", ", chatUsers));
+            if (ChatFeatures.Current.On)
+            {
+                var chatRefs = System.Reflection.Assembly.Load("Dcx.Chat").GetReferencedAssemblies().Select(r => r.Name ?? "").Where(r => r.StartsWith("Dcx", StringComparison.Ordinal)).ToList();
+                if (chatRefs.Any(r => r is not ("Dcx.Core" or "Dcx.Ui"))) throw new Exception("Dcx.Chat references " + string.Join(", ", chatRefs));
+                checkedCount++;
+            }
+            // The stream manager (ADR-118) likewise: nothing below the app references it; it references only Core and Ui.
+            var streamUsers = below.Keys.Select(k => { try { return System.Reflection.Assembly.Load(k); } catch (FileNotFoundException) { return null; } })
+                .Where(a => a != null && a.GetReferencedAssemblies().Any(r => r.Name == "Dcx.Stream")).Select(a => a!.GetName().Name).ToList();
+            if (streamUsers.Count > 0) throw new Exception("these reference the stream module: " + string.Join(", ", streamUsers));
+            // ADR-120: it isn't part of the app at all: no reference, no file next to the exe; loaded, it came from its package.
+            if (app.GetReferencedAssemblies().Any(r => r.Name == "Dcx.Stream") || File.Exists(Path.Combine(AppContext.BaseDirectory, "Dcx.Stream.dll"))) throw new Exception("Dcx.Stream ships with the app");
+            if (AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "Dcx.Stream") is { } streamAsm)
+            {
+                if (System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(streamAsm)?.Name != "addon:com.darkcipher.stream") throw new Exception("Dcx.Stream wasn't loaded from its add-on package");
+                var streamRefs = streamAsm.GetReferencedAssemblies().Select(r => r.Name ?? "").Where(r => r.StartsWith("Dcx", StringComparison.Ordinal)).ToList();
+                if (streamRefs.Any(r => r is not ("Dcx.Core" or "Dcx.Ui"))) throw new Exception("Dcx.Stream references " + string.Join(", ", streamRefs));
+                checkedCount++;
+            }
             // Embedded files: help with the help search (Core), the terminal page with the app, the add-on SDK with the app.
             string[] Res(System.Reflection.Assembly a) => a.GetManifestResourceNames();
             var help = typeof(HelpKb).Assembly;

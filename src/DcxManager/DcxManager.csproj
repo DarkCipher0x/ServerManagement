@@ -25,7 +25,7 @@
     <!-- Version: numeric (assembly, Windows Installer, update checks); it must keep increasing.
          ReleaseLabel: what the release is called (file names, dist folder, shown in the app), e.g. 0.2.0-preview.1 while
          the numeric version is 0.1.21 (a preview has to sort below the final 0.2.0, which upgrades it). Empty = Version. -->
-    <Version>0.6.35</Version>
+    <Version>0.6.40</Version>
     <ReleaseLabel></ReleaseLabel>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
@@ -85,6 +85,12 @@
     <ProjectReference Include="..\Dcx.Notify\Dcx.Notify.csproj" />
     <!-- The AI module: only App.LoadAiModule() and the self-test name it; with AI off the assembly is never loaded -->
     <ProjectReference Include="..\Dcx.Ai\Dcx.Ai.csproj" />
+    <!-- The CipherChat module (ADR-117): only App.LoadChatModule() and the self-test name it; with CipherChat off neither it
+         nor CipherChat's vendored libraries are loaded -->
+    <ProjectReference Include="..\Dcx.Chat\Dcx.Chat.csproj" />
+    <!-- Windows management (ADR-119): only App.LoadWinToolsModule() and the self-test name it; with it off the assembly
+         is never loaded -->
+    <ProjectReference Include="..\Dcx.WinTools\Dcx.WinTools.csproj" />
     <!-- Add-on SDK (ADR-035): the encrypted bridge for PowerShell add-ons, used by the self-test and offered on the Add-ons screen -->
     <EmbeddedResource Include="..\..\samples\addons\sdk\DcxBridge.dll" LogicalName="sdk/DcxBridge.dll" />
     <EmbeddedResource Include="..\..\samples\addons\sdk\DcxAddon.ps1" LogicalName="sdk/DcxAddon.ps1" />

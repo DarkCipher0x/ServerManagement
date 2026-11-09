@@ -21,6 +21,7 @@ public sealed class ToolboxRun
     /// <summary>Adds a run to the store (trimmed, newest first) and saves.</summary>
     public static void Record(string tool, string target, string summary, string report)
     {
+        if (!ActivityHistory.MayRecord()) return;   // ADR-116: Toolbox runs are history (off by default)
         var run = new ToolboxRun { Tool = tool, Target = target, Summary = Trim(summary, 300), Report = Trim(report, MaxReport) };
         var list = AppData.Current.ToolboxHistory;
         list.Insert(0, run);

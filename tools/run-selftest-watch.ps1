@@ -1,4 +1,4 @@
-param([string]$Exe, [string]$Scratch, [int]$Minutes = 10, [switch]$AiOff)
+param([string]$Exe, [string]$Scratch, [int]$Minutes = 10, [switch]$AiOff, [switch]$ChatOn, [switch]$StreamOn, [string[]]$Addon)
 $ErrorActionPreference = 'Stop'
 Add-Type @"
 using System; using System.Collections.Generic; using System.Runtime.InteropServices; using System.Text;
@@ -28,11 +28,28 @@ $env:DCX_DATA_DIR = "$Scratch\selftest-data"
 # 0.2.0: a fresh store is a new install, where AI features start off; the normal run turns them on, -AiOff runs the
 # AI-off suite (the module never loaded).
 $env:DCX_AI_FEATURES = if ($AiOff) { '0' } else { '1' }
+# ADR-117: CipherChat is off by default (and in the normal run, which checks nothing of it is loaded); -ChatOn loads it.
+$env:DCX_CHAT_FEATURES = if ($ChatOn) { '1' } else { '0' }
+# ADR-119: the AI-off suite checks the app with no module at all, so Windows management is off there too.
+$env:DCX_WINTOOLS_FEATURES = if ($AiOff) { '0' } else { $null }
+# ADR-120: module add-ons are installed into the scratch store before the modules load. -Addon <.dcxaddon> installs those;
+# -StreamOn packs and signs the stream manager (samples\addons\stream, release keys: run with LOCALAPPDATA pointing at
+# them) into the scratch folder and installs it. Without either, the run checks nothing of the stream manager exists.
+$addons = @($Addon | Where-Object { $_ })
+if ($StreamOn) {
+  $root = Split-Path $PSScriptRoot -Parent
+  & (Join-Path $root 'samples\addons\pack.ps1') (Join-Path $root 'samples\addons\stream') -OutDir "$Scratch\addon-build" | Out-Host
+  $addons += @(Get-ChildItem "$Scratch\addon-build" -Filter 'com.darkcipher.stream-*.dcxaddon' | Sort-Object LastWriteTime | Select-Object -Last 1 | ForEach-Object FullName)
+}
+$env:DCX_SELFTEST_ADDONS = if ($addons.Count -gt 0) { ($addons | ForEach-Object { (Resolve-Path $_).Path }) -join ';' } else { $null }
 $started = Get-Date
 $p = Start-Process $Exe -ArgumentList '--selftest', "$Scratch\selftest.txt" -PassThru
 $null = $p.Handle   # keep the handle, or Windows PowerShell can lose the real exit code
 $env:DCX_DATA_DIR = $null
 $env:DCX_AI_FEATURES = $null
+$env:DCX_CHAT_FEATURES = $null
+$env:DCX_WINTOOLS_FEATURES = $null
+$env:DCX_SELFTEST_ADDONS = $null
 $seen = @{}
 $deadline = (Get-Date).AddMinutes($Minutes)
 while (-not $p.HasExited -and (Get-Date) -lt $deadline) {

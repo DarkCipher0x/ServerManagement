@@ -45,8 +45,15 @@ public static partial class SelfTest
         // several times and expect a tab each, so they run with switching off; Release051Tests checks the default and the
         // switching itself on its own.
         AppSettings.Current.ReuseOpenTabs = false;
+        // 0.6.37 (ADR-116): history is off by default. The older sections exercise recents, Toolbox runs and transfers, so
+        // the suite keeps history; HistoryTests checks the default (read here, before it is turned on) and the off state.
+        HistoryTests.FreshStoreOff = !AppSettings.Current.HistorySave;
+        AppSettings.Current.HistorySave = true;
         // 0.2.0 phase 5: the second run starts with AI features off (DCX_AI_FEATURES=0) and has its own suite — it must not
         // touch any AI code, so it branches before the lines below.
+        // ADR-117: the CipherChat live run (tools\chat-live-test.ps1 only, never the release build): its own suite against
+        // a local CipherChat server.
+        if (ChatLiveSuite.Requested && ChatFeatures.Current.On) { await ChatLiveSuite.RunAsync(main, reportPath); return; }
         if (!AiFeatures.Current.On) { await AiOffTests.RunAsync(main, reportPath); return; }
         await RunFullAsync(main, reportPath);
     }
@@ -207,6 +214,14 @@ public static partial class SelfTest
         try { await QuickConnectTests.RunAsync(main, Ok, Fail); }
         catch (Exception ex) { Fail("quick connect tests", ex); }
 
+        // 0.6.36 (ADR-115): keyboard control — the shortcut registry, Settings → Keyboard, policy and encryption.
+        try { await KeyboardTests.RunAsync(main, Ok, Fail); }
+        catch (Exception ex) { Fail("keyboard tests", ex); }
+
+        // 0.6.37 (ADR-116): history — off by default, every kind gated, cleared by hand, by age and on exit, policy.
+        try { await HistoryTests.RunAsync(main, Ok, Fail); }
+        catch (Exception ex) { Fail("history tests", ex); }
+
         // 0.3.0 preview.5: syslog over TLS and e-mail notifications (fakes on 127.0.0.1).
         try { await NotifyTests.RunAsync(main, Ok, Fail); }
         catch (Exception ex) { Fail("syslog / notification tests", ex); }
@@ -329,6 +344,18 @@ public static partial class SelfTest
         // 0.2.0 phase 5: the AI features switch, its lock and the capability filter (the AI-off run has its own suite).
         try { await AiSwitchTests.RunAsync(main, Ok, Fail); }
         catch (Exception ex) { Fail("AI features switch", ex); }
+
+        // 0.6.38 (ADR-117): CipherChat built in — the switch; off: nothing of it loaded; -ChatOn: the module and its rules.
+        try { await ChatTests.RunAsync(main, Ok, Fail); }
+        catch (Exception ex) { Fail("CipherChat tests", ex); }
+        // 0.6.39 (ADR-119): Windows management built in — the switch, the wmic translation and the console on this PC.
+        try { await WinToolsTests.RunAsync(main, Ok, Fail); }
+        catch (Exception ex) { Fail("Windows management tests", ex); }
+
+        // ADR-120: module add-ons — signatures, loading and settings with test keys; then every loaded module add-on's own
+        // self-test (the stream manager for Twitch, ADR-118, when the run installed it: -StreamOn); none loaded: no trace of it.
+        try { await ModuleAddonTests.RunAsync(main, Path.GetDirectoryName(reportPath)!, Ok, Fail); }
+        catch (Exception ex) { Fail("module add-on tests", ex); }
 
         // ADR-030 (0.1.12): theme add-ons (the sample theme): applied, refused when malformed, removable back to the default.
         try { await ThemeAddonTests.RunAsync(main, Path.GetDirectoryName(reportPath)!, Ok, Fail, Snap); }

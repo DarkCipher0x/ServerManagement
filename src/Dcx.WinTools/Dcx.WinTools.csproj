@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dcx.WinTools (0.6.39, ADR-119): Windows management built in. It is an MMC-style console for services, processes,
+       event logs, storage, users and groups, shares, scheduled tasks, network, start-up programs, updates, drivers and
+       classic consoles, plus a WMI console that runs WQL and wmic-style commands, for this PC and saved Windows hosts.
+       It uses native WMI (System.Management) and the event log API; nothing runs through PowerShell or wmic.exe.
+       Only the app's composition root (and its self-test) references it: with Windows management off, the module isn't
+       registered and this assembly isn't loaded. Depends on Dcx.Core and Dcx.Ui only. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DcxManager.WinTools</RootNamespace>
+    <AssemblyName>Dcx.WinTools</AssemblyName>
+    <Product>DarkCipher ServerManagement</Product>
+    <Company>DarkCipher Systems</Company>
+    <Copyright>Copyright © 2026 DarkCipher Systems</Copyright>
+    <DebugType>none</DebugType>
+    <!-- Keep local build paths (user name) out of compiled code -->
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dcx.Core\Dcx.Core.csproj" />
+    <ProjectReference Include="..\Dcx.Ui\Dcx.Ui.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The app (its composition root and self-test) uses its internal members -->
+    <InternalsVisibleTo Include="DcxServerManager" />
+  </ItemGroup>
+
+</Project>

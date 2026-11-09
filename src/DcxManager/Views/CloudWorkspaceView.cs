@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 
 namespace DcxManager.Views;
 
@@ -87,7 +88,7 @@ public sealed class CloudWorkspaceView : UserControl, ICloudView, IDisposable
             if (Keyboard.Modifiers == ModifierKeys.Control) OpenInTab(key); else Show(key);
             e.Handled = true;
         };
-        PreviewKeyDown += (_, e) => { if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) { _search.Focus(); _search.SelectAll(); e.Handled = true; } };
+        PreviewKeyDown += (_, e) => { if (KeyCommands.Matches(e, ViewCommands.PageFind)) { _search.Focus(); _search.SelectAll(); e.Handled = true; } };
         Menus.Attach(_tree, TreeMenu);
         BuildTree();
         ShowOverview();

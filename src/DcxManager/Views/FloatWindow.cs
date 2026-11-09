@@ -199,7 +199,10 @@ public sealed class FloatWindow : DetachedWindow
     }
 
     /// <summary>Title: the window's label and its selected tab.</summary>
-    internal void UpdateTitle(TabItem? selected) => Title = selected != null ? $"{selected.Header} — {Label} — ServerManagement" : $"{Label} — ServerManagement";
+    internal void UpdateTitle(TabItem? selected) => Title = FixedTitle ?? (selected != null ? $"{selected.Header} — {Label} — ServerManagement" : $"{Label} — ServerManagement");
+
+    /// <summary>A title that stays while it is set (0.6.39: a tab shared live into a chat call, captured by this title).</summary>
+    public string? FixedTitle { get; set { field = value; UpdateTitle(LastActive?.SelectedItem as TabItem ?? Frame.Pane.SelectedItem as TabItem); } }
 
     /// <summary>Where the window is now (normal bounds), for restoring it next time.</summary>
     internal WindowPlacement Placement()
@@ -215,4 +218,10 @@ public sealed class FloatWindow : DetachedWindow
     }
 
     protected override void OnUserClosing() => _host.FloatClosing(this);
+
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        _host.FloatClosed(this);
+    }
 }

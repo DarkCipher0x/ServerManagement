@@ -3115,3 +3115,334 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
 - **Tests:** `InfraApiTests` (fake BMC, GreenLake and Sophos Central: sessions opened and deleted, paths refused, actions
   limited to the offered values and verified, tokens cached and sent only to the service's own hosts), fuzzing
   (`redfish-inventory`, `greenlake-inventory`, `sophos-inventory`).
+
+## ADR-115: Keyboard control — one command registry, rebindable keys and Settings → Keyboard (0.6.36)
+- **Context:** DarkCipher0x asked for "full keyboard control of ServerManagement with a dedicated keybindings page in the
+  settings", with the code "organised, secure, and easy to maintain". Before this, the main window's shortcuts were one
+  `switch` in `HandleShortcut`, modules registered key + modifiers + display text separately (`IAppHost.Shortcut`),
+  screens compared keys inline, and menus and tooltips repeated the key text by hand, so a key could only be changed in
+  code and its text could drift.
+- **Decision — one registry:** `Dcx.Ui/Services/Keys/KeyCommands.cs` holds every command: an id (`tab.close`), title,
+  category, scope and default keys. App commands (scope `app`) carry their action and an optional `CanRun`; screen
+  commands (`portal`, `notes`, `page`, `editor`) are carried out by their screen, which asks `KeyCommands.Matches(e, id)`
+  with an id from `Services/ViewCommands.cs` instead of naming a key. The main window registers its own in
+  `Shell/MainWindow.Keyboard.cs`, a "Go to …" command per sidebar page follows `BuildNav`, and modules use
+  `IAppHost.Command` (the AI sidebar's `ai.sidebar`). `MainWindow.HandleShortcut` (main and pop-out windows) is now one
+  call: `KeyCommands.TryRun(e, RemoteKeyboard.HasKeyboard(e))`. The command palette lists the same app commands with
+  their keys, menus show `KeyCommands.Text(id)`, and tooltips follow `KeyCommands.Changed`.
+- **Decision — keys in force:** the defaults, then the user's changes (`AppSettings.KeyBindings`, encrypted, one
+  `id=Ctrl+Shift+P;F6` line per changed command, `id=` for none), and Group Policy can set that list (REG_MULTI_SZ) or
+  keep the defaults (`KeyBindingsAllowChange` = 0). Everything is worked out again only when a command is registered or
+  the stored list's hash changes. A key bound twice where both commands work (same scope, or the app and a screen inside
+  its windows) stays with the first command and is listed as a problem; the editors' own windows don't overlap the app.
+- **Decision — terminals keep their keys:** a screen that sends the keyboard to a remote program implements
+  `IRemoteKeyboard` (`TerminalView`, `VncView`, `RdpView`). While one has the keyboard only `KeyChord.WorksInRemoteSessions`
+  keys are taken (Ctrl+Shift, Ctrl+Alt, Ctrl+Tab and Ctrl+F-key), as `HandleShortcut` did before, now as one rule shown
+  on the Keyboard page ("not in terminals") instead of per-case conditions.
+- **Decision — screens keep their own keys:** a screen with its own key map implements `IOwnKeys.OwnsKey(chord)`
+  (`CommanderView.OwnKeys` while a file list has the keyboard, `DocsView.EditorKeys` while the text does).
+  `KeyCommands.TryRun(KeyEventArgs)` asks `ScreenKeys.Claimed` (walking up from the focused element and the event's
+  source; an owner that throws is logged and ignored) before matching, so the screen's own handler gets the key. The
+  self-test checks that every app command a screen takes a default from stays reachable there (another default, or
+  the command palette).
+- **Decision — strict input:** key text is read by `KeyChord.TryParse` against an allow-list (letters, digits, F1–F24,
+  arrows, navigation and punctuation keys; Ctrl, Alt, Shift only; never the Windows key), at most 40 characters, no
+  control characters; `KeyBindingList.Parse` takes at most 400 lines of 200 characters, ids of the form `word.word`, three
+  keys per command, and skips (and lists) whatever fails, so a bad line never turns a command's keys off. Keys that keep
+  their meaning can't be bound: Windows' own (Alt+F4, Alt+Tab, Ctrl+Esc…), focus movement (Shift+Tab), Shift+F10, text
+  editing (Ctrl+C / X / V / Z / Y / A, Ctrl/Shift+Ins, Shift+Del) and the terminal's Ctrl+Shift+C / V; without Ctrl or Alt
+  only F-keys and Pause. Defaults go through the same checks and throw at registration, so a bad default can't ship.
+- **Decision — the page:** Settings → Keyboard (`Views/Settings/SettingsView.Keyboard.cs`): grouped, searchable by name or
+  key, "only the ones I changed"; Change… opens a `KeyCaptureBox` (Dcx.Ui) under the row that records the next keys (Tab
+  still moves on, Esc cancels; while it has the keyboard no shortcut runs), then says whether the keys are free, belong to
+  another command (using them moves them, said first) or would go to a remote program; Add as another key, Remove,
+  Default, Reset all (asks), Copy the list. Policy locks are shown and disable the buttons. Every change is saved
+  encrypted and written to the audit log; the shortcuts travel with Import & export (validated the same way).
+- **Keyboard focus:** an accent-coloured focus ring replaces Windows' dotted rectangle app-wide
+  (`SystemParameters.FocusVisualStyleKey` in `Themes/Controls.xaml`); Ctrl+Shift+E moves to the sidebar, where ↑ / ↓ /
+  Home / End move and Esc returns to the tab.
+- **Rejected:** WPF `InputBinding`s / `RoutedCommand`s per window (they can't express the terminal rule or scopes, and
+  pop-out windows would each need their own copy); multi-key sequences such as Ctrl+K Ctrl+S (rarely needed here, and
+  they make the terminal rule ambiguous); rebinding the file commander's Midnight Commander keys and the Vim engine (they
+  follow those programs on purpose); storing the bindings in a separate plain JSON file (everything stored is encrypted).
+- **Tests:** `KeyboardTests` (`SelfTest/SelfTestKeyboard.cs`): every allowed key and modifier set round-trips, malformed
+  and reserved keys are refused, a 4,000-input fuzz pass never throws, the stored list's limits, the defaults are valid and
+  clash-free and keep the pre-0.6.36 keys, dispatch and the terminal rule, clashes refused or moved, policy locks (list and
+  switch), the page driven through its rows and capture box, the import, the window helpers, and the settings file holds
+  no readable binding. The architecture and AI-off suites check the module command.
+
+## ADR-116: History — one switch, off by default, cleared anywhere (0.6.37)
+
+- **Context:** the app remembered what you did in several places, each on its own terms: quick connect's recents, the
+  palette's, Toolbox runs with their reports, finished transfers, "last connected" on hosts, "last opened" on portals,
+  and the portal browser's page history. Only Toolbox and the palette could be cleared, nothing could be stopped, and a
+  new feature had no rule to follow. Asked for: clear history in the quick connect bar and everywhere else, settings to
+  clear it automatically or not keep it at all, with not keeping it the default.
+- **Decision — one gate, one list:** `ActivityHistory` (Dcx.Core) holds the switch (`HistorySave`, default off), the
+  automatic clear (`HistoryAutoClear`: never, exit, 1, 7, 30 days, counted from `HistoryLastCleared`) and the registry of
+  `HistorySource`s (id, title, where it shows, count, clear). Every history asks `MayRecord()` before writing (which also
+  runs a clear that came due), and every one is registered in `DcxManager/Services/HistorySources.cs`, so a new history is
+  one line there plus one check where it writes. "Last connected" goes through `NoteConnected`.
+- **Decision — off means none kept, not hidden:** turning it off clears, and every start while it is off clears what an
+  older version, a backup or a sync left (`AtStart`), so "off" is a property of the store, not of the screens. Upgrading
+  from 0.6.35 therefore clears the old recents once (said in the release notes).
+- **Decision — portal pages:** WebView2 keeps its own history and can't be counted; while history is off each profile's
+  page and download history is cleared the first time a portal tab starts it in a run (`PortalHistory.OnStartedAsync`),
+  and "Clear" clears every profile through a hidden controller. Sign-ins, cookies and site data are not history.
+- **Decision — what is not history:** the audit log (a security record with its own lock), saved hosts and portals,
+  pins, notes, reports, snippets and the dashboard's check results. In-memory histories that die with their tab (the
+  commander's folders and command line) are not stored, and forget themselves on `Cleared`.
+- **Decision — accountability without leakage:** clearing is audited with the kinds and counts only.
+- **Where:** the History card (Security & privacy) with a switch, the automatic clear, each kind's count and Clear, and
+  Clear all; the quick connect list's footer (Clear recent, Shift+Del, History settings…); palette commands
+  `history.clear` and `history.settings` (no default keys); Group Policy `HistorySave`, `HistoryAutoClear`.
+- **Tests:** `HistoryTests` (`SelfTest/SelfTestHistory.cs`): defaults off; all kinds registered; nothing written while off
+  and the bar says so; kept, counted, cleared per kind and all, audited without entries; Shift+Del; automatic clear by age
+  and on exit; off and a start while off clear; policy sets both and refuses a bad value; the card's switch and buttons.
+  The rest of the suite runs with history kept.
+
+## ADR-117: CipherChat built in — CipherChat's own code, our screens, one module (0.6.38)
+- **Context:** DarkCipher0x asked for CipherChat inside the app with every feature, native-looking, controlled by Group
+  Policy, as secure as CipherChat itself, easy to keep up to date when CipherChat ships security fixes, and with the
+  same server administration as CipherChat for Windows (a separate admin sign-in). Full design: docs/CIPHERCHAT-INTEGRATION.md.
+- **Decision — the protocol is CipherChat's:** CipherChat's Crypto, Transport, Api and Engine libraries are vendored
+  unchanged in `src/Vendor/CipherChat` at a pinned commit (`VENDOR.json` lists every file's SHA-256);
+  `tools/sync-cipherchat.ps1` brings in a new version and `-Check` (run by build.ps1) fails on any local change. Fixes go
+  to CipherChat first. The app adds only `Dcx.Chat`: accounts, sessions, screens, policy and the module.
+- **Decision — one module, off by default:** `ChatFeatures` (Dcx.Core) decides at start-up (policy `ChatFeatures` beats
+  `DCX_CHAT_FEATURES` beats the admin-protected setting `chat.features`); with it off, `Dcx.Chat` and CipherChat's
+  assemblies are never loaded (`LoadChatModule` is NoInlining, like the AI). `ChatModule` contributes the CHAT sidebar
+  section (💬 Chats, ⚑ Chat server admin), commands `chat.open` (Ctrl+Shift+M), `chat.admin`, `chat.lock`, the dashboard
+  source, privacy rows, the help article and the store file. Rooms open as tabs through `ModuleTabs.Open`.
+- **Decision — sign-in and keys:** this PC pairs as a CipherChat device (pairing code); only the device token is kept, in
+  `chat-accounts.dcx` (AES-256-GCM under the store key), and a stored account is used only when it passes the server
+  rules again. Password + authenticator sign-in remembers nothing. The chat passphrase is a parameter of the call that
+  needs it and is never stored or sent. The per-PC room-key store is sealed with the app's store key (`SecureStoreGuard`).
+  The app lock (`AppLockEvents.Locking`), Lock every chat and quitting wipe every engine's keys; pairings stay.
+- **Decision — servers:** https:// over CipherChat's post-quantum TLS 1.3 transport only; plain http only for a
+  loopback development server in the self-test or with `DCX_CHAT_DEV=1`; `ChatAllowedServers` limits the servers.
+- **Decision — administration:** `ChatAdminClient` over CipherChat's `AdminApi`, a separate admin-scope sign-in held in
+  memory only, never resumed with the device token, ended on lock; a 403 that isn't a permission denial signs it out.
+  Tabs and actions follow the admin's permissions from the server, which checks every call again; settings are checked
+  against the server's own schema first; one-time links are shown once, only when they are the server's own
+  `/chat/login/` links, and never logged or saved. Policy `ChatAdmin` = 0 removes the pane.
+- **Decision — rules on this PC:** `ChatPolicy` reads `ChatAllowFiles`, `ChatMaxFileMB` (1–100), `ChatAllowCalls`,
+  `ChatShareFromScreens` and `ChatToastPreviews` (off: notifications say only who and where); every screen asks there.
+  Message text is drawn as plain text with control characters removed and capped at 20,000 characters.
+- **Where:** `src/Dcx.Chat` (`ChatModule`, `Chat/ChatHub`, `ChatSession`, `ChatAccounts`, `ChatServers`, `ChatPolicy`,
+  `Admin/ChatAdminClient`, `AdminModels`, `Views/ChatHomeView`, `ChatRoomView`, `ChatAdminView`); the CipherChat card in
+  Settings → Security & privacy (`SettingsView.Chat.cs`).
+- **Decision — side panel:** the app gained a general panel column between the documents and the AI dock (the AI keeps
+  the right dock): `IAppHost.SidePanel(id, title, make)` contributes a panel and `ModulePanels.Show/Hide/Toggle` shows
+  it (`Shell/MainWindow.SidePanels.cs`; one at a time, 260–720 DIPs and at most 40 % of the window, disposed on close).
+  The chat's panel (`ChatPanelView`) pins one room from any unlocked chat beside whatever tab is open — "📌 Pin" on a
+  room tab, `chat.panel` (Ctrl+Shift+J) or the Chats item's menu — on the same engine as its tab.
+- **Decision — send to a chat:** a seam beside the AI's (`Services.SendTo` / `ISendTarget` in Dcx.Core,
+  `Menus.SendItem` in Dcx.Ui, `IAppHost.SendTarget`): the screens build the material (terminal selection and scrollback,
+  a file in the file commander, a report or its selection, a snippet) and every 📷 menu gets "Send screenshot to a
+  chat…"; with no target registered the items don't exist. The chat's target (`Share/ChatSendTarget`) asks for the room
+  and opens it with the text in the composer and the files attached, so nothing is sent until Send; long text becomes a
+  .txt file, files follow `ChatAllowFiles` / `ChatMaxFileMB`, and `ChatShareFromScreens` turns it all off. Only where
+  it came from is audited.
+- **Decision — calls (0.6.38):** made exactly as CipherChat for Windows makes them (its docs/CALLS.md). CipherChat's call
+  page — `web/callhost` with the portal's call engine, call screen and their libraries — is vendored unchanged as
+  `src/Vendor/CipherChat/CallHost` by the same sync (hashed in `VENDOR.json`, checked by build.ps1), embedded in Dcx.Chat
+  and served from memory to the call window's WebView2 on a private host (`Calls/CallPage`: nothing unpacked, every other
+  address refused, the page's no-fetch CSP also sent as a header, dev tools / menus / autofill / host objects off, its
+  own profile folder encrypted by Windows like the portal browser's). The page asks the app only for CipherChat's call
+  operations (`Calls/CallWindow.Dispatch`: seal, open, wrap / unwrap a sender key, the call words, and the server paths
+  `calls/signal` and `calls/turn`); the identity's keys stay in CipherChat's engine. Camera and microphone are allowed
+  for that page only. Ringing is native (`Calls/RingPopup`: a corner window, a ringtone made in memory, the taskbar
+  flashing; no browser runs until answered) and follows `ChatAllowCalls`; locking a chat ends its ring and its call.
+- **Decision — pictures (0.6.38):** a picture added to a message gets a JPEG thumbnail (360 px at most) and its size, as
+  CipherChat's apps send them, so it shows inline everywhere; the composer shows the files to send with previews and ✕;
+  pictures in messages show from their encrypted thumbnail. Only PNG / JPEG / GIF bytes are decoded (by their bytes,
+  never their name).
+- **Decision — dashboard (0.6.38):** besides unread messages, "Chat contacts" (people not verified yet; a changed key is an
+  alert) from the engines' own trust records, and — only while signed in to a server's administration — "Chat server"
+  (sign-up requests waiting), checked under the dashboard's own rule.
+- **Decision — the panel remembers (0.6.38):** whether the side panel is open, its width and the pinned room are kept in
+  the encrypted settings (state, not policies) and come back at the next start.
+- **Not yet:** an interop run against a local CipherChat server (calls included).
+- **Tests:** `ChatTests` (`SelfTest/SelfTestChat.cs`): the switch's rule, protection, policies and start-up audit in every
+  run; with chat off nothing of it is loaded or contributed; with `-ChatOn` the contributions, server and account rules,
+  admin checks, the PC's rules, text cleaning, the screens as singleton tabs and the lock; 0.6.38: pictures, the
+  dashboard tiles, the panel's state, and calls (the embedded page loads in an off-screen browser under its CSP and can
+  reach nothing outside; the page's server paths; ChatAllowCalls). `ArchitectureTests`: nothing below the app references
+  the chat; `Dcx.Chat` references only Core and Ui.
+
+## ADR-118: Stream manager for Twitch — a data-only "stream" add-on switches on a built-in module (design; phase 1 groundwork)
+- **Context:** DarkCipher0x asked for a full Twitch stream manager (dashboard, chat, activity feed, stream info, quick
+  actions with keyboard shortcuts, Streamer.bot on the streaming PC over the LAN) that looks native once its add-on is
+  installed, updates live, scales its text, and doesn't affect gaming performance. Program add-ons can't draw UI or run
+  for long (ADR-012, ADR-035), so it can't be one.
+- **Decision:** follow the portal browser (ADR-032) and the shared library (ADR-033): a new data-only kind, `stream`
+  (`AddonManifest.Stream` → a strict `stream.json`: name, notes, a Twitch Client ID, connection suggestions; no secrets),
+  sealed at rest, switches on the `Dcx.Stream` module. `StreamFeatures` (Dcx.Core) decides at start-up: policy
+  `StreamFeatures` = 0 wins, `DCX_STREAM_FEATURES` overrides for a run, else an enabled stream add-on; with it off,
+  `Dcx.Stream.dll` is never loaded.
+- **Decision — security:** Twitch's device code flow as a public client (no secret ships); tokens only in the encrypted
+  settings, validated hourly, one-time refresh tokens rotated, the 30-day expiry treated as absolute. Streamer.bot and
+  OBS speak plain `ws://`, so the clients connect only to local-network addresses (resolved names included) unless
+  policy names a host, and refuse a Streamer.bot without authentication unless the user ticks it; the password is sent
+  only as Streamer.bot's salt/challenge hash.
+- **Decision — lightweight:** push (EventSub WebSocket, Streamer.bot events), capped ring buffers drained by the UI at
+  most 4×/s, virtualised lists, no work while unseen, no video by default (a thumbnail), and a stream mode (below-normal
+  priority + EcoQoS) while live.
+- **Where:** the full design is docs/STREAM-MODULE.md. Phase 1 groundwork in `src/Dcx.Stream`: `StreamPack`,
+  `RingBuffer`, `Net/LanHosts`, `StreamerBot/StreamerBotClient`, `Twitch/TwitchAuth`, `TwitchScopes`, `TwitchHelix`,
+  `EventSubSocket`; the kind's checks in `AddonPackages`; the sample add-on `samples/addons/stream`. Wired into the app
+  in ADR-118a.
+
+## ADR-118a: Stream manager, phases 1–2 built — wired through the module seams only
+- **Context:** the groundwork (ADR-118) waited for CipherChat's wiring (ADR-117), which touched the same shared files;
+  DarkCipher0x asked for a clean integration.
+- **Decision — only the seams:** the module contributes everything through `IAppHost` (sidebar section STREAM with
+  Dashboard / Chat / Activity / Streamer.bot, commands, a Settings category with three cards, start-up, window-ready and
+  shutdown hooks, a dashboard source, privacy rows, its help article, its encrypted file's schema). The app's own changes
+  are the loader (`LoadStreamModule`, NoInlining like the chat's), the add-on kind's registration (the parse goes through
+  a NoInlining method, so inspecting a stream package is the only other thing that loads `Dcx.Stream.dll`), the settings
+  and their policies, STREAM in the sidebar's module sections, and the Add-ons screen's stream section (status, open,
+  restart). Three Core seams so the module needs only Core and Ui: `StreamFeatures.ReadPackFile` (the app reads the
+  add-on's verified file), `DesktopToast.Show` and `AppLockEvents.IsLocked`.
+- **Decision — namespace:** the module is `DcxManager.Streaming` (assembly `Dcx.Stream`): `DcxManager.Stream` hid
+  `System.IO.Stream` from all the app's code in the `DcxManager` namespace.
+- **Decision — secrets:** the Twitch sign-in and the Streamer.bot password live in their own encrypted file,
+  `stream-account.dcx` (SecureStore, registered with the store schema), never in settings. Locking the app drops the
+  Streamer.bot link and stops system-wide keys; Twitch keeps buffering read-only so the screens catch up on unlock.
+- **Decision — while gaming:** system-wide keys (RegisterHotKey with MOD_NOREPEAT on a message-only window) exist only
+  for `stream.*` / `streamerbot.*` commands, need a modifier or a function key, and are none until set; a key's result
+  reaches you as a toast when the app isn't in front. Stream mode (below-normal priority + EcoQoS) is on while live by
+  default. Screens tick only while visible, at background priority; chat is a recycling virtualised list over a
+  500-line ring.
+- **Built:** sign-in (device code, only the switched-on features' scopes, renew warning ≤ 5 days, re-sign-in keeps the
+  old sign-in until the new one is saved), live status strip with viewer sparkline, followers since start, subscribers
+  and next ad; chat (read, send, reply, deletions, mentions); activity feed with filters; stream info edit with category
+  search; clip (link copied), marker, ads (30/60/90, snooze); Streamer.bot (connect, actions, ★ favourites with their
+  own commands, run, its events in the feed); the compact pop-out (never in the self-test). Text cleaning drops control
+  and bidirectional-override characters.
+- **Not built yet:** moderation buttons, chat modes, raids, shoutouts, polls, predictions, the redemption queue
+  (phase 3); OBS stats and the live player (phase 4).
+- **Self-test:** `SelfTestStream.cs`. Every run: the switch's rule, its audit entry, every stream setting a policy; the
+  normal run checks `Dcx.Stream` isn't loaded and nothing is contributed. `-StreamOn` (`DCX_STREAM_FEATURES=1`): the
+  contributions, the rules, a real RegisterHotKey of Ctrl+Alt+Shift+F24 for a moment, a whole Twitch session against
+  fakes on 127.0.0.1 (sign-in, EventSub welcome and subscriptions, live/offline, 600 chat messages, deletions, follows,
+  every quick action with the policy refusals, the screens built and drained, sign-out with revoke) and Streamer.bot
+  (passwords, no-auth, TEST-NET refused, actions and events). The architecture checks count the module's hooks, tiles,
+  rows and article only when it is loaded, and that `Dcx.Stream` references only Core and Ui.
+
+
+## ADR-117a: CipherChat — its own Settings page, notifications, idle lock and live session sharing (0.6.39)
+- **Context:** DarkCipher0x asked for every CipherChat integration to be solid, for an on/off switch under Group Policy
+  like the AI's, for a detailed native-looking CipherChat settings page, and to share live terminal / RDP sessions into
+  a room so others can watch and help.
+- **Decision — Settings → CipherChat:** a category of its own (after Cloud providers) with the switch (admin-protected
+  `chat.features`, policy `ChatFeatures`), "Chat rules on this PC" (every Chat* policy, shown locked when managed),
+  "Chat notifications & locking", and the module's own "Chat accounts" card (each paired account with its stage: Lock,
+  Forget this PC…, Open Chats, Lock every chat). The page exists with the module off, so the switch can be turned on.
+- **Decision — notifications:** `ChatNotifier` toasts a message that isn't yours and is under two minutes old, unless
+  you're looking at that room with the app in front; one toast per room every 8 s; a burn-after-reading message shows
+  only "(a message that burns after reading)". `ChatNotify` and `ChatRingSound` are policies.
+- **Decision — idle lock:** `ChatIdleLock` reads the session's last input every 20 s and locks every unlocked chat after
+  `ChatAutoLockMinutes` (0 = never) without input.
+- **Decision — live sharing:** "📡 Share live in a chat…" on a terminal / RDP / VNC tab (policy
+  `ChatAllowSessionShare`, and calls allowed) pops the tab into its own window with a fixed title, starts a call in the
+  room and shares exactly that window: the call page runs in a separate WebView2 environment whose only extra argument
+  is `--auto-select-desktop-capture-source="CipherChat live share - ServerManagement"`, so no picker opens and no other
+  window can be chosen. New tabs never land in that window while it's shared. Hanging up restores the title and docks the
+  tab back; both ends are audited.
+- **Self-test:** the chat suite checks the 12 chat policies and the page's cards; the live CipherChat run
+  (tools\chat-live-test.ps1, a real CipherChat 0.2.0 server on loopback) covers notifications, the idle lock rule and a
+  live share whose peer receives the window's video.
+
+## ADR-119: Windows management built in — an MMC-style console over WMI (0.6.39)
+- **Context:** DarkCipher0x asked for a full, integrated MMC-style management tool for Windows, including wmic.
+- **Decision — one module, its own switch:** `Dcx.WinTools`, loaded by `WinToolsFeatures` (policy `WinToolsFeatures`
+  beats `DCX_WINTOOLS_FEATURES` beats the admin-protected setting `wintools.features`; new installs on). Sidebar →
+  WINDOWS → 🪟 Windows management, command `wintools.open` (Ctrl+Alt+W), Settings → Windows management, help article.
+- **Decision — WMI, not shelling out:** System.Management with packet privacy and impersonation; a remote computer uses
+  a saved host's credential handed over as a SecureString (never on a command line), and only while
+  `WinToolsAllowRemote` is on. Event logs through EventLogReader (Security only with `WinToolsAllowSecurityLog`, at most
+  `WinToolsEventLimit` events).
+- **Decision — snap-ins:** overview, services (start / stop / restart / startup type), processes (end), startup items,
+  drivers, updates, the System / Application / Setup / Security logs, disks, volumes, shares, local users (enable /
+  disable) and groups, network adapters and connections, scheduled tasks (run / enable / disable), a WMI console and the
+  classic consoles (mmc.exe snap-ins, never in the self-test). Every change asks first, is audited, and is offered only
+  while `WinToolsAllowChanges` (admin-protected) is on. Keys that reach a WMI path are checked (no quotes or backslashes).
+- **Decision — wmic:** ~46 wmic aliases translate to WQL (`get`, `where`, `list brief`, `path`, `/namespace`); the console
+  only reads: `call`, `set`, `create`, `delete`, `/node:` and `/user:` are refused with the reason, and WQL that isn't a
+  single SELECT never runs.
+- **Self-test:** `SelfTestWinTools.cs`: the switch, its policies and page, the wmic translations and refusals, and
+  against this PC through the real screen: every snap-in, a Stop on Winmgmt that asks and is refused (still running),
+  changes off, the console and the remote policy.
+
+## ADR-120: Module add-ons — code-carrying add-ons signed by the release keys; the stream manager moves out of the app (0.6.39)
+- **Context:** DarkCipher0x asked for the Twitch add-on's code to be in the add-on, not the main app: add-ons should be
+  detachable modules that hold all their own code.
+- **Decision — a module add-on:** addon.json names `"module": {"assembly", "type", "api"}`. The package carries
+  `module.json` (`purpose: "dcx-addon-module"`, id, version, API, assembly, type and the SHA-256 of every other file),
+  signed with the same pinned release keys as update.json (`module.json.sig` ECDSA P-256, `module.json.pq.sig`
+  ML-DSA-65) by `samples\addons\pack.ps1` through `tools\sign-update.ps1 -Path`. Install refuses a package whose
+  signature, files or API don't match; installed, its files are sealed at rest like any data add-on.
+- **Decision — loading:** `ModuleAddons.LoadAll` at start-up, after the built-in modules: enabled, allowed by policy
+  (`AddonAllowModules`, the add-on rules), files unchanged, signature checked again, API equal to
+  `AddonModuleInfo.CurrentApi`. The assembly is loaded from its decrypted bytes into an `AssemblyLoadContext` of its
+  own whose default resolution is the app's (so Core, Ui and the module seams are shared types); other .dll files in
+  the package resolve from the package. A tampered package is disabled; any failure leaves the app running without it,
+  logged and audited. A third party can't make a module the app loads: their add-ons stay programs or data.
+- **Decision — the module owns everything:** settings through `ModuleSettings.Attach<T>` (kept in the encrypted
+  settings file's `ModuleData`, saved with every save; values an older app kept in its own settings are in `Retired`
+  and move over the first time), policies through `PolicySettings.RegisterModule` (same registry names; secrets refused;
+  its user choices excluded), help through `HelpKb.AddModuleHelp` from the package's help.md, its package's files
+  through `IAddonPackage`, its self-test through `IModuleSelfTest`.
+- **Decision — the stream manager:** `Dcx.Stream` moved to `samples\addons\stream\src` and is no longer referenced or
+  shipped by the app; `StreamFeatures`, the "stream" data kind, every Stream* setting and policy, the stream help
+  article and SelfTestStream left the app. The add-on (com.darkcipher.stream 0.2.0) carries Dcx.Stream.dll, stream.json
+  and help.md. It is never published with the app.
+- **Self-test:** `SelfTestModuleAddons.cs` with throwaway test keys: a signed package is inspected as signed, installed
+  sealed and its assembly loaded into its own context; a changed or unlisted file, another purpose, version or API, a
+  missing post-quantum signature, another key, no signature and AddonAllowModules = 0 are refused; disabled or with the
+  pinned keys back, it doesn't load; settings migration and secret refusal. Then each loaded module add-on's own
+  self-test runs (`-StreamOn` / `-Addon` in run-selftest-watch, and build.ps1's first run, install the freshly signed
+  stream add-on into the scratch store); without it, nothing of the stream manager exists. The architecture checks
+  confirm Dcx.Stream isn't referenced or next to the exe and, when loaded, came from its package's load context.
+## ADR-118c: The stream board — a customisable dashboard, full control, OBS and AI tools (all inside Dcx.Stream)
+- **Context:** DarkCipher0x asked for a dashboard "almost exactly like" Twitch's advanced Stream Manager view (move tiles,
+  resize chat and feeds, stream performance), easy to use on stream, with live feeds, clips and markers, Streamer.bot,
+  AI help, and everything else a streamer would want. They also asked that the add-on's code stay in the add-on so it
+  can grow without app releases (the detachable-module loader is the app session's ADR-119; until it lands the code
+  stays in `Dcx.Stream`, which references only Core and Ui).
+- **Decision — a board, not fixed columns:** `StreamBoard` is a pure model (12 columns, tile kinds with minimum sizes,
+  push-down placement plus compaction, at most 40 tiles and 200 rows, text serialisation). `StreamBoardView` is the only
+  screen code that knows about positions; tiles implement `IBoardTile` (view, refresh, tick, menu, dispose) and are
+  created by `StreamTiles.Make`. Layouts, quick actions, counters, notes, title presets, the OBS address and finished
+  redemptions live in `stream-board.dcx` (SecureStore, schema registered), never in the app's settings.
+- **Decision — the module's own policies:** `StreamPolicy` reads `PolicySettings.Key + \Stream` (HKLM, then HKCU), so new
+  stream settings never need an app release; the self-test injects values through `StreamPolicy.ForTests`.
+- **Decision — full control through Helix:** moderation, chat modes, shield mode, announcements, shoutouts, channel
+  search, raids, polls, predictions, redemptions, chatters and goals (`TwitchHelix.Tools.cs`); every one refuses to act
+  on your own account where Twitch would, and moderation goes away with `StreamModerationTools = 0` or the app's
+  moderation setting. EventSub adds 19 subscriptions (35 in all), including outgoing raids keyed apart by
+  `StreamEvents.Key`.
+- **Decision — OBS WebSocket 5:** a small client of our own (`Obs/ObsClient.cs`, same salted challenge as Streamer.bot),
+  LAN only, a password required unless allowed, OBS's own refusals shown with OBS's reason.
+- **Decision — AI:** quick asks go through `Assist.Current` (the AI panel, local by default); the 11 stream capabilities
+  are registered with module "stream", reads are `Read`, changes are `Change` and call `ctx.Approve` themselves.
+  `StreamAi = 0` removes both.
+- **Self-test:** stream board rules (presets, parsing, clamping, placement, layouts, policies), the board through the
+  dashboard during the Twitch session (edit, move saved, 12 tiles added and kept, every tile drawn with the live state),
+  every new Helix tool against the fake, an OBS fake (passwords, scenes, mute, refusals, LAN and policy), and the AI
+  tools (approval, policy). The module-capability count in `SelfTestAiOff` leaves the stream tools out.
+
+## ADR-118d: The stream live player — Twitch's player, only while you watch
+- **Context:** phase 4's last item (ADR-118): live video on the board, without costing a game anything when unused.
+- **Decision:** the preview tile keeps its once-a-minute picture; *Watch live* creates a WebView2 that loads a
+  script-free page served from memory on `https://dcx-stream-player.example` holding Twitch's player for your channel
+  (`parent` = that host, muted). Stop, offline, hidden tile and board close dispose the browser. Rules live in
+  `TwitchPlayer` (login cleaned before any URL, CSP `default-src 'none'; frame-src https://player.twitch.tv`, top
+  navigations only to our page, frames only to Twitch over https); the view denies every permission and download, and
+  links go to the browser for twitch.tv only. Own profile folder (`WebView2-stream`, PrivateFolders). Module policy
+  `StreamPlayer = 0` removes it. WebView2 is a compile-time reference of the add-on at the app's version
+  (`ExcludeAssets="runtime"`); at run time it resolves from the app (ADR-120's load context), so nothing ships twice.
+- **Self-test:** the rules (logins, URL, page, CSP, navigation lists, runtime missing, policy) and the tile's Watch / Stop /
+  policy path; the browser itself is never started in the self-test. Untested against the real Twitch player.

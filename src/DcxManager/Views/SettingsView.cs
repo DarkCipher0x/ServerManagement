@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using DcxManager.Services;
+using DcxManager.Services.Keys;
 using ThemeMode = DcxManager.Services.ThemeMode;   // .NET 9+ WPF has System.Windows.ThemeMode too
 using DcxManager.Sessions;
 using DcxManager.Ssh;
@@ -50,9 +51,12 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
         ("Security & privacy", "⛨", "Encryption of everything stored, master password, two-factor sign-in, app lock and offline mode."),
         ("Identity & directory", "◎", "Who you are signed in to Windows as, automatic sign-in with Windows Hello, Active Directory / LDAPS / Microsoft Entra ID sign-in (view, edit, test), and single sign-on into SSH and Remote Desktop."),
         ("Cloud providers", "☁", "Accounts and API credentials for Vultr, Contabo, Hetzner Cloud, Microsoft Azure and Google Cloud. Credentials belong to one account each and are stored encrypted."),
+        (ChatCategory, "💬", "CipherChat built in: on or off (like AI features), the servers this PC may use, files, calls, live session sharing, notifications, locking and your paired chat accounts. Every option is also a Group Policy."),
+        (WinToolsCategory, "🪟", "Windows management built in: on or off, whether it may change things or manage other computers, the WMI console, the Security log and how many events it reads. Every option is also a Group Policy."),
         ("Terminals & connections", "⌨", "Behaviour of terminal tabs, reconnects, paste safety, Telnet, Remote Desktop, and terminal profiles."),
         ("Appearance", "◐", "Theme preset, accent, status colours, density, text size, zoom, corners, animation and fonts."),
         ("Navigation", "☰", "The sidebar's style, width, sections and pinned pages, the screen opened at start, and how trees and explorers open."),
+        (KeyboardCategory, "⇥", "Every keyboard shortcut: search them, change or remove keys, see clashes before they happen, and put the defaults back. Group Policy can set them."),
         ("Data & backups", "⛁", "Encrypted backups and restores (pick what), scheduled backups, where the store lives, its snapshots, screenshots and crash recovery."),
         ("Integrations", "⇌", "The loopback-only local API, OBS broadcasts, the portal browser, syslog over TLS, log sinks (Elastic, Loki, Azure Monitor, Splunk, Graylog, webhooks), dashboards and e-mail notifications."),
         ("Import & export", "⇅", "Appearance and navigation settings as a file — no secrets, accounts or hosts — previewed before anything changes."),
@@ -67,6 +71,7 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
     private static readonly Dictionary<string, (string Category, string Scope)> Placement = new()
     {
         ["Admin protection"] = ("Security & privacy", "this Windows user on this PC · changes need admin approval"),
+        [HistoryCardTitle] = ("Security & privacy", "this Windows user · off by default · Group Policy can set it"),
         ["Locks & restrictions"] = ("Security & privacy", "this Windows user · Group Policy can lock categories and turn options off"),
         ["Managed by your organisation"] = ("Security & privacy", "this PC · set by Group Policy"),
         ["Security & encryption"] = ("Security & privacy", "this PC's encrypted store"),
@@ -78,6 +83,11 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
         ["Team features"] = ("Security & privacy", "this Windows user on this PC · changes need admin approval"),
         ["Offline mode"] = ("Security & privacy", "whole app"),
         ["AI features"] = ("Security & privacy", "whole app · applies after a restart"),
+        ["CipherChat"] = (ChatCategory, "whole app · applies after a restart · changes need admin approval"),
+        ["Chat rules on this PC"] = (ChatCategory, "this Windows user · Group Policy can set each"),
+        ["Chat notifications & locking"] = (ChatCategory, "this Windows user · Group Policy can set each"),
+        ["Windows management"] = (WinToolsCategory, "whole app · applies after a restart · changes need admin approval"),
+        ["Windows management rules"] = (WinToolsCategory, "this Windows user · Group Policy can set each"),
         ["Vultr accounts"] = ("Cloud providers", "per account"),
         ["Contabo accounts"] = ("Cloud providers", "per account"),
         ["Hetzner Cloud projects"] = ("Cloud providers", "per project"),
@@ -94,6 +104,7 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
         ["Typography"] = ("Appearance", "whole app · terminals separate"),
         ["Sidebar"] = ("Navigation", "whole app"),
         ["Navigation & explorers"] = ("Navigation", "whole app"),
+        [KeyboardCardTitle] = (KeyboardCategory, "whole app and its pop-out windows · the editors · Group Policy can set them"),
         ["Backup & restore"] = ("Data & backups", "this Windows user · the rules need admin approval · Group Policy can set them"),
         ["Data & storage"] = ("Data & backups", "this PC's encrypted store"),
         ["Snapshots"] = ("Data & backups", "this PC's encrypted store"),
@@ -140,7 +151,7 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
     };
 
     private readonly WrapPanel _tabs = new() { Margin = new Thickness(0, 10, 0, 0) };
-    private readonly TextBox _search = Hint.Set(new TextBox { Padding = new Thickness(6, 4, 6, 4), Width = FieldWidth, ToolTip = "Search every setting in every tab (Ctrl+F)" }, "Search settings…");
+    private readonly TextBox _search = Hint.Set(new TextBox { Padding = new Thickness(6, 4, 6, 4), Width = FieldWidth, ToolTip = "Search every setting in every tab" + (KeyCommands.Text(ViewCommands.PageFind) is { } k ? $" ({k})" : "") }, "Search settings…");
     private readonly StackPanel _page = new() { Margin = new Thickness(24, 14, 18, 24), MaxWidth = PageWidth, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly Dictionary<string, FrameworkElement> _catHeads = new();
@@ -168,11 +179,14 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
         _page.Children.Add(_searchHead);
         var built = new (string Category, Func<Border> Make)[]
         {
-            ("Security & privacy", ProtectionCard), ("Security & privacy", LocksCard), ("Security & privacy", PolicyCard), ("Security & privacy", Security), ("Security & privacy", TeamCard), ("Security & privacy", OfflineCard), ("Security & privacy", AiFeaturesCard),
+            ("Security & privacy", ProtectionCard), ("Security & privacy", HistoryCard), ("Security & privacy", LocksCard), ("Security & privacy", PolicyCard), ("Security & privacy", Security), ("Security & privacy", TeamCard), ("Security & privacy", OfflineCard), ("Security & privacy", AiFeaturesCard),
+            (ChatCategory, ChatFeaturesCard), (ChatCategory, ChatRulesCard), (ChatCategory, ChatNotifyCard),
+            (WinToolsCategory, WinToolsFeaturesCard), (WinToolsCategory, WinToolsRulesCard),
             ("Cloud providers", Vultr), ("Cloud providers", ContaboCard), ("Cloud providers", HetznerCard), ("Cloud providers", AzureCard), ("Cloud providers", GcpCard),
             ("Terminals & connections", Terminal), ("Terminals & connections", SavedSessionsCard), ("Terminals & connections", TerminalProfilesCard), ("Terminals & connections", TmuxCard), ("Terminals & connections", AlertsCard), ("Terminals & connections", HighlightCard), ("Terminals & connections", EditorCard),
             ("Appearance", ThemeCard), ("Appearance", BrandingCard), ("Appearance", LayoutCard), ("Appearance", TypographyCard),
             ("Navigation", SidebarCard), ("Navigation", NavigationCard),
+            (KeyboardCategory, KeyboardCard),
             ("Identity & directory", IdentityAccountCard), ("Identity & directory", AutoSignInCard), ("Identity & directory", DirectoryConnectionsCard), ("Identity & directory", SsoCard), ("Identity & directory", ProfilesCard),
             ("Data & backups", BackupCard), ("Data & backups", Data), ("Data & backups", SnapshotsCard), ("Data & backups", FolderSyncCard), ("Data & backups", ScreenshotsCard),
             ("Integrations", PortalBrowserCard), ("Integrations", LocalApiCard), ("Integrations", SyslogCard), ("Integrations", LogSinksCard), ("Integrations", DashboardsCard), ("Integrations", NotificationsCard), ("Integrations", AutomationCard), ("Integrations", TeamsCard), ("Integrations", CloudPcCard), ("Integrations", M365Card), ("Integrations", PingdomCard), ("Integrations", IdeCard),
@@ -220,7 +234,7 @@ public sealed partial class SettingsView : UserControl, IDisposable, ISettingsKi
         _search.TextChanged += (_, _) => ApplySearch();
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == System.Windows.Input.Key.F && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control) { _search.Focus(); _search.SelectAll(); e.Handled = true; }
+            if (KeyCommands.Matches(e, ViewCommands.PageFind)) { _search.Focus(); _search.SelectAll(); e.Handled = true; }
             else if (e.Key == System.Windows.Input.Key.Escape && _search.IsKeyboardFocusWithin && _search.Text.Length > 0) { _search.Text = ""; e.Handled = true; }
         };
         RevealCategory(_catHeads.ContainsKey(_lastCategory) ? _lastCategory : CoreCategories[0].Name);

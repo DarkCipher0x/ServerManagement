@@ -1,7 +1,7 @@
 # Add-ons for DarkCipher ServerManagement (API 2)
 
 This is the complete add-on reference: the package format, every manifest rule, the install and run life cycle, the
-sandbox, the encrypted bridge, every method and permission, the SDK, the four kinds of add-on, and each add-on that ships
+sandbox, the encrypted bridge, every method and permission, the SDK, every kind of add-on, and each add-on that ships
 with the project. It was checked against `src/DcxManager/Addons/*.cs`, `Views/AddonsView.cs` and `samples/addons/**` for
 0.1.18.
 
@@ -24,8 +24,9 @@ lives: [SOURCE.md](SOURCE.md) section 9. Packing: [BUILD.md](BUILD.md) section 9
 | **Theme** | `theme` (and no `entry`) | no | recolours the app and can rebrand its header (ADR-030) |
 | **Portal browser** | `browser` | no | switches on Portals and brings starter bookmarks (ADR-032) |
 | **Shared library** | `library` | no | switches on the Shared library, optionally naming one team library (ADR-033) |
+| **Stream manager** | `stream` | no | switches on the stream manager for Twitch and Streamer.bot (ADR-118, [STREAM-MODULE.md](STREAM-MODULE.md); in development) |
 
-Data-only kinds can't have permissions or commands. A portal browser or shared library add-on can't also carry an entry,
+Data-only kinds can't have permissions or commands. A portal browser, shared library or stream manager add-on can't also carry an entry,
 theme or anything else; a program add-on may carry a `theme` file too.
 
 ---
