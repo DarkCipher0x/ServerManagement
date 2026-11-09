@@ -21,19 +21,22 @@ public partial class MainWindow
     /// providers" workspace instead of a section each.</summary>
     /// 0.6.16 (DarkCipher0x: "separate the tools into their own section of TOOLS", "put the documents and notes into a
     /// DOCUMENTS section", "a bit better organised"): TOOLS and DOCUMENTS sections; Help moved to SYSTEM.
-    private static readonly string[] AllNavSections = { "OVERVIEW", "SERVERS", "TOOLS", "DOCUMENTS", "AUTOMATION", "LOCAL", "WINDOWS", "VAULT", "TEAM", "CHAT", "STREAM", "AI", "LOGS", "SYSTEM" };
+    /// ADR-121 (0.6.43): the list lives in AppModules.BuiltInNavSections so a module's own section can't take a built-in name.
+    private static readonly IReadOnlyList<string> AllNavSections = AppModules.BuiltInNavSections;
 
     /// <summary>The sections that exist now, in their default order; the user's order and hidden set come from settings
     /// (NavLayout). TEAM (shared library, team hosts and credentials) exists only while a library add-on is enabled; AI only
     /// while the AI module is loaded (since 0.6.16 Reports and Help live in DOCUMENTS and SYSTEM, so it would be empty);
-    /// CHAT only while the CipherChat module is loaded (ADR-117), STREAM only while the stream manager is (ADR-118). Module sections exist only when a module fills them.</summary>
-    public static string[] NavSections => AllNavSections.Where(n => (n != "TEAM" || Library.SharedLibraries.Enabled) && (!ModuleSections.Contains(n) || AppModules.NavItemsIn(n).Any())).ToArray();
+    /// CHAT only while the CipherChat module is loaded (ADR-117), STREAM only while the stream manager is (ADR-118). Module sections exist only when a module fills them.
+    /// ADR-121: a module's own sections (IAppHost.NavSection, e.g. CipherMail's EMAIL) are merged in after the section each
+    /// named, also only while they have items; from then on they are ordered, hidden, expanded and pinned like the rest.</summary>
+    public static string[] NavSections => AppModules.MergeNavSections(AllNavSections.Where(n => (n != "TEAM" || Library.SharedLibraries.Enabled) && (!ModuleSections.Contains(n) || AppModules.NavItemsIn(n).Any())).ToList());
 
     /// <summary>Sections filled only by modules: they exist while a loaded module contributes items to them.</summary>
     private static readonly string[] ModuleSections = { "WINDOWS", "CHAT", "STREAM", "AI" };
 
     /// <summary>The glyph in front of a section header (the same family as the items' glyphs).</summary>
-    public static string SectionGlyph(string key) => key switch { "OVERVIEW" => "◈", "SERVERS" => "▣", "TOOLS" => "🧰", "DOCUMENTS" => "📄", "AUTOMATION" => "⟐", "LOCAL" => "⌨", "WINDOWS" => "🪟", "VAULT" => "⚿", "TEAM" => "⇄", "CHAT" => "💬", "STREAM" => "📺", "LOGS" => "☷", "AI" => "✦", "SYSTEM" => "⚙", _ => "•" };
+    public static string SectionGlyph(string key) => key switch { "OVERVIEW" => "◈", "SERVERS" => "▣", "TOOLS" => "🧰", "DOCUMENTS" => "📄", "AUTOMATION" => "⟐", "LOCAL" => "⌨", "WINDOWS" => "🪟", "VAULT" => "⚿", "TEAM" => "⇄", "CHAT" => "💬", "STREAM" => "📺", "LOGS" => "☷", "AI" => "✦", "SYSTEM" => "⚙", _ => AppModules.FindNavSection(key)?.Glyph ?? "•" };
 
     /// <summary>A section's title (its key).</summary>
     public static string SectionTitle(string key) => key;
@@ -43,12 +46,17 @@ public partial class MainWindow
     private readonly HashSet<string> _navExpanded = new();
 
     /// <summary>One-time tidy of saved sidebar state: names of sections that no longer exist (VULTR, CONTABO before 0.1.11)
-    /// are dropped, and the pre-0.1.11 "collapsed" list is retired (sections now start collapsed).</summary>
+    /// are dropped, and the pre-0.1.11 "collapsed" list is retired (sections now start collapsed). ADR-121: a module add-on's
+    /// own section is remembered (AddonNavSections) the first time it is seen, and its saved order, hidden and expanded
+    /// state are kept even while the add-on isn't loaded (disabled, refused, or not registered yet).</summary>
     public static bool MigrateNavSettings(AppSettings s)
     {
         bool changed = false;
+        foreach (var c in AppModules.NavSectionItems)
+            if (!s.AddonNavSections.Contains(c.Key)) { s.AddonNavSections.Add(c.Key); changed = true; }
+        var keep = NavSections.Concat(s.AddonNavSections).ToHashSet();
         foreach (var list in new[] { s.NavSectionOrder, s.HiddenNavSections, s.ExpandedNavSections })
-            changed |= list.RemoveAll(n => !NavSections.Contains(n)) > 0;
+            changed |= list.RemoveAll(n => !keep.Contains(n)) > 0;
         if (s.CollapsedNavSections.Count > 0) { s.CollapsedNavSections.Clear(); changed = true; }
         if (!s.RememberNavExpansion && s.ExpandedNavSections.Count > 0) { s.ExpandedNavSections.Clear(); changed = true; }
         return changed;
@@ -64,7 +72,8 @@ public partial class MainWindow
     internal void SaveNavExpansion()
     {
         var s = AppSettings.Current;
-        s.ExpandedNavSections = s.RememberNavExpansion ? NavSections.Where(_navExpanded.Contains).ToList() : new();
+        // ADR-121: an add-on section that isn't loaded right now keeps its saved expansion.
+        s.ExpandedNavSections = s.RememberNavExpansion ? NavSections.Where(_navExpanded.Contains).Concat(s.ExpandedNavSections.Where(AbsentAddonSection)).Distinct().ToList() : new();
         SaveSettings();
     }
 
@@ -75,8 +84,37 @@ public partial class MainWindow
 
     public void MoveNavSection(string name, int delta)
     {
-        AppSettings.Current.NavSectionOrder = NavLayout.Move(NavOrder, name, delta);
+        AppSettings.Current.NavSectionOrder = KeepAbsentAddonSections(NavLayout.Move(NavOrder, name, delta));
         SaveSettings(); BuildNav();
+    }
+
+    /// <summary>ADR-121a: keys of the app's own sidebar pages, which a module's live item can't take.</summary>
+    private bool BuiltInPageKey(string key) => _allNav.ContainsKey(key) || LaterPageKeys.Contains(key);
+    private static readonly HashSet<string> LaterPageKeys = new(StringComparer.Ordinal) { "audit", "sessionlogs", "errorlog", "observe", "addons", "privacy", "help", "settings" };
+
+    private bool _navRefreshQueued;
+    /// <summary>ADR-121a: IAppHost.RefreshNav from any thread: one rebuild on the UI thread for any number of calls in a row.</summary>
+    private void QueueNavRefresh()
+    {
+        lock (_allNav) { if (_navRefreshQueued) return; _navRefreshQueued = true; }
+        Dispatcher.BeginInvoke(() => { lock (_allNav) _navRefreshQueued = false; BuildNav(); }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    /// <summary>ADR-121: a section a module add-on added before, not shown now (the add-on disabled or not loaded).</summary>
+    private static bool AbsentAddonSection(string n) => AppSettings.Current.AddonNavSections.Contains(n) && !NavSections.Contains(n);
+
+    /// <summary>ADR-121: a new saved order keeps the absent add-on sections of the old one, each after the section it
+    /// followed (or first), so the add-on's place survives a reorder made while it isn't loaded.</summary>
+    internal static List<string> KeepAbsentAddonSections(List<string> order)
+    {
+        var old = AppSettings.Current.NavSectionOrder;
+        for (int i = 0; i < old.Count; i++)
+        {
+            if (!AbsentAddonSection(old[i]) || order.Contains(old[i])) continue;
+            int at = i == 0 ? 0 : order.IndexOf(old[i - 1]) + 1;
+            order.Insert(Math.Clamp(at, 0, order.Count), old[i]);
+        }
+        return order;
     }
 
     public void SetNavSectionHidden(string name, bool hide)
@@ -229,7 +267,7 @@ public partial class MainWindow
     }
 
     /// <summary>A sidebar screen: its key, glyph (drawn as a Segoe Fluent icon, <see cref="Icons"/>), title and tooltip.</summary>
-    public sealed record NavEntry(string Key, string Glyph, string Title, string? Tip);
+    public sealed record NavEntry(string Key, string Glyph, string Title, string? Tip, int Badge = 0);
     private readonly Dictionary<string, NavEntry> _allNav = new();
     private Dictionary<string, List<string>> _sectionsForTest = new();
     /// <summary>Self-test: each section's screens in their default order (before hiding and pinning).</summary>
@@ -302,10 +340,10 @@ public partial class MainWindow
         var items = new Dictionary<string, List<NavEntry>>();
         List<NavEntry> current = new();
         void Header(string t) { current = items[t] = new(); }
-        void Item(string key, string text, string? tip = null)
+        void Item(string key, string text, string? tip = null, int badge = 0)
         {
             var parts = text.Split("  ", 2);
-            var e = new NavEntry(key, parts.Length > 1 ? parts[0] : "", parts.Length > 1 ? parts[1] : text, tip);
+            var e = new NavEntry(key, parts.Length > 1 ? parts[0] : "", parts.Length > 1 ? parts[1] : text, tip, badge);
             current.Add(e);
             _allNav[key] = e;
         }
@@ -359,11 +397,14 @@ public partial class MainWindow
         // Cloud providers (ADR-020) are one workspace since 0.1.11 (ADR-028): Item "cloud" above, not a section each.
         // Modules contribute their items (0.2.0 phase 3): the CipherChat module adds Chats and Server admin (ADR-117), the
         // AI module the AI Engineer sidebar and the AI operator.
-        foreach (var section in ModuleSections)
+        // ADR-121a: the modules' live lists, asked once per build. A live key never takes one of the app's own pages (those
+        // keys open the app's screens first): the ones above and LOGS / SYSTEM's below.
+        AppModules.RefreshLiveNav(BuiltInPageKey);
+        foreach (var section in ModuleSections.Concat(AppModules.NavSectionItems.Select(c => c.Key)))   // ADR-121: then the modules' own sections
         {
             if (!AppModules.NavItemsIn(section).Any()) continue;
             Header(section);
-            foreach (var c in AppModules.NavItemsIn(section)) Item(c.Key, c.Text, c.Tip);
+            foreach (var c in AppModules.NavItemsIn(section)) Item(c.Key, c.Text, c.Tip, c.Badge);
         }
         // 0.5.1 #8 (DarkCipher0x): every log in one section. The Audit log is locked by default (Group Policy: LockAuditLog); the
         // others can be locked from their right-click menu or Settings → Security & privacy → Locks.
@@ -418,6 +459,14 @@ public partial class MainWindow
             row.Children.Add(NavIcon(e.Glyph));
             row.Children[0].SetValue(MarginProperty, new Thickness(0, 0, 8, 0));
             row.Children.Add(new TextBlock { Text = e.Title, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+            // ADR-121a: a live item's count (unread mail…), after the title.
+            if (e.Badge > 0)
+            {
+                var b = new TextBlock { Text = e.Badge > 99 ? "99+" : e.Badge.ToString(), FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Tag = "nav-badge" }.Fs(FontStep.Caption);
+                b.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+                System.Windows.Automation.AutomationProperties.SetName(b, e.Badge + " new");
+                row.Children.Add(b);
+            }
             // 0.5.1 (ADR-067): a locked category shows its padlock (closed, or open while unlocked).
             if (Locks.CategoryOfScreen(e.Key) is { } cat && LockUi.Padlock("cat:" + cat) is { Length: > 0 } pad)
             {
@@ -446,7 +495,7 @@ public partial class MainWindow
             dock.Children.Add(row);
             content = dock;
         }
-        var rb = new RadioButton { Content = content, Style = (Style)FindResource("NavItem"), Tag = e.Key, ToolTip = iconOnly ? (e.Tip is { } t ? $"{e.Title} — {t}" : e.Title) : e.Tip };
+        var rb = new RadioButton { Content = content, Style = (Style)FindResource("NavItem"), Tag = e.Key, ToolTip = iconOnly ? (e.Tip is { } t ? $"{e.Title}{(e.Badge > 0 ? $" ({e.Badge})" : "")} — {t}" : e.Title + (e.Badge > 0 ? $" ({e.Badge})" : "")) : e.Tip };
         if (iconOnly) rb.Padding = new Thickness(6, 7, 6, 7);
         System.Windows.Automation.AutomationProperties.SetName(rb, e.Title);
         rb.Checked += (_, _) => { if (!_suppressNav) Navigate(e.Key); };

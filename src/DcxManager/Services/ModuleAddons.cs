@@ -64,6 +64,7 @@ public static class ModuleAddons
         if (!a.Enabled) return "it is turned off";
         if ((AddonPackages.ModuleRefusal(a.Manifest) ?? AddonPackages.UseRefusal(a)) is { } rule) return rule;
         if (mod.Api != AddonModuleInfo.CurrentApi) return $"it is made for module API {mod.Api}; this app provides {AddonModuleInfo.CurrentApi}";
+        if (AddonPackages.AppTooOld(a.Manifest.MinAppVersion, AppInfo.Version) is { } old) return old;   // 0.6.43: e.g. the app was rolled back
         if (AddonPackages.VerifyFiles(a) is { } changed) { tampered = true; return "its files changed: " + changed; }
         byte[]? Read(string rel)
         {

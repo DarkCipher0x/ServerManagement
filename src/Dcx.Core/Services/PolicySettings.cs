@@ -78,6 +78,7 @@ public static class PolicySettings
         [nameof(AppSettings.PreviousDataDir)] = "where the store was before a move (state)",
         [nameof(AppSettings.SyncWarningDismissedFor)] = "warnings the user dismissed (state)",
         [nameof(AppSettings.SetupDone)] = "whether the first-run setup was completed (state)",
+        [nameof(AppSettings.AddonNavSections)] = "the sidebar sections module add-ons have added (state)",
         [nameof(AppSettings.LocalSshKeysSeen)] = "which of the user's own .ssh keys were already offered (state)",
         [nameof(AppSettings.BrandingLogoPng)] = "the logo image picked in Settings (too large for the registry; a policy uses BrandingLogoPath instead)",
         [nameof(AppSettings.PuppetServerHostId)] = "which saved host is the Puppet server (per user; host ids differ per store)",

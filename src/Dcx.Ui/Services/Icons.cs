@@ -36,10 +36,29 @@ public static class Icons
         ["☰"] = '',   // Audit log: checklist
         ["⚙"] = '',   // Settings / SYSTEM: gear
         ["📌"] = '',  // PINNED
+        // ADR-121 (0.6.43): CipherMail's EMAIL section and pages (code points checked on a rendered sheet, 2026-11-09).
+        ["✉"] = '',   // Mail / EMAIL: mail
+        ["👥"] = '',  // Accounts: people
+        ["📇"] = '',  // Contacts: contact info
+        ["🎭"] = '',  // Masked Email: shield
     };
+    private static readonly Dictionary<string, char> ByModule = new();
 
     /// <summary>The Fluent icon for a screen's glyph, or null when there is none (draw the glyph itself).</summary>
-    public static char? For(string glyph) => ByGlyph.TryGetValue(glyph.Trim(), out var c) ? c : null;
+    public static char? For(string glyph) => ByGlyph.TryGetValue(glyph.Trim(), out var c) || ByModule.TryGetValue(glyph.Trim(), out c) ? c : null;
+
+    /// <summary>ADR-121: a module's own glyph drawn as a Fluent icon (IAppHost.Icon). Refused (false) when the app or another
+    /// module maps that glyph already, or the code point isn't in the private use area the icon fonts use (U+E000–U+F8FF).</summary>
+    public static bool AddForModule(string glyph, char codePoint)
+    {
+        var g = glyph?.Trim() ?? "";
+        if (g.Length is 0 or > 4 || codePoint is < '' or > '' || ByGlyph.ContainsKey(g) || ByModule.ContainsKey(g)) return false;
+        ByModule[g] = codePoint;
+        return true;
+    }
+
+    /// <summary>Self-test: forget the modules' icons.</summary>
+    internal static void ResetModulesForTest() => ByModule.Clear();
 
     /// <summary>The PINNED section's icon.</summary>
     public const char Pin = '';

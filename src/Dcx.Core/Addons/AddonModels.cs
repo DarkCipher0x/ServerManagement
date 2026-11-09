@@ -43,6 +43,9 @@ public sealed class AddonManifest
     /// registers as an app module (screens, settings, policies, commands). Only a package whose module.json is signed with
     /// DarkCipher Systems' release keys (ECDSA P-256 + ML-DSA-65) and lists every file's SHA-256 is loaded.</summary>
     public AddonModuleInfo? Module { get; set; }
+    /// <summary>0.6.43 (ADR-121a): the oldest app version the add-on works with ("major.minor.patch"; empty = any). An older
+    /// app refuses to install it, and doesn't load a module add-on that asks for a newer app. Apps before 0.6.43 ignore it.</summary>
+    public string MinAppVersion { get; set; } = "";
     public int TimeoutSeconds { get; set; } = 60;
     public List<string> Permissions { get; set; } = new();
     public List<AddonCommand> Commands { get; set; } = new();

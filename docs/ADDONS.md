@@ -66,6 +66,7 @@ A `.dcxaddon` file is a zip archive with `addon.json` at its root, plus your fil
 | `name` | 1–60 characters |
 | `publisher` | 1–80 characters (shown as "as stated by the package": it is not verified) |
 | `description` | ≤ 1000 characters |
+| `minAppVersion` | optional, `major.minor.patch`: the oldest app the add-on works with; an older app (0.6.43 on) refuses the install and doesn't load such a module |
 | `entry` | program add-ons: a `.exe` or `.ps1` in the package. `.ps1` runs with `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File` |
 | `timeoutSeconds` | 5–600 (default 60); the process is killed after it |
 | `permissions` | names from section 6; unknown names are refused; duplicates removed |
@@ -437,3 +438,36 @@ All four live in `samples/addons/<folder>` and are packed with `samples\addons\p
 | "The add-on's files no longer match what you approved…" | a file changed after install: the add-on was disabled; reinstall it from a trusted package |
 | "Version X is already installed" / "Downgrades are refused" | bump `version` |
 | "permission denied: X (not requested in addon.json)" / "(not granted by the user)" | add it to `permissions` / grant it on the Add-ons screen |
+
+## 14. Module add-ons: sidebar sections and icons (ADR-121)
+
+A module add-on (ADR-120, signed by the release keys) registers what it adds through `IAppHost` in its
+`IAppModule.Register`. Two stable points (0.6.43, module API 1 unchanged) let it shape the sidebar without an app change:
+
+```csharp
+host.NavSection("EMAIL", "✉", after: "CHAT");      // a section of its own (null after = before LOGS)
+host.Icon("✉", '');                            // its glyph drawn as a Segoe Fluent icon (U+E000–U+F8FF)
+host.NavItem("EMAIL", "mail", "✉  Mail", "Your mail", screen: () => new MailView());
+```
+
+- The section shows only while it has items, and the user orders, hides, expands and pins it like any other; its
+  saved place survives a restart, and a time when the add-on is disabled.
+- Keys are upper case (1–24 of A–Z, 0–9, space, `&`, `-`); a built-in name, PINNED or a duplicate is ignored (logged).
+  `Icon` can't change the app's own glyphs or another module's.
+- On an app older than 0.6.43 both methods are missing: call them in `try { … } catch (MissingMethodException) { … }`
+  and fall back (for example, put the items in TOOLS).
+
+Live items (ADR-121a) for lists that change while the app runs (one entry per account, say):
+
+```csharp
+host.NavItems("EMAIL", () => accounts.Select(a =>
+    new ModuleNavEntry("com.darkcipher.ciphermail:" + a.Id, "✉  " + a.Name, a.Locked ? "Locked" : null,
+        Screen: () => new InboxView(a), Header: "✉ " + a.Name, Badge: a.Unread)));
+host.RefreshNav();   // whenever the list changes (any thread)
+```
+
+The provider runs on the UI thread at every sidebar build: keep it to in-memory data. Prefix keys with your add-on id;
+an app page's key or one already used is skipped.
+
+`addon.json` may name the oldest app it works with: `"minAppVersion": "0.6.43"`. From 0.6.43 an older app refuses the
+install with "Update the app first" (apps before 0.6.43 ignore the field).

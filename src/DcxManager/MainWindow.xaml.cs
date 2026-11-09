@@ -56,6 +56,7 @@ public partial class MainWindow : Window
         ThemeManager.Changed += ApplyBranding;   // the main window lives as long as the app: nothing to unhook
         Browser.PortalBrowser.Changed += () => Dispatcher.BeginInvoke(() => BuildNav());   // the portal browser switch (Settings) or add-on shows / hides Portals (ADR-032)
         Library.SharedLibraries.FeatureChanged += () => BuildNav();   // a library add-on shows / hides Shared library (ADR-033)
+        AppModules.NavRefreshRequested += QueueNavRefresh;   // ADR-121a: a module's live sidebar list changed
         Locks.Changed += () => Dispatcher.BeginInvoke(OnLocksChanged);   // 0.5.1 (ADR-067): padlocks redraw; screens that locked again close
         foreach (ComboBoxItem i in ThemeBox.Items) if ((string)i.Tag == AppSettings.Current.Theme) ThemeBox.SelectedItem = i;
         SideCol.Width = new GridLength(Math.Clamp(AppSettings.Current.SidebarWidth, 150, 480));

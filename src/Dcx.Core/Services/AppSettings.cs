@@ -241,6 +241,9 @@ public sealed class AppSettings
     public List<string> NavItemOrder { get; set; } = new();
     /// <summary>Sidebar sections the user hid (header right-click → Hide, or Settings → Appearance).</summary>
     public List<string> HiddenNavSections { get; set; } = new();
+    /// <summary>ADR-121 (0.6.43): sidebar sections module add-ons have added (state). Their saved order, hidden and expanded
+    /// state are kept while the add-on isn't loaded, instead of being tidied away as a section that no longer exists.</summary>
+    public List<string> AddonNavSections { get; set; } = new();
     /// <summary>List row spacing: "comfortable" (default) or "compact".</summary>
     public string Density { get; set; } = "comfortable";
     // Appearance and navigation (0.2.1, the DarkCipher house theme shared across the DarkCipher Systems apps; every value is bounded and

@@ -164,6 +164,16 @@ public static class AddonPackages
         }
     }
 
+    /// <summary>0.6.43 (ADR-121a): why an add-on asking for app <paramref name="minApp"/> can't be used by app
+    /// <paramref name="app"/>, or null (no minimum, or the app is new enough). A malformed minimum is refused too.</summary>
+    public static string? AppTooOld(string? minApp, string app)
+    {
+        if (string.IsNullOrWhiteSpace(minApp)) return null;
+        if (!VersionRx.IsMatch(minApp) || !Version.TryParse(minApp, out var min)) return "Invalid minAppVersion (major.minor.patch).";
+        if (!Version.TryParse(app, out var have)) return null;   // a build without a version (tests): nothing to compare
+        return have < min ? $"This add-on needs DarkCipher ServerManagement {minApp} or newer; this app is {app}. Update the app first (Settings → Updates)." : null;
+    }
+
     private static string? Validate(AddonManifest m, HashSet<string> files)
     {
         // s40 (DarkCipher0x: every add-on to the same standard, encrypted only): API 2 for every package, data-only ones too. API 1
@@ -172,6 +182,7 @@ public static class AddonPackages
         if (m.Api != 2) return $"The add-on needs API {m.Api}; this app provides API 2.";
         if (!IdRx.IsMatch(m.Id ?? "")) return "Invalid id (3–64 lowercase letters, digits, dots, hyphens).";
         if (!VersionRx.IsMatch(m.Version ?? "")) return "Invalid version (major.minor.patch).";
+        if (AppTooOld(m.MinAppVersion, Services.AppInfo.Version) is { } old) return old;
         if (string.IsNullOrWhiteSpace(m.Name) || m.Name.Length > 60) return "A name of 1–60 characters is required.";
         if (string.IsNullOrWhiteSpace(m.Publisher) || m.Publisher.Length > 80) return "A publisher of 1–80 characters is required.";
         if ((m.Description ?? "").Length > 1000) return "The description is longer than 1000 characters.";

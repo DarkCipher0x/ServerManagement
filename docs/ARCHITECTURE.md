@@ -3446,3 +3446,53 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
   (`ExcludeAssets="runtime"`); at run time it resolves from the app (ADR-120's load context), so nothing ships twice.
 - **Self-test:** the rules (logins, URL, page, CSP, navigation lists, runtime missing, policy) and the tile's Watch / Stop /
   policy path; the browser itself is never started in the self-test. Untested against the real Twitch player.
+
+## ADR-121: A module's own sidebar section and icons — stable extension points for module add-ons (0.6.43)
+- **Context:** CipherMail (a module add-on, ADR-120) put its pages in a "MAIL" section with `IAppHost.NavItem`, and they
+  never showed: the sidebar drew only its fixed list of sections and silently dropped any other. DarkCipher0x wanted an
+  EMAIL section, and other add-ons will want sections and icons of their own without an app change each time.
+- **Decision — `IAppHost.NavSection(string key, string glyph, string? after = null)`:** a module adds a section; its items
+  come from `NavItem(key, …)` as before. `key` is the header (1–24 of A–Z, 0–9, space, `&`, `-`, starting with a letter),
+  `glyph` the character before it, `after` the section it follows by default (null = just before LOGS; a section after
+  another module's section waits for it; a missing or circular `after` also lands before LOGS). A built-in name
+  (`AppModules.BuiltInNavSections`, the single list the sidebar uses), PINNED, a duplicate or a malformed key is ignored
+  and logged. Contributions are `AppModules.NavSectionItems` (`NavSectionContribution(Module, Key, Glyph, After)`).
+- **Decision — a contributed section is a section:** `MainWindow.NavSections` is the built-in sections with each
+  contributed one merged in (`AppModules.MergeNavSections`), and like the built-in module sections it exists only while it
+  has items. Everything that reads `NavSections` (order, hiding, expanding, pinning, page order, Settings → Navigation,
+  appearance import/export, the icon rail) treats it like a built-in one; `SectionGlyph` returns its glyph.
+- **Decision — saved state survives an absent add-on:** `AppSettings.AddonNavSections` (state, not a policy) remembers
+  every section a module registered. `MigrateNavSettings` keeps those names in the saved order, hidden and expanded lists
+  even when the add-on isn't loaded (disabled, refused, not registered yet), and a reorder or expansion change made
+  meanwhile keeps them in place, so EMAIL comes back where the user left it.
+- **Decision — `IAppHost.Icon(string glyph, char codePoint)`:** a module maps its own glyph to a Segoe Fluent Icons code
+  point (U+E000–U+F8FF), drawn like the app's glyphs (`Icons.For`). The app's own glyphs and a glyph another module
+  mapped can't be changed (logged). CipherMail's glyphs (✉ 👥 📇 🎭) are also mapped by the app itself.
+- **Compatibility:** both methods are additive; module API stays 1 (`AddonModuleInfo.CurrentApi`), so existing packages
+  keep loading. An add-on that must also run on an older app calls them in a `try` and catches `MissingMethodException`
+  (CipherMail then falls back to TOOLS).
+- **Self-test:** `SelfTestNavSections.cs` registers a throwaway module (two sections, one after the other registered in
+  reverse, one without items, refused keys, icons) and checks the default order, glyphs and icons, the sidebar headers and
+  items, hiding, showing and moving, remembering, and that order and hidden state survive while the module is gone; the
+  module and every setting are removed again. The architecture check counts other add-ons' contributions apart.
+
+## ADR-121a: Live sidebar items and a minimum app version for add-ons (0.6.43)
+- **Context:** CipherMail lists each mail account as its own sidebar entry under EMAIL, and accounts are added, removed,
+  renamed and locked at run time; `NavItem` is registration-time only. DarkCipher0x wants the add-on detachable: install
+  it and EMAIL appears with his accounts, remove it and the section goes.
+- **Decision — `IAppHost.NavItems(string section, Func<IEnumerable<ModuleNavEntry>> items)`:** a live list, asked on the
+  UI thread every time the sidebar is built (`AppModules.RefreshLiveNav`, once per `BuildNav`; providers must not do
+  I/O). `ModuleNavEntry(Key, Text, Tip, Screen, Header, Open, Menu, Badge)` carries a NavItem's fields plus a count drawn
+  after the title (99+ above 99; in the icon rail's tooltip). Entries become ordinary `NavContribution`s (`Live`,
+  `Badge`): they open through their key (`FindNav`), pin, hide, order and have their menu like any page, and follow the
+  section's static items. Skipped: an app page's key, a key used twice, an entry with nothing to open; a provider that
+  throws is logged. A section of live items only exists while the list has entries. Use keys prefixed with your id.
+- **Decision — `IAppHost.RefreshNav()`:** raises `AppModules.NavRefreshRequested`; the main window queues one rebuild
+  on the UI thread (Background priority) however many calls come in a row, from any thread; nothing before the window.
+- **Decision — `addon.json` `minAppVersion`:** "major.minor.patch"; an older app refuses to install the package
+  ("needs DarkCipher ServerManagement X or newer … Update the app first") and doesn't load a module add-on that asks for a
+  newer app (e.g. after a rollback). Apps before 0.6.43 ignore the field, so it protects from 0.6.43 on.
+- **Compatibility:** additive; module API stays 1. On older apps catch `MissingMethodException`.
+- **Self-test:** `SelfTestNavSections.cs`: a throwaway module with a live-only section, its count, opening through the
+  key, the skipped entries and a failing provider, RefreshNav from a worker thread, pinning, the section leaving with an
+  empty list; `AddonPackages.AppTooOld` for none, equal, older, newer and malformed minimums.

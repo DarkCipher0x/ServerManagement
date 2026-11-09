@@ -107,5 +107,6 @@ tools/msix/packages.lock.json
 !.selftest*/**
 !dist/**
 !publish/**
-# Add-ons are never published (ADR-120): the stream manager add-on, its source included.
+# Add-ons are never published (ADR-120): the stream manager and CipherMail add-ons, their source included.
 !samples/addons/stream/**
+!samples/addons/ciphermail/**

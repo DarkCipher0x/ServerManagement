@@ -246,6 +246,9 @@ public static partial class SelfTest
         // 0.5.1: locks, restrictions, add-on policy, host import, Commander, LOGS, dropdowns, the VNC tab (docs/PLAN-0.5.1.md).
         try { await Release051Tests.RunAsync(main, Ok, Fail); }
         catch (Exception ex) { Fail("0.5.1 tests", ex); }
+        // ADR-121 (0.6.43): a module add-on's own sidebar section.
+        try { await NavSectionTests.RunAsync(main, Ok, Fail); }
+        catch (Exception ex) { Fail("ADR-121 tests", ex); }
 
         // 0.3.0 preview.6: LAN discovery tools (ping, port tests, connection, monitoring) and scrolling (loopback only).
         try { await LanTests.RunAsync(main, Ok, Fail); }
