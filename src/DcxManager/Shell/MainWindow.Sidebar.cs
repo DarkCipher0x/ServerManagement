@@ -97,7 +97,71 @@ public partial class MainWindow
     private void QueueNavRefresh()
     {
         lock (_allNav) { if (_navRefreshQueued) return; _navRefreshQueued = true; }
-        Dispatcher.BeginInvoke(() => { lock (_allNav) _navRefreshQueued = false; BuildNav(); }, System.Windows.Threading.DispatcherPriority.Background);
+        Dispatcher.BeginInvoke(() => { lock (_allNav) _navRefreshQueued = false; if (!TryUpdateLiveBadges()) BuildNav(); }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    /// <summary>0.6.45: when a module's live list changed only in its counts (unread mail…), the counts are redrawn in place
+    /// and the sidebar isn't rebuilt (a rebuild re-lays out the window, which a session's native window, such as a
+    /// WebView2, can show as a black area until the next layout). False: something else changed; rebuild.</summary>
+    private bool TryUpdateLiveBadges()
+    {
+        if (Nav.Children.Count == 0) return false;
+        var before = AppModules.LiveNavSnapshot;
+        var oldKeys = before.Select(n => n.Key).ToHashSet(StringComparer.Ordinal);
+        var after = AppModules.RefreshLiveNav(k => (_allNav.ContainsKey(k) && !oldKeys.Contains(k)) || LaterPageKeys.Contains(k));
+        static string Sig(IEnumerable<NavContribution> l) => string.Join("\n", l.Select(n => $"{n.Module}\t{n.Section}\t{n.Key}\t{n.Text}\t{n.Tip}"));
+        if (Sig(before) != Sig(after)) return false;
+        bool icons = AppSettings.Current.SidebarStyle == "icons";
+        foreach (var n in after)
+        {
+            if (!_allNav.TryGetValue(n.Key, out var e)) return false;
+            if (e.Badge == n.Badge) continue;
+            var ne = e with { Badge = n.Badge };
+            _allNav[n.Key] = ne;
+            foreach (var rb in NavDescendants(Nav).OfType<RadioButton>().Where(r => r.Tag as string == n.Key).ToList())
+                if (!SetNavBadge(rb, ne, icons)) return false;
+        }
+        return true;
+    }
+
+    private static IEnumerable<DependencyObject> NavDescendants(DependencyObject d)
+    {
+        foreach (var c in LogicalTreeHelper.GetChildren(d).OfType<DependencyObject>())
+        {
+            yield return c;
+            foreach (var x in NavDescendants(c)) yield return x;
+        }
+    }
+
+    /// <summary>A sidebar item's count, shown after its title (ADR-121a).</summary>
+    private static TextBlock NavBadge(int count)
+    {
+        var b = new TextBlock { Text = count > 99 ? "99+" : count.ToString(), FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Tag = "nav-badge" }.Fs(FontStep.Caption);
+        b.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+        System.Windows.Automation.AutomationProperties.SetName(b, count + " new");
+        return b;
+    }
+
+    private static string? NavTip(NavEntry e, bool iconOnly) =>
+        iconOnly ? (e.Tip is { } t ? $"{e.Title}{(e.Badge > 0 ? $" ({e.Badge})" : "")} — {t}" : e.Title + (e.Badge > 0 ? $" ({e.Badge})" : "")) : e.Tip;
+
+    /// <summary>0.6.45: puts an item's count in place (adds, changes or removes it). False: the item isn't laid out as expected.</summary>
+    private static bool SetNavBadge(RadioButton rb, NavEntry e, bool iconOnly)
+    {
+        rb.ToolTip = NavTip(e, iconOnly);
+        if (iconOnly) return true;
+        if (NavDescendants(rb).OfType<TextBlock>().FirstOrDefault(t => t.Tag as string == "nav-badge") is { } old)
+        {
+            if (LogicalTreeHelper.GetParent(old) is not Panel p) return false;
+            if (e.Badge > 0) { old.Text = e.Badge > 99 ? "99+" : e.Badge.ToString(); System.Windows.Automation.AutomationProperties.SetName(old, e.Badge + " new"); }
+            else p.Children.Remove(old);
+            return true;
+        }
+        if (e.Badge <= 0) return true;
+        var row = NavDescendants(rb).OfType<StackPanel>().FirstOrDefault(p => p.Orientation == Orientation.Horizontal && p.Children.Count >= 2 && p.Children[1] is TextBlock);
+        if (row == null) return false;
+        row.Children.Insert(2, NavBadge(e.Badge));
+        return true;
     }
 
     /// <summary>ADR-121: a section a module add-on added before, not shown now (the add-on disabled or not loaded).</summary>
@@ -306,7 +370,8 @@ public partial class MainWindow
     public void ApplySidebarWidth()
     {
         var s = AppSettings.Current;
-        SideCol.Width = new GridLength(s.SidebarCollapsed ? 0 : s.SidebarStyle == "icons" ? IconRailWidth : Math.Clamp(s.SidebarWidth, 150, 480));
+        var w = new GridLength(s.SidebarCollapsed ? 0 : s.SidebarStyle == "icons" ? IconRailWidth : Math.Clamp(s.SidebarWidth, 150, 480));
+        if (SideCol.Width != w) SideCol.Width = w;   // 0.6.45: a sidebar rebuild never touches the columns when nothing changed
     }
     private const double IconRailWidth = 52;
 
@@ -460,13 +525,7 @@ public partial class MainWindow
             row.Children[0].SetValue(MarginProperty, new Thickness(0, 0, 8, 0));
             row.Children.Add(new TextBlock { Text = e.Title, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
             // ADR-121a: a live item's count (unread mail…), after the title.
-            if (e.Badge > 0)
-            {
-                var b = new TextBlock { Text = e.Badge > 99 ? "99+" : e.Badge.ToString(), FontWeight = FontWeights.SemiBold, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Tag = "nav-badge" }.Fs(FontStep.Caption);
-                b.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
-                System.Windows.Automation.AutomationProperties.SetName(b, e.Badge + " new");
-                row.Children.Add(b);
-            }
+            if (e.Badge > 0) row.Children.Add(NavBadge(e.Badge));
             // 0.5.1 (ADR-067): a locked category shows its padlock (closed, or open while unlocked).
             if (Locks.CategoryOfScreen(e.Key) is { } cat && LockUi.Padlock("cat:" + cat) is { Length: > 0 } pad)
             {
@@ -495,7 +554,7 @@ public partial class MainWindow
             dock.Children.Add(row);
             content = dock;
         }
-        var rb = new RadioButton { Content = content, Style = (Style)FindResource("NavItem"), Tag = e.Key, ToolTip = iconOnly ? (e.Tip is { } t ? $"{e.Title}{(e.Badge > 0 ? $" ({e.Badge})" : "")} — {t}" : e.Title + (e.Badge > 0 ? $" ({e.Badge})" : "")) : e.Tip };
+        var rb = new RadioButton { Content = content, Style = (Style)FindResource("NavItem"), Tag = e.Key, ToolTip = NavTip(e, iconOnly) };
         if (iconOnly) rb.Padding = new Thickness(6, 7, 6, 7);
         System.Windows.Automation.AutomationProperties.SetName(rb, e.Title);
         rb.Checked += (_, _) => { if (!_suppressNav) Navigate(e.Key); };

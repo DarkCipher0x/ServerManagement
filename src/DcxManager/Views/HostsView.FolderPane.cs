@@ -26,8 +26,11 @@ public partial class HostsView
     private bool _folderOpen;
     private DispatcherTimer? _folderClose;
 
-    /// <summary>"pinned" or "auto" (0.5.8–0.6.1's "tab" and anything else read as pinned).</summary>
-    internal static string FolderMode => AppSettings.Current.HostsDock == "auto" ? "auto" : "pinned";
+    /// <summary>"pinned", "auto" or (0.6.45) "hosts": the panel only on the Hosts tab, nothing beside the other tabs.
+    /// 0.5.8–0.6.1's "tab" and anything else read as pinned.</summary>
+    internal static string FolderMode => AppSettings.Current.HostsDock switch { "auto" => "auto", "hosts" => "hosts", _ => "pinned" };
+    /// <summary>0.6.45: the panel sits beside every tab of the main window (pinned or auto), not only on the Hosts tab.</summary>
+    internal static bool PaneBesideTabs => FolderMode != "hosts";
     /// <summary>0.6.42: a collapsible panel opens when pointed at and folds by itself (default); off, the Hosts strip is a
     /// click toggle (<see cref="AppSettings.HostsDockHover"/>, also the extra windows' host pane).</summary>
     internal static bool HoverOpens => AppSettings.Current.HostsDockHover;
@@ -77,7 +80,7 @@ public partial class HostsView
         List.PreviewMouseDown += (_, _) => { if (FolderMode == "auto" && HoverOpens && _folderOpen) SetFolderOpen(false); };
         FolderSplitter.DragCompleted += (_, _) =>
         {
-            if (FolderMode != "pinned") return;
+            if (FolderMode == "auto") return;
             AppSettings.Current.HostsDockWidth = Math.Round(FolderCol.ActualWidth);
             try { AppSettings.Save(); } catch (Exception ex) { App.Log("Hosts folder pane width", ex); }
         };
@@ -125,20 +128,40 @@ public partial class HostsView
         return FolderPane;
     }
 
+    /// <summary>0.6.45: takes the folder pane back from the main window's hosts panel ("Only on the Hosts tab"): it is laid
+    /// out inside this page again, pinned beside the host list.</summary>
+    internal void ReturnFolderPane()
+    {
+        if (!PaneInWindow) return;
+        PaneInWindow = false;
+        if (LogicalTreeHelper.GetParent(FolderPane) is Border b) b.Child = null;
+        FolderHost.Child = FolderPane;
+        _folderOpen = false;
+        ApplyFolderPane();
+    }
+
     /// <summary>Lays the pane out for the current mode.</summary>
     internal void ApplyFolderPane()
     {
         bool auto = FolderMode == "auto";
+        bool onlyHere = FolderMode == "hosts";
         bool managed = PolicySettings.Get(nameof(AppSettings.HostsDock)) != null;
         PinButton.Content = auto ? "📍" : "📌";
         PinButton.IsEnabled = !managed;
         PinButton.ToolTip = managed ? "🔒 Set by your organisation (Group Policy: HostsDock)."
+            : onlyHere ? "Only on the Hosts tab: the hosts panel isn't shown beside your other tabs. Click to pin it open beside every tab again."
             : PaneInWindow
                 ? auto ? "Auto-collapse: the hosts panel folds to a Hosts strip beside the tabs and opens when you point at it. Click to pin it open."
                        : "Pinned: the hosts panel stays open beside every tab. Click to auto-collapse it to a strip (it opens when you point at it)."
             : auto ? "Auto-collapse: the folder pane folds to a strip on the left of this page and slides out when you point at it. Click to pin it open."
                    : "Pinned: the folder pane stays open beside the hosts. Click to auto-collapse it to a strip (it slides out when you point at it).";
-        System.Windows.Automation.AutomationProperties.SetName(PinButton, auto ? "Pin the hosts panel open" : "Auto-collapse the hosts panel");
+        System.Windows.Automation.AutomationProperties.SetName(PinButton, auto ? "Pin the hosts panel open" : onlyHere ? "Pin the hosts panel beside every tab" : "Auto-collapse the hosts panel");
+        // 0.6.45: ✕ closes the panel beside the tabs (it stays on the Hosts tab, where 📌 brings it back).
+        ClosePaneButton.Visibility = PaneInWindow ? Visibility.Visible : Visibility.Collapsed;
+        ClosePaneButton.IsEnabled = !managed;
+        ClosePaneButton.ToolTip = managed ? "🔒 Set by your organisation (Group Policy: HostsDock)."
+            : "Close the hosts panel beside the tabs. It stays on the Hosts tab (sidebar → Hosts), where 📌 pins it beside every tab again.";
+        System.Windows.Automation.AutomationProperties.SetName(ClosePaneButton, "Close the hosts panel");
         // 0.6.44: the auto-hide switch on the panel's own header while it folds (before, only Settings and a menu had it).
         bool hoverManaged = PolicySettings.Get(nameof(AppSettings.HostsDockHover)) != null;
         AutoHideBox.Visibility = auto ? Visibility.Visible : Visibility.Collapsed;
@@ -198,20 +221,33 @@ public partial class HostsView
         FolderHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>Pinned or auto-collapsing, for every open Hosts page (refused when Group Policy sets it).</summary>
+    /// <summary>Pinned, auto-collapsing or (0.6.45) only on the Hosts tab, for every open Hosts page (refused when Group
+    /// Policy sets it).</summary>
     internal static void SetFolderMode(string mode)
     {
         if (PolicySettings.Get(nameof(AppSettings.HostsDock)) != null) { MainWindow.Instance?.Status("🔒 The folder pane's mode is set by your organisation (Group Policy: HostsDock)."); return; }
-        AppSettings.Current.HostsDock = mode == "auto" ? "auto" : "pinned";
+        mode = mode is "auto" or "hosts" ? mode : "pinned";
+        AppSettings.Current.HostsDock = mode;
         try { AppSettings.Save(); } catch (Exception ex) { App.Log("Hosts folder pane mode", ex); }
+        MainWindow.Instance?.ApplyHostPane();   // 0.6.31: the hosts panel beside every tab (0.6.45: or back inside the Hosts page)
         foreach (var hv in MainWindow.Instance?.Panes.AllTabs.Select(t => t.Content).OfType<HostsView>() ?? Enumerable.Empty<HostsView>()) { hv._folderOpen = false; hv.ApplyFolderPane(); }
-        MainWindow.Instance?.ApplyHostPane();   // 0.6.31: the hosts panel beside every tab
-        MainWindow.Instance?.Status(mode != "auto" ? "The hosts panel is pinned open beside every tab."
-            : HoverOpens ? "The hosts panel auto-collapses: point at the Hosts strip beside the tabs to open it."
-            : "The hosts panel folds to a Hosts strip beside the tabs: click it to open the panel, and again to fold it.");
+        MainWindow.Instance?.Status(mode switch
+        {
+            "hosts" => "The hosts panel is closed beside your tabs. It's still on the Hosts tab (sidebar → Hosts): click 📌 there to pin it beside every tab again.",
+            "auto" => HoverOpens ? "The hosts panel auto-collapses: point at the Hosts strip beside the tabs to open it."
+                : "The hosts panel folds to a Hosts strip beside the tabs: click it to open the panel, and again to fold it.",
+            _ => "The hosts panel is pinned open beside every tab.",
+        });
     }
 
-    private void OnPinToggle(object sender, RoutedEventArgs e) => SetFolderMode(FolderMode == "auto" ? "pinned" : "auto");
+    /// <summary>📌 / 📍: pinned ⇄ auto-collapse; on the Hosts tab only, 📌 pins it beside every tab again.</summary>
+    private void OnPinToggle(object sender, RoutedEventArgs e) => SetFolderMode(FolderMode == "pinned" ? "auto" : "pinned");
+
+    private void OnClosePane(object sender, RoutedEventArgs e) => SetFolderMode("hosts");
+    /// <summary>Self-test: the header's buttons.</summary>
+    internal (string Pin, bool CloseShown) PaneButtonsForTest => ((string)PinButton.Content, ClosePaneButton.Visibility == Visibility.Visible);
+    internal void ClickCloseForTest() => OnClosePane(ClosePaneButton, new RoutedEventArgs());
+    internal void ClickPinForTest() => OnPinToggle(PinButton, new RoutedEventArgs());
 
     private void OnAutoHideToggle(object sender, RoutedEventArgs e)
     {

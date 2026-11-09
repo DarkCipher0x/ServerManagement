@@ -121,7 +121,9 @@ public partial class HostsView : UserControl, IDisposable
 
     public void Dispose()
     {
-        if (PaneInWindow) return;   // 0.6.31: the main window's one Hosts page outlives its tab (its folder pane is the hosts panel)
+        // 0.6.31: the main window's one Hosts page outlives its tab (its folder pane is the hosts panel); 0.6.45: also while
+        // its pane is back inside it ("Only on the Hosts tab"), since reopening Hosts shows the same page.
+        if (PaneInWindow || ReferenceEquals(DcxManager.MainWindow.Instance?.HostsPageIfMade, this)) return;
         AppData.Changed -= OnStoreChanged; Locks.Changed -= OnLocksChanged; Library.SharedLibraries.Changed -= OnStoreChanged; }
 
     private bool _stale;
@@ -147,9 +149,11 @@ public partial class HostsView : UserControl, IDisposable
             tip: "Scan your network for SSH, Remote Desktop and VNC, review what answered (✦ the AI can suggest names), tick and import");
         // The hosts panel (0.6.31: beside every tab), pinned or auto-collapsing (also its own 📌 / 📍).
         bool paneManaged = PolicySettings.Get(nameof(AppSettings.HostsDock)) != null;
-        yield return FolderMode == "auto"
-            ? Menus.Item("📌 Pin the hosts panel open", () => SetFolderMode("pinned"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : null)
+        yield return FolderMode != "pinned"
+            ? Menus.Item(FolderMode == "hosts" ? "📌 Pin the hosts panel beside every tab" : "📌 Pin the hosts panel open", () => SetFolderMode("pinned"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : null)
             : Menus.Item("📍 Auto-collapse the hosts panel", () => SetFolderMode("auto"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : "Folds to a Hosts strip beside the tabs; point at it to open the panel");
+        if (FolderMode != "hosts")   // 0.6.45
+            yield return Menus.Item("✕ Close the hosts panel (keep it on the Hosts tab only)", () => SetFolderMode("hosts"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : "Nothing beside your other tabs; open Hosts and click 📌 to bring it back");
         if (FolderMode == "auto")   // 0.6.42: open on pointing (auto-hide) or only on a click
         {
             bool hoverManaged = PolicySettings.Get(nameof(AppSettings.HostsDockHover)) != null;

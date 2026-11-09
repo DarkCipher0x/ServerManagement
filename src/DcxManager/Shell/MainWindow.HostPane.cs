@@ -44,11 +44,14 @@ public partial class MainWindow
             if (_hostsPage == null)
             {
                 _hostsPage = new HostsView();
-                if (_hostPaneWired) { HostPaneHost.Child = _hostsPage.TakeFolderPane(); _hostsPage.ApplyFolderPane(); }
+                if (_hostPaneWired && HostsView.PaneBesideTabs) { HostPaneHost.Child = _hostsPage.TakeFolderPane(); _hostsPage.ApplyFolderPane(); }
             }
             return _hostsPage;
         }
     }
+
+    /// <summary>The one Hosts page if it has been made (never makes it).</summary>
+    internal HostsView? HostsPageIfMade => _hostsPage;
 
     /// <summary>The panel is showing (always when pinned; opened when auto).</summary>
     internal bool HostPaneShowing => HostsView.FolderMode == "pinned" || _hostPaneOpen;
@@ -58,7 +61,7 @@ public partial class MainWindow
     private void InitHostPane()
     {
         _hostPaneWired = true;
-        if (_hostsPage != null) HostPaneHost.Child = _hostsPage.TakeFolderPane();
+        if (_hostsPage != null) { if (HostsView.PaneBesideTabs) HostPaneHost.Child = _hostsPage.TakeFolderPane(); }
         else Dispatcher.BeginInvoke(DispatcherPriority.Background, () => { _ = HostsPage; StartupTrace.Mark("hosts page made (deferred, Background priority)"); });
         BuildHostStrip();
         _hostPaneClose.Tick += (_, _) =>
@@ -78,6 +81,7 @@ public partial class MainWindow
         {
             Menus.Item(HostsView.HoverOpens ? "Turn auto-hide off (open and fold with a click)" : "Turn auto-hide on (open when pointed at)", () => HostsView.SetHoverOpens(!HostsView.HoverOpens)),
             Menus.Item("📌 Pin the hosts panel open", () => HostsView.SetFolderMode("pinned")),
+            Menus.Item("✕ Close the hosts panel (keep it on the Hosts tab only)", () => HostsView.SetFolderMode("hosts")),
         });
         HostPaneHost.MouseEnter += (_, _) => _hostPaneClose.Stop();
         HostPaneHost.MouseLeave += (_, _) => { if (HostsView.FolderMode == "auto" && HostsView.HoverOpens && _hostPaneOpen) _hostPaneClose.Start(); };
@@ -127,6 +131,18 @@ public partial class MainWindow
         bool auto = HostsView.FolderMode == "auto";
         _hostPaneClose.Stop();
         if (!auto) _hostPaneOpen = false;
+        // 0.6.45 (DarkCipher0x: "i should also be able to exit that host pane. and put it back ... by opening hosts again and
+        // pinning it"): "Only on the Hosts tab" gives the pane back to the Hosts page and takes the column away.
+        if (!HostsView.PaneBesideTabs)
+        {
+            if (_hostsPage is { PaneInWindow: true } back) { HostPaneHost.Child = null; back.ReturnFolderPane(); }
+            HostPaneStrip.Visibility = HostPaneSplitter.Visibility = HostPaneHost.Visibility = Visibility.Collapsed;
+            HostPaneCol.MinWidth = 0;
+            HostPaneCol.Width = new GridLength(0);
+            _hostsPage?.ApplyFolderPane();
+            return;
+        }
+        if (_hostPaneWired && _hostsPage is { PaneInWindow: false } page) HostPaneHost.Child = page.TakeFolderPane();
         HostPaneStrip.Visibility = auto ? Visibility.Visible : Visibility.Collapsed;
         HostPaneStrip.ToolTip = HostsView.HoverOpens ? "Hosts: point here to open the hosts panel" : "Hosts: click to open the hosts panel, click again to fold it";
         HostPaneSplitter.Visibility = auto ? Visibility.Collapsed : Visibility.Visible;

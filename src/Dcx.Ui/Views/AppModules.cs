@@ -254,6 +254,9 @@ public static class AppModules
         module.Register(new Host(module.Id));
     }
 
+    /// <summary>0.6.45: the live entries as last asked (RefreshLiveNav).</summary>
+    public static IReadOnlyList<NavContribution> LiveNavSnapshot => _liveSnapshot;
+
     public static IEnumerable<NavContribution> NavItemsIn(string section) => Nav.Where(n => n.Section == section).Concat(_liveSnapshot.Where(n => n.Section == section));
 
     /// <summary>ADR-121a: asks every live list for its entries (the main window calls it as it builds the sidebar; UI

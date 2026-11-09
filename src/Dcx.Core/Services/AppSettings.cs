@@ -182,7 +182,8 @@ public sealed class AppSettings
     /// <summary>The Hosts page's folder pane (0.6.2, DarkCipher0x: "auto collapsing etc INSIDE the tab/window of hosts ... like it
     /// was before, but able to collapse within itself"): "pinned" (open beside the host list, as before) or "auto" (folds to
     /// a narrow strip inside the Hosts page; pointing at it slides the pane out over the list). 0.5.8–0.6.1's "tab" (no
-    /// pane beside the sessions) reads as "pinned".</summary>
+    /// pane beside the sessions) reads as "pinned". 0.6.31: the panel beside every tab. 0.6.45: "hosts" = only on the
+    /// Hosts tab (DarkCipher0x: "i should also be able to exit that host pane").</summary>
     public string HostsDock { get; set; } = "pinned";
     /// <summary>0.6.42 (DarkCipher0x: "a way to toggle the auto-hide on the collapsable hosts pane ... untick that and make it
     /// so i have to click to expand and click to minimize"): while the hosts panel (and the extra windows' host pane) is

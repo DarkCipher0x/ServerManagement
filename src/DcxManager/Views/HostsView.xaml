@@ -51,6 +51,8 @@
                         <Button x:Name="PinButton" DockPanel.Dock="Left" Content="📌" Style="{StaticResource SmallButton}" Click="OnPinToggle"/>
                         <TextBlock DockPanel.Dock="Left" Text="HOSTS" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                         <!-- 0.6.44 (DarkCipher0x: "give the option for the auto-collapsable host bar"): auto-hide on the panel itself. -->
+                        <!-- 0.6.45 (DarkCipher0x: "i should also be able to exit that host pane"): close it to the Hosts tab only. -->
+                        <Button x:Name="ClosePaneButton" DockPanel.Dock="Right" Content="✕" Style="{StaticResource SmallButton}" Margin="6,0,0,0" Visibility="Collapsed" Click="OnClosePane"/>
                         <CheckBox x:Name="AutoHideBox" DockPanel.Dock="Right" Content="Auto-hide" VerticalAlignment="Center" Margin="6,0,2,0" Visibility="Collapsed" Click="OnAutoHideToggle"/>
                     </DockPanel>
                     <!-- 0.6.7 (DarkCipher0x: "it needs to be a fully working hosts pane"): hosts inside their folders, a filter, ＋ Host. -->

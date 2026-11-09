@@ -123,7 +123,7 @@ public static class PolicySettings
     private static readonly Dictionary<string, string[]> Choices = new()
     {
         [nameof(AppSettings.Theme)] = new[] { "System", "Dark", "Light" },
-        [nameof(AppSettings.HostsDock)] = new[] { "pinned", "auto" },
+        [nameof(AppSettings.HostsDock)] = new[] { "pinned", "auto", "hosts" },
         [nameof(AppSettings.SessionsOnExit)] = new[] { "ask", "save", "never" },
         [nameof(AppSettings.WindowHostPane)] = new[] { "pinned", "auto" },
         [nameof(AppSettings.UpdateSource)] = new[] { "github", "url" },
@@ -426,7 +426,7 @@ public static class PolicySettings
         [nameof(AppSettings.AddonAllowModules)] = "Module add-ons signed by DarkCipher Systems load into the app as modules (e.g. the stream manager for Twitch); 0 = none is installed or loaded",
         [nameof(AppSettings.LockedCategories)] = "Categories locked by your organisation (audit, credentials, hosts, …)",
         [nameof(AppSettings.CommanderRestoreLast)] = "File commander reconnects to its last places when it opens",
-        [nameof(AppSettings.HostsDock)] = "The hosts panel beside every tab of the main window: pinned open or auto-collapsing (pinned or auto)",
+        [nameof(AppSettings.HostsDock)] = "The hosts panel of the main window: pinned open beside every tab, auto-collapsing beside every tab, or only on the Hosts tab (pinned, auto or hosts)",
         [nameof(AppSettings.HostsDockHover)] = "A collapsible hosts panel opens when pointed at and folds when the pointer leaves (off: click the Hosts strip to open and fold it)",
         [nameof(AppSettings.TmuxInstall)] = "The terminal's tmux button installs tmux when it is missing (asking first)",
         [nameof(AppSettings.TmuxSession)] = "The tmux session the terminal's tmux button attaches to or creates",

@@ -347,8 +347,8 @@ public sealed partial class SettingsView
             v => { _s.LandingPage = v; Save(); }, "The screen opened when the app starts (workspace restore after a crash still reopens your tabs).");
 
         // 0.6.31 (ADR-109): the hosts panel beside every tab of the main window, pinned open or auto-collapsing.
-        var hostsDock = Choice(new[] { ("pinned", "Pinned open (default)"), ("auto", "Auto-collapse") }, HostsView.FolderMode,
-            v => HostsView.SetFolderMode(v), "The hosts panel on the left of the main window, beside every tab. Pinned: always open. Auto-collapse: folds to a slim Hosts strip; point at it to open the panel. Also the 📌 / 📍 on the panel itself. Sessions always open in the main tab bar.");
+        var hostsDock = Choice(new[] { ("pinned", "Pinned open beside every tab (default)"), ("auto", "Auto-collapse beside every tab"), ("hosts", "Only on the Hosts tab") }, HostsView.FolderMode,
+            v => HostsView.SetFolderMode(v), "The hosts panel on the left of the main window. Pinned: always open beside every tab. Auto-collapse: folds to a slim Hosts strip beside the tabs. Only on the Hosts tab: nothing beside your other tabs (the ✕ on the panel does this; 📌 on the Hosts tab brings it back). Sessions always open in the main tab bar.");
         // 0.6.4 (ADR-082): extra windows for other monitors, each with a host pane.
         var windowPane = Choice(new[] { ("pinned", "Pinned open (default)"), ("auto", "Auto-collapse") }, _s.WindowHostPane,
             v => { if (MainWindow.Instance?.Panes.Floats.FirstOrDefault() is { } fw) fw.SetMode(v); else { _s.WindowHostPane = v; Save(); } },

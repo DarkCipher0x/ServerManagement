@@ -722,6 +722,39 @@ public static class Release051Tests
                 if (page.AutoHideBoxForTest.Shown) throw new Exception("pinned: the Auto-hide switch still shows (it means nothing there)");
                 HostsView.SetFolderMode("auto");
                 mw.SetHostPaneOpen(false);
+                // 0.6.45 (DarkCipher0x: "i should also be able to exit that host pane. and put it back if i need to by opening
+                // hosts again and pinning it again"): ✕ leaves nothing beside the tabs; the Hosts tab keeps the panel, 📌 there
+                // brings it back beside every tab.
+                HostsView.SetFolderMode("pinned");
+                if (page.PaneButtonsForTest != ("📌", true)) throw new Exception("pinned beside the tabs: the panel's header has no ✕ " + page.PaneButtonsForTest);
+                page.ClickCloseForTest();
+                if (HostsView.FolderMode != "hosts" || s.HostsDock != "hosts") throw new Exception("✕ didn't close the panel (mode " + s.HostsDock + ")");
+                if (col.Width.Value > 0.5 || host.Visibility == Visibility.Visible || strip.Visibility == Visibility.Visible || splitter.Visibility == Visibility.Visible || mw.HostPaneShowing)
+                    throw new Exception("closed: something still shows beside the tabs (column " + col.Width.Value + ")");
+                if (page.PaneInWindow || host.Child != null || page.FolderHost.Child != page.FolderPane || page.FolderHost.Visibility != Visibility.Visible || page.FolderCol.Width.Value < 100)
+                    throw new Exception("closed: the Hosts tab didn't get its panel back (column " + page.FolderCol.Width.Value + ")");
+                if (page.PaneButtonsForTest != ("📌", false)) throw new Exception("closed: the Hosts tab's panel shows " + page.PaneButtonsForTest + " (📌 to pin it back, no ✕)");
+                if (probe != null) probe.IsSelected = true;
+                if (col.Width.Value > 0.5 || mw.HostPaneShowing) throw new Exception("closed: the panel came back when another tab came to the front");
+                mw.SetHostPaneOpen(true);
+                if (col.Width.Value > 0.5) throw new Exception("closed: something opened the panel beside the tabs");
+                // The Hosts tab closed and reopened: the same page, still with its panel, still up to date.
+                mw.Navigate("hosts");
+                mw.CloseTab(mw.Panes.AllTabs.First(t => t.Content == page));
+                mw.Navigate("hosts");
+                if (!mw.Panes.AllTabs.Any(t => t.Content == page) || page.FolderHost.Child != page.FolderPane || page.Folders.Items.Count == 0)
+                    throw new Exception("closed: reopening Hosts didn't show the same page with its panel");
+                if (mw.Panes.AllTabs.Select(t => t.Content).OfType<HostsView>().Count() != 1) throw new Exception("closed: reopening Hosts made a second page");
+                // 📌 on the Hosts tab: back beside every tab, as before.
+                page.ClickPinForTest();
+                if (HostsView.FolderMode != "pinned" || !page.PaneInWindow || host.Child != page.FolderPane || host.Visibility != Visibility.Visible || col.Width.Value < 140)
+                    throw new Exception("📌 on the Hosts tab didn't pin the panel beside every tab (column " + col.Width.Value + ")");
+                if (page.FolderHost.Visibility == Visibility.Visible || page.FolderCol.Width.Value > 0.5) throw new Exception("pinned again: the Hosts page still lays out its own copy of the panel");
+                if (page.PaneButtonsForTest != ("📌", true)) throw new Exception("pinned again: header " + page.PaneButtonsForTest);
+                // The strip's menu offers the same close.
+                HostsView.SetFolderMode("auto");
+                if (!(Menus.BuilderOf(strip)!().OfType<MenuItem>().Any(m => (m.Header as string ?? "").StartsWith("✕ Close the hosts panel")))) throw new Exception("the Hosts strip's menu has no ✕ Close");
+                mw.SetHostPaneOpen(false);
                 // Closing the Hosts tab keeps the page (and so the panel) alive; reopening shows the same page.
                 mw.Navigate("hosts");
                 var hostsTab = mw.Panes.AllTabs.FirstOrDefault(t => t.Content == page) ?? throw new Exception("the Hosts tab isn't the main window's Hosts page");
@@ -732,8 +765,8 @@ public static class Release051Tests
                 // 0.5.8–0.6.1's "tab" reads as pinned; the policy offers pinned / auto.
                 s.HostsDock = "tab";
                 if (HostsView.FolderMode != "pinned") throw new Exception("the old 'tab' value isn't read as pinned");
-                if (PolicySettings.Catalog.FirstOrDefault(e => e.Name == nameof(AppSettings.HostsDock)) is not { Choices: { } ch } || !ch.SequenceEqual(new[] { "pinned", "auto" }))
-                    throw new Exception("HostsDock is not a policy with the choices pinned, auto");
+                if (PolicySettings.Catalog.FirstOrDefault(e => e.Name == nameof(AppSettings.HostsDock)) is not { Choices: { } ch } || !ch.SequenceEqual(new[] { "pinned", "auto", "hosts" }))
+                    throw new Exception("HostsDock is not a policy with the choices pinned, auto, hosts");
             }
             finally
             {

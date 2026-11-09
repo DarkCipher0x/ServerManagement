@@ -160,13 +160,35 @@ public static class NavSectionTests
             if (Descendants(nav).OfType<TextBlock>().FirstOrDefault(t => t.Tag as string == "nav-badge")?.Text != "99+") throw new Exception("a count above 99");
             if (AppModules.FindNav("selftest-live-a") != null) throw new Exception("a removed live item still opens");
 
+            // 0.6.45: only the counts changed: redrawn in place, the sidebar isn't rebuilt (a rebuild while a WebView2 shows
+            // blacked out the document area in CipherMail).
+            RadioButton Item(string key) => Descendants(nav).OfType<RadioButton>().First(r => r.Tag as string == key);
+            string? Badge(string key) => Descendants(Item(key)).OfType<TextBlock>().FirstOrDefault(t => t.Tag as string == "nav-badge")?.Text;
+            var itemB = Item("selftest-live-b"); var itemC = Item("selftest-live-c"); var firstChild = nav.Children[0];
+            LiveList[0] = LiveList[0] with { Badge = 7 };
+            LiveList[1] = LiveList[1] with { Badge = 2 };
+            await Task.Run(() => LiveModule.Host!.RefreshNav());
+            await Idle();
+            if (!ReferenceEquals(Item("selftest-live-b"), itemB) || !ReferenceEquals(Item("selftest-live-c"), itemC) || !ReferenceEquals(nav.Children[0], firstChild))
+                throw new Exception("a count-only change rebuilt the sidebar");
+            if (Badge("selftest-live-b") != "7" || Badge("selftest-live-c") != "2") throw new Exception($"counts in place: {Badge("selftest-live-b")}, {Badge("selftest-live-c")}");
+            LiveList[0] = LiveList[0] with { Badge = 0 };
+            await Task.Run(() => LiveModule.Host!.RefreshNav());
+            await Idle();
+            if (!ReferenceEquals(Item("selftest-live-b"), itemB) || Badge("selftest-live-b") != null) throw new Exception("a count going to 0 wasn't removed in place");
+            LiveList[1] = LiveList[1] with { Text = "✉  All inboxes (renamed)" };
+            await Task.Run(() => LiveModule.Host!.RefreshNav());
+            await Idle();
+            if (ReferenceEquals(Item("selftest-live-c"), itemC)) throw new Exception("a renamed live item didn't rebuild the sidebar");
+            LiveList[0] = LiveList[0] with { Badge = 150 };
+
             // Pinned like any page; the list empty: the section goes away.
             main.SetNavPinned("selftest-live-c", true);
             if (!s.PinnedNavItems.Contains("selftest-live-c")) throw new Exception("a live item can't be pinned");
             LiveList.Clear();
             main.BuildNav();
             if (MainWindow.NavSections.Contains(Live) || main.NavSectionsForTest.ContainsKey(Live)) throw new Exception("an empty live section still shows");
-            ok("ADR-121a live sidebar items: a section of a module's live list only; entries open through their key, with their count (99+); an app page's key, a key used twice, an entry with nothing to open and a failing provider are skipped; RefreshNav from another thread rebuilds on the UI thread; pinned like any page; the section goes when the list is empty");
+            ok("ADR-121a live sidebar items: a section of a module's live list only; entries open through their key, with their count (99+); an app page's key, a key used twice, an entry with nothing to open and a failing provider are skipped; RefreshNav from another thread rebuilds on the UI thread; 0.6.45: counts alone are redrawn in place without a rebuild, other changes rebuild; pinned like any page; the section goes when the list is empty");
         }
         catch (Exception ex) { fail("ADR-121a live sidebar items", ex); }
         finally

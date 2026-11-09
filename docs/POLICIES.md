@@ -157,7 +157,7 @@ Registry: `HKLM\SOFTWARE\Policies\DarkCipher Systems\ServerManagement` (computer
 | `DashboardOrder` | Dashboard order | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `HiddenNavItems` | Hidden nav items | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `HiddenNavSections` | Hidden nav sections | REG_MULTI_SZ | one entry per line (up to 200) | empty |
-| `HostsDock` | The hosts panel beside every tab of the main window: pinned open or auto-collapsing (pinned or auto) | REG_SZ | `pinned` / `auto` | `pinned` |
+| `HostsDock` | The hosts panel of the main window: pinned open beside every tab, auto-collapsing beside every tab, or only on the Hosts tab (pinned, auto or hosts) | REG_SZ | `pinned` / `auto` / `hosts` | `pinned` |
 | `HostsDockHover` | A collapsible hosts panel opens when pointed at and folds when the pointer leaves (off: click the Hosts strip to open and fold it) | REG_DWORD | 1 = on, 0 = off | on |
 | `HostsHiddenColumns` | Hosts hidden columns | REG_MULTI_SZ | one entry per line (up to 200) | empty |
 | `HostsView` | Hosts view | REG_SZ | text (up to 2,048 characters) | `folders` |
