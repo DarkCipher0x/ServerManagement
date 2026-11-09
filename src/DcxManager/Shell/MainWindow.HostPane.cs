@@ -68,13 +68,15 @@ public partial class MainWindow
             _hostPaneClose.Stop();
             SetHostPaneOpen(false);
         };
-        HostPaneStrip.MouseLeftButtonUp += (_, _) => SetHostPaneOpen(true);
-        HostPaneStrip.MouseEnter += (_, _) => SetHostPaneOpen(true);
+        // 0.6.42: with "open when pointed at" off (AppSettings.HostsDockHover), the strip is a click toggle and nothing folds
+        // the panel by itself.
+        HostPaneStrip.MouseLeftButtonUp += (_, _) => SetHostPaneOpen(HostsView.HoverOpens || !_hostPaneOpen);
+        HostPaneStrip.MouseEnter += (_, _) => { if (HostsView.HoverOpens) SetHostPaneOpen(true); };
         HostPaneStrip.DragEnter += (_, _) => SetHostPaneOpen(true);   // drag hosts onto a folder while it's folded
         HostPaneHost.MouseEnter += (_, _) => _hostPaneClose.Stop();
-        HostPaneHost.MouseLeave += (_, _) => { if (HostsView.FolderMode == "auto" && _hostPaneOpen) _hostPaneClose.Start(); };
-        HostPaneHost.DragLeave += (_, _) => { if (HostsView.FolderMode == "auto" && _hostPaneOpen) _hostPaneClose.Start(); };
-        DocArea.PreviewMouseDown += (_, _) => { if (HostsView.FolderMode == "auto" && _hostPaneOpen) SetHostPaneOpen(false); };
+        HostPaneHost.MouseLeave += (_, _) => { if (HostsView.FolderMode == "auto" && HostsView.HoverOpens && _hostPaneOpen) _hostPaneClose.Start(); };
+        HostPaneHost.DragLeave += (_, _) => { if (HostsView.FolderMode == "auto" && HostsView.HoverOpens && _hostPaneOpen) _hostPaneClose.Start(); };
+        DocArea.PreviewMouseDown += (_, _) => { if (HostsView.FolderMode == "auto" && HostsView.HoverOpens && _hostPaneOpen) SetHostPaneOpen(false); };
         HostPaneSplitter.DragCompleted += (_, _) =>
         {
             if (HostsView.FolderMode != "pinned") return;
@@ -120,6 +122,7 @@ public partial class MainWindow
         _hostPaneClose.Stop();
         if (!auto) _hostPaneOpen = false;
         HostPaneStrip.Visibility = auto ? Visibility.Visible : Visibility.Collapsed;
+        HostPaneStrip.ToolTip = HostsView.HoverOpens ? "Hosts: point here to open the hosts panel" : "Hosts: click to open the hosts panel, click again to fold it";
         HostPaneSplitter.Visibility = auto ? Visibility.Collapsed : Visibility.Visible;
         if (auto)
         {

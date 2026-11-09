@@ -34,11 +34,15 @@ internal static class ChatLiveSuite
 
     public static bool Requested => Environment.GetEnvironmentVariable(OriginVar) is { Length: > 0 };
 
+    /// <summary>Where the run's renders go (the report's shots folder).</summary>
+    private static string _shots = "";
+
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     public static async Task RunAsync(MainWindow main, string reportPath)
     {
         var log = new StringBuilder();
         int failures = 0;
+        _shots = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(reportPath)!, "shots")).FullName;
         void Ok(string s) { log.AppendLine("ok    " + s); SelfTest.Progress(reportPath, "ok    " + s); }
         void Fail(string s, Exception? ex) { failures++; log.AppendLine("FAIL  " + s + " :: " + ex); SelfTest.Progress(reportPath, "FAIL  " + s); }
         Application.Current.DispatcherUnhandledException += (_, e) => { Fail("unhandled UI exception", e.Exception); e.Handled = true; };
@@ -138,12 +142,14 @@ internal static class ChatLiveSuite
             await Step("the room screen: messages both ways through the server (typed and sent in ServerManagement's room tab)", RoomAsync);
             await Step("pictures: a picture from this PC arrives with its thumbnail and size; one from the other person shows inline here", PicturesAsync);
             await Step("reactions, edits and burn messages between ServerManagement and CipherChat's engine", ExtrasAsync);
+            await Step("the chat screen, laid out as CipherChat's Windows client: sidebar, room header, terminal log, prompt and status line", ScreenAsync);
             await Step("notifications: a new message from the other person raises a Windows notification (text only when previews allow); none with ChatNotify off", NotifyAsync);
             await Step("dashboard tiles from the live chat (unread, contacts) and the administration tile", DashboardAsync);
             await Step("server administration: ServerManagement's admin pane signs in to the real server (memory only)", AdminAsync);
             await Step("a call rings here: the other person's signed ring reaches ServerManagement's ring and stops when declined", RingAsync);
             await Step("a video call: ServerManagement's call window and CipherChat's call page connect through the server, same call words, video both ways", CallAsync);
             await Step("live session sharing: a tab shared into the room moves into its own window, the call captures only that window and the other person sees it; the title comes back after", ShareAsync);
+            await Step("saved chat passphrase: ticked at the unlock it is kept encrypted (in no file readable), a locked chat unlocks with Windows Hello, the app's unlock opens it without asking again; a refused one is forgotten, the policy deletes them", SavedPassAsync);
             await Step("lock and tidy up: locking wipes this PC's chat keys; the test accounts are removed", TidyAsync);
         }
 
@@ -301,6 +307,44 @@ internal static class ChatLiveSuite
             using var ms = new MemoryStream();
             enc.Save(ms);
             return ms.ToArray();
+        }
+
+        /// <summary>0.6.41: Chats as CipherChat draws it — the sidebar's ROOMS / DIRECT / PEOPLE (this room, the owner verified),
+        /// the room on the right with its key line, prompt and status line, a slash command answered in the log, and a
+        /// render of the screen.</summary>
+        private async Task<string> ScreenAsync()
+        {
+            ChatModule.OpenHome();
+            await Settle(600);
+            var home = main.Panes.AllTabs.Select(t => t.Content).OfType<ChatHomeView>().FirstOrDefault() ?? throw new Exception("Chats didn't open");
+            home.SelectForTest(_pc);
+            var room = _pc.Engine!.RoomById(_room.Id)!;
+            home.ShowRoomForTest(_pc, room);
+            await Settle(800);
+            var side = home.SideTextsForTest;
+            foreach (var want in new[] { "ACCOUNTS", "ROOMS", "DIRECT", "PEOPLE", room.Label(_pc.Engine.MyUser), "verified" })
+                if (!side.Any(t => t.Contains(want, StringComparison.Ordinal))) throw new Exception("the sidebar has no “" + want + "”: " + string.Join(" | ", side.Take(30)));
+            var view = home.RoomViewForTest ?? throw new Exception("the room isn't shown on the chat screen");
+            if (view.RoomId != room.Id) throw new Exception("another room is shown");
+            var head = view.ChromeTextsForTest;
+            foreach (var want in new[] { room.Label(_pc.Engine.MyUser), "key #", "hold it", "@cipherchat:", "ML-KEM-1024", "online" })
+                if (!head.Any(t => t.Contains(want, StringComparison.Ordinal))) throw new Exception("the room has no “" + want + "”: " + string.Join(" | ", head));
+            if (!view.RowTextsForTest.Any(t => t.Contains("hello from CipherChat's engine ✓"))) throw new Exception("the room's messages aren't shown on the chat screen");
+            await view.SendForTest("/help");
+            await Until(() => view.LogTextsForTest.Any(t => t.Contains("/join #room")), "the /help lines in the log", 10);
+            if (!view.LogTextsForTest.Any(t => t == "/kick user ...")) throw new Exception("/help: /kick isn't on its own line");
+            if (Texts(_owner, _room.Id).Any(t => t.Contains("/help"))) throw new Exception("a slash command was sent as a message");
+            await Settle(400);
+            var png = Path.Combine(_shots, "chat-screen.png");
+            SelfTest.Snap(main, png);
+            // and at a full-size window (the self-test's own window is small): the same screen, laid out wide
+            var (ow, oh) = (main.Width, main.Height);
+            main.Width = 1920; main.Height = 1080;
+            await Settle(900);
+            SelfTest.Snap(main, Path.Combine(_shots, "chat-screen-wide.png"));
+            main.Width = ow; main.Height = oh;
+            await Settle(300);
+            return "Chats shows the sidebar (accounts, ROOMS, DIRECT, PEOPLE with trust) and the room in place: its key line, the prompt, the status line; /help answered in the log and nothing sent; rendered " + Path.GetFileName(png) + " and chat-screen-wide.png";
         }
 
         private async Task<string> ExtrasAsync()
@@ -503,6 +547,10 @@ internal static class ChatLiveSuite
             if (!LiveShare.Start(_pc, _pc.Engine!.RoomById(_room.Id)!, sv, "Settings (live run)")) throw new Exception("the share didn't start");
             var shared = Window.GetWindow(sv) as FloatWindow ?? throw new Exception("the tab didn't move into a window of its own");
             if (shared.Title != LiveShare.WindowTitle) throw new Exception("the shared window's title: " + shared.Title);
+            // 0.6.41: a square window, so the picture's shape tells the window (square) from a screen (16:9) beyond doubt
+            shared.WindowState = WindowState.Normal;
+            shared.Width = 760; shared.Height = 760;
+            await Settle(300);
             var probe = new System.Windows.Controls.TabItem { Header = "probe", Content = new System.Windows.Controls.TextBlock() };
             main.Panes.Add(probe);
             bool leaked = Window.GetWindow(probe) == shared;
@@ -515,21 +563,31 @@ internal static class ChatLiveSuite
             if (!w.Sharing) throw new Exception("the call window isn't a share");
             await Until(() => { lock (w.NoticesForTest) return w.NoticesForTest.Any(n => n.Contains("joined the call")); }, "the other person joining", 60);
             await Until(() => w.ShareStartedForTest, "the screen share starting", 20);
+            // 0.6.41: the received share (never the other person's own preview, the ".self" tile), once a frame with
+            // something on it has arrived: before that a call's video is a small blank placeholder.
+            const string Probe = "(() => { const v = [...document.querySelectorAll('video')].find(v => v.videoWidth > 0 && !v.closest('.self')); if (!v) return ''; " +
+                "const c = document.createElement('canvas'); c.width = 64; c.height = 64; const g = c.getContext('2d'); g.drawImage(v, 0, 0, 64, 64); const d = g.getImageData(0, 0, 64, 64).data; " +
+                "let lit = 0; for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 30) lit++; return v.videoWidth + 'x' + v.videoHeight + ':' + lit; })()";
             string dims = "";
-            for (var i = 0; i < 300 && dims.Length == 0; i++)
+            var lit = 0;
+            for (var i = 0; i < 75 && lit == 0; i++)
             {
-                var r = JsonNode.Parse(await peer.CallDevToolsProtocolMethodAsync("Runtime.evaluate", new JsonObject { ["expression"] = "[...document.querySelectorAll('video')].filter(v => v.videoWidth > 0).map(v => v.videoWidth + 'x' + v.videoHeight).join(',')", ["returnByValue"] = true }.ToJsonString()))?["result"]?["value"]?.ToString() ?? "";
-                if (r.Length > 0) dims = r; else await Task.Delay(200);
+                var r = JsonNode.Parse(await peer.CallDevToolsProtocolMethodAsync("Runtime.evaluate", new JsonObject { ["expression"] = Probe, ["returnByValue"] = true }.ToJsonString()))?["result"]?["value"]?.ToString() ?? "";
+                if (r.Split(':') is [var size, var n] && int.TryParse(n, out var count)) { dims = size; lit = count; }
+                if (lit == 0) await Task.Delay(200);
             }
             List<string> notices; lock (w.NoticesForTest) notices = w.NoticesForTest.ToList();
             if (dims.Length == 0) throw new Exception("the other person never saw the shared window; notices here: " + string.Join(" | ", notices.TakeLast(4)));
-            // The picture is the window's, not the screen's: its shape matches the window, not the monitor.
+            // Only the shared window is captured, never a screen. With something on the received frames their shape must be
+            // the window's (it was made square above; both screens are 16:9). The self-test keeps every window off the
+            // screen (-10000,-10000), where Windows composes nothing for it, so the frames can arrive blank: that is
+            // still the window, since a captured screen always has the desktop on it.
             var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(shared);
             double winW = shared.ActualWidth * dpi.DpiScaleX, winH = shared.ActualHeight * dpi.DpiScaleY;
-            var first = dims.Split(',')[0].Split('x');
+            var first = dims.Split('x');
             double vw = double.Parse(first[0], System.Globalization.CultureInfo.InvariantCulture), vh = double.Parse(first[1], System.Globalization.CultureInfo.InvariantCulture);
-            double screenAspect = SystemParameters.PrimaryScreenWidth / SystemParameters.PrimaryScreenHeight;
-            if (Math.Abs(vw / vh - winW / winH) > 0.06 && Math.Abs(winW / winH - screenAspect) > 0.06) throw new Exception($"the picture ({dims}) isn't the shape of the window ({winW:0}x{winH:0})");
+            if (lit > 0 && Math.Abs(vw / vh - winW / winH) > 0.06) throw new Exception($"the picture ({dims}) isn't the shape of the window ({winW:0}x{winH:0}): something other than the shared window was captured");
+            if (lit == 0) dims += ", blank: the window is off the screen in the self-test, and a captured screen is never blank";
             dims += $", window {winW:0}x{winH:0}";
             w.Close();
             await Until(() => CallWindow.Current is null, "the call window to close after hanging up", 15);
@@ -541,6 +599,87 @@ internal static class ChatLiveSuite
         }
 
         // ------------------------------------------------------------------------------------------- the end
+        private async Task<string> SavedPassAsync()
+        {
+            // 0.6.42 (DarkCipher0x: "a way to save the chat passphrase ... the same option" as the app's Windows Hello), through
+            // the unlock panel the user sees. Hello is the self-test's stand-in (never a real prompt).
+            var st = DcxManager.Services.AppSettings.Current;
+            var key = ChatPassphrases.KeyOf(_pc);
+            var fake = new DcxManager.Services.WindowsHello.FakeHello();
+            DcxManager.Services.WindowsHello.Fake = fake;
+            ChatPassphrases.ProtectedForTest = true;
+            try
+            {
+                ChatModule.OpenHome();
+                await Settle(400);
+                var home = main.Panes.AllTabs.Select(t => t.Content).OfType<ChatHomeView>().FirstOrDefault() ?? throw new Exception("Chats didn't open");
+                async Task Locked()
+                {
+                    _pc.Lock();
+                    await Settle(300);
+                    home.SelectForTest(_pc);
+                    await Settle(300);
+                    if (_pc.Stage != ChatSession.Stages.NeedsUnlock) throw new Exception("locking left " + _pc.Stage);
+                }
+                await Locked();
+                if (home.UnlockWithHelloForTest is not null) throw new Exception("“Unlock with Windows Hello” offered with nothing saved");
+                await home.UnlockForTest(MemberPass, save: true);
+                if (_pc.Stage != ChatSession.Stages.Ready) throw new Exception("typed and saved: " + _pc.Stage);
+                if (!ChatPassphrases.IsSaved(key)) throw new Exception("“Save on this PC” didn't save it");
+                foreach (var f in Directory.GetFiles(Environment.GetEnvironmentVariable("DCX_DATA_DIR")!, "*", SearchOption.AllDirectories))
+                {
+                    var bytes = await File.ReadAllBytesAsync(f);
+                    if (bytes.Length < 50_000_000 && (Encoding.UTF8.GetString(bytes).Contains(MemberPass, StringComparison.Ordinal) || Encoding.Unicode.GetString(bytes).Contains(MemberPass, StringComparison.Ordinal)))
+                        throw new Exception("the saved passphrase is readable in " + Path.GetFileName(f));
+                }
+                await Locked();
+                var hello = home.UnlockWithHelloForTest ?? throw new Exception("no “Unlock with Windows Hello” with a saved passphrase");
+                fake.Answer = DcxManager.Services.WindowsHello.Outcome.Cancelled;
+                var p0 = fake.Prompts;
+                await hello();
+                if (fake.Prompts != p0 + 1) throw new Exception("Windows Hello wasn't asked");
+                if (_pc.Stage == ChatSession.Stages.Ready) throw new Exception("unlocked although Windows Hello was cancelled");
+                fake.Answer = DcxManager.Services.WindowsHello.Outcome.Verified;
+                home.SelectForTest(_pc);
+                await (home.UnlockWithHelloForTest ?? throw new Exception("the Hello button went away"))();
+                if (_pc.Stage != ChatSession.Stages.Ready) throw new Exception("Windows Hello verified, still " + _pc.Stage);
+                // the app's own unlock (you just verified): unlocks by itself, no second prompt
+                await Locked();
+                var p1 = fake.Prompts;
+                DcxManager.Services.AppLockEvents.RaiseUnlocked("the live run unlocked the app");
+                await Until(() => _pc.Stage == ChatSession.Stages.Ready, "the chat unlocking with the app", 30);
+                if (fake.Prompts != p1) throw new Exception("the app's unlock asked Windows Hello again");
+                // a passphrase changed elsewhere: refused, forgotten, still locked (said in the status line, no dialog)
+                await Locked();
+                st.ObserveSecrets["chat:pass:" + key] = "not the passphrase any more";
+                await (home.UnlockWithHelloForTest ?? throw new Exception("no Hello button"))();
+                if (_pc.Stage == ChatSession.Stages.Ready) throw new Exception("unlocked with a wrong saved passphrase");
+                if (st.ObserveSecrets.ContainsKey("chat:pass:" + key)) throw new Exception("the refused passphrase was kept");
+                // the policy off: not offered, saved ones deleted
+                ChatPassphrases.Save(key, MemberPass, _pc.Display);
+                st.ChatAllowRemember = false;
+                home.SelectForTest(_pc);
+                await Settle(200);
+                if (st.ObserveSecrets.ContainsKey("chat:pass:" + key) && ChatPassphrases.IsSaved(key)) throw new Exception("saved with the policy off");
+                if (await ChatPassphrases.UnlockAsync(_pc, askHello: false, "self-test") != ChatPassphrases.Result.NotSaved) throw new Exception("the policy off still unlocks");
+                if (st.ObserveSecrets.ContainsKey("chat:pass:" + key)) throw new Exception("the policy off didn't delete the saved passphrase");
+                st.ChatAllowRemember = true;
+                home.SelectForTest(_pc);
+                await Settle(200);
+                await home.UnlockForTest(MemberPass, save: false);
+                if (_pc.Stage != ChatSession.Stages.Ready) throw new Exception("typed again: " + _pc.Stage);
+                if (ChatPassphrases.IsSaved(key)) throw new Exception("saved without the tick");
+                return $"ticked at the unlock: saved encrypted (no file shows it); Hello cancelled → locked, verified → unlocked; the app's unlock opened it with no second prompt ({fake.Prompts} Hello prompts in all); a refused one forgotten; the policy off deleted it";
+            }
+            finally
+            {
+                st.ChatAllowRemember = true;
+                ChatPassphrases.Forget(key, _pc.Display, "the live run ended");
+                ChatPassphrases.ProtectedForTest = false;
+                DcxManager.Services.WindowsHello.Fake = null;
+            }
+        }
+
         private async Task<string> TidyAsync()
         {
             foreach (var t in main.Panes.AllTabs.Where(t => t.Content is ChatRoomView).ToList()) main.CloseTab(t);

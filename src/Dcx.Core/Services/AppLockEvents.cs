@@ -7,6 +7,19 @@ namespace DcxManager.Services;
 public static class AppLockEvents
 {
     public static event Action<string>? Locking;
+    /// <summary>0.6.42: the app was unlocked (you just verified with Windows Hello or the master password): CipherChat unlocks
+    /// the chats whose passphrase is saved.</summary>
+    public static event Action<string>? Unlocked;
+
+    /// <summary>Called by the app's lock when it opens again.</summary>
+    public static void RaiseUnlocked(string reason)
+    {
+        foreach (var h in Unlocked?.GetInvocationList() ?? Array.Empty<Delegate>())
+        {
+            try { ((Action<string>)h)(reason); }
+            catch (Exception ex) { Log.Write("Unlock handler", ex); }
+        }
+    }
 
     /// <summary>Whether the app is locked right now (set by the app's lock): work started from outside the windows, such
     /// as the stream manager's system-wide keys (ADR-118), does nothing while it is.</summary>

@@ -28,6 +28,20 @@ public partial class HostsView
 
     /// <summary>"pinned" or "auto" (0.5.8–0.6.1's "tab" and anything else read as pinned).</summary>
     internal static string FolderMode => AppSettings.Current.HostsDock == "auto" ? "auto" : "pinned";
+    /// <summary>0.6.42: a collapsible panel opens when pointed at and folds by itself (default); off, the Hosts strip is a
+    /// click toggle (<see cref="AppSettings.HostsDockHover"/>, also the extra windows' host pane).</summary>
+    internal static bool HoverOpens => AppSettings.Current.HostsDockHover;
+
+    /// <summary>Turns "open when pointed at" on or off (refused when Group Policy sets it).</summary>
+    internal static void SetHoverOpens(bool on)
+    {
+        if (PolicySettings.Get(nameof(AppSettings.HostsDockHover)) != null) { MainWindow.Instance?.Status("🔒 Set by your organisation (Group Policy: HostsDockHover)."); return; }
+        AppSettings.Current.HostsDockHover = on;
+        try { AppSettings.Save(); } catch (Exception ex) { App.Log("Hosts panel: open when pointed at", ex); }
+        MainWindow.Instance?.ApplyHostPane();
+        foreach (var w in MainWindow.Instance?.Panes.Floats ?? Enumerable.Empty<FloatWindow>()) w.ApplyPaneMode();
+        MainWindow.Instance?.Status(on ? "The folded hosts panel opens when you point at its Hosts strip." : "The folded hosts panel opens and folds only when you click its Hosts strip.");
+    }
     /// <summary>The pane is showing (always when pinned; slid out when auto).</summary>
     internal bool FolderPaneOpen => FolderMode == "pinned" || _folderOpen;
 
@@ -52,14 +66,14 @@ public partial class HostsView
             _folderClose.Stop();
             SetFolderOpen(false);
         };
-        FolderStrip.MouseLeftButtonUp += (_, _) => SetFolderOpen(true);
+        FolderStrip.MouseLeftButtonUp += (_, _) => SetFolderOpen(HoverOpens || !_folderOpen);
         BuildFolderStrip();
-        FolderStrip.MouseEnter += (_, _) => SetFolderOpen(true);
+        FolderStrip.MouseEnter += (_, _) => { if (HoverOpens) SetFolderOpen(true); };
         FolderStrip.DragEnter += (_, _) => SetFolderOpen(true);   // drag hosts onto a folder while collapsed
         FolderHost.MouseEnter += (_, _) => _folderClose.Stop();
-        FolderHost.MouseLeave += (_, _) => { if (FolderMode == "auto" && _folderOpen) _folderClose.Start(); };
-        FolderHost.DragLeave += (_, _) => { if (FolderMode == "auto" && _folderOpen) _folderClose.Start(); };
-        List.PreviewMouseDown += (_, _) => { if (FolderMode == "auto" && _folderOpen) SetFolderOpen(false); };
+        FolderHost.MouseLeave += (_, _) => { if (FolderMode == "auto" && HoverOpens && _folderOpen) _folderClose.Start(); };
+        FolderHost.DragLeave += (_, _) => { if (FolderMode == "auto" && HoverOpens && _folderOpen) _folderClose.Start(); };
+        List.PreviewMouseDown += (_, _) => { if (FolderMode == "auto" && HoverOpens && _folderOpen) SetFolderOpen(false); };
         FolderSplitter.DragCompleted += (_, _) =>
         {
             if (FolderMode != "pinned") return;
@@ -183,7 +197,9 @@ public partial class HostsView
         try { AppSettings.Save(); } catch (Exception ex) { App.Log("Hosts folder pane mode", ex); }
         foreach (var hv in MainWindow.Instance?.Panes.AllTabs.Select(t => t.Content).OfType<HostsView>() ?? Enumerable.Empty<HostsView>()) { hv._folderOpen = false; hv.ApplyFolderPane(); }
         MainWindow.Instance?.ApplyHostPane();   // 0.6.31: the hosts panel beside every tab
-        MainWindow.Instance?.Status(mode == "auto" ? "The hosts panel auto-collapses: point at the Hosts strip beside the tabs to open it." : "The hosts panel is pinned open beside every tab.");
+        MainWindow.Instance?.Status(mode != "auto" ? "The hosts panel is pinned open beside every tab."
+            : HoverOpens ? "The hosts panel auto-collapses: point at the Hosts strip beside the tabs to open it."
+            : "The hosts panel folds to a Hosts strip beside the tabs: click it to open the panel, and again to fold it.");
     }
 
     private void OnPinToggle(object sender, RoutedEventArgs e) => SetFolderMode(FolderMode == "auto" ? "pinned" : "auto");

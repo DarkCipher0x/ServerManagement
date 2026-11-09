@@ -70,6 +70,7 @@ public static class ChatHub
             catch (Exception ex) when (ex is ApiException or InvalidOperationException or ArgumentException) { s.LastError = ex.Message; Log.Write("Chat resume " + a.Display, ex); }
         }
         Raise();
+        await ChatPassphrases.AutoUnlockAllAsync("the app started").ConfigureAwait(false);   // 0.6.42: saved passphrases only
     }
 
     /// <summary>Unread messages over every unlocked chat (the dashboard card and the sidebar badge).</summary>

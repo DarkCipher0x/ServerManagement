@@ -211,10 +211,11 @@ public static class ArchitectureTests
             var postureNames = PrivacyReport.PostureItems().Select(p => p.Name).ToList();
             int dl = postureNames.IndexOf("Data location");
             int chatRows = ChatFeatures.Current.On ? 2 : 0;   // "CipherChat" and "CipherChat administration" after the AI's rows
-            int streamRows = streamOn ? 2 : 0;                // then "Stream manager (Twitch)" and "Streamer.bot"
+            // then "Stream manager (Twitch)", "NDI Tools" (add-on 0.2.2 on) and "Streamer.bot"
+            int streamRows = streamOn ? (postureNames.Contains("NDI Tools") ? 3 : 2) : 0;
             if (dl < 0 || postureNames.ElementAtOrDefault(dl + 1) != "External AI" || postureNames.ElementAtOrDefault(dl + 2) != "Secret masking for AI" || postureNames.ElementAtOrDefault(dl + 3 + chatRows + streamRows) != "Paste protection"
                 || (chatRows > 0 && (postureNames.ElementAtOrDefault(dl + 3) != "CipherChat" || postureNames.ElementAtOrDefault(dl + 4) != "CipherChat administration"))
-                || (streamRows > 0 && (postureNames.ElementAtOrDefault(dl + 3 + chatRows) != "Stream manager (Twitch)" || postureNames.ElementAtOrDefault(dl + 4 + chatRows) != "Streamer.bot")))
+                || (streamRows > 0 && (postureNames.ElementAtOrDefault(dl + 3 + chatRows) != "Stream manager (Twitch)" || postureNames.ElementAtOrDefault(dl + 2 + chatRows + streamRows) != "Streamer.bot")))
                 throw new Exception("posture order: " + string.Join(", ", postureNames));
             var firstEndpoint = PrivacyReport.Endpoints().FirstOrDefault()?.Service ?? "";
             if (!firstEndpoint.StartsWith("AI engine")) throw new Exception("first endpoint: " + firstEndpoint);

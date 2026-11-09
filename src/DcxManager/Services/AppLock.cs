@@ -119,6 +119,7 @@ public static class AppLock
                 Ui.Window.Activate();
                 try { Api.LocalServer.Sync(); } catch (Exception ex) { Log.Write("Unlock: listener", ex); }
                 _ = BitwardenSessions.AutoUnlockAsync("the app was unlocked");   // 0.6.20: with a remembered master password only
+                AppLockEvents.RaiseUnlocked("the app was unlocked");   // 0.6.42: chats with a saved passphrase unlock
             }
         }
         return true;

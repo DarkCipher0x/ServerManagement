@@ -150,6 +150,12 @@ public partial class HostsView : UserControl, IDisposable
         yield return FolderMode == "auto"
             ? Menus.Item("📌 Pin the hosts panel open", () => SetFolderMode("pinned"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : null)
             : Menus.Item("📍 Auto-collapse the hosts panel", () => SetFolderMode("auto"), enabled: !paneManaged, tip: paneManaged ? "🔒 Set by your organisation (Group Policy: HostsDock)." : "Folds to a Hosts strip beside the tabs; point at it to open the panel");
+        if (FolderMode == "auto")   // 0.6.42: open on pointing (auto-hide) or only on a click
+        {
+            bool hoverManaged = PolicySettings.Get(nameof(AppSettings.HostsDockHover)) != null;
+            yield return Menus.Item(HoverOpens ? "☐ Turn auto-hide off (click the strip to open and fold)" : "☑ Turn auto-hide on (open when pointed at)", () => SetHoverOpens(!HoverOpens),
+                enabled: !hoverManaged, tip: hoverManaged ? "🔒 Set by your organisation (Group Policy: HostsDockHover)." : null);
+        }
         yield return Menus.Item("⧉ Duplicate", () => OnDuplicate(this, ev), enabled: one != null);
         yield return Menus.Item(one is { Favorite: true } ? "☆ Remove from favourites" : "★ Add to favourites", () => OnFavourite(this, ev), enabled: sel.Count > 0);
         yield return Menus.Item("Copy address", () => OnCopyAddress(this, ev), enabled: one != null);

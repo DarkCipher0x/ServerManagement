@@ -99,6 +99,8 @@ public sealed partial class SettingsView
             L("CALLS AND LIVE SHARING"),
             Check("Voice and video calls", _s.ChatAllowCalls, v => _s.ChatAllowCalls = v),
             Check("Live session sharing: share a terminal, Remote Desktop or VNC tab into a room (a call that shows only that tab's window; asked every time)", _s.ChatAllowSessionShare, v => _s.ChatAllowSessionShare = v),
+            L("CHAT PASSPHRASE"),
+            Check("The chat passphrase may be saved on this PC (ticked at the unlock; encrypted, only while the app opens with Windows Hello or a master password; a locked chat then unlocks with Windows Hello)", _s.ChatAllowRemember, v => _s.ChatAllowRemember = v),
             L("SHARING FROM THE APP"),
             Check("“Send to a chat” from the app's screens (screenshots, output, notes — always shown before it's sent)", _s.ChatShareFromScreens, v => _s.ChatShareFromScreens = v),
             L("ADMINISTRATION"),

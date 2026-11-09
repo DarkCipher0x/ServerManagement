@@ -664,6 +664,7 @@ public static class Release051Tests
         {
             var mw = MainWindow.Instance ?? throw new Exception("no main window");
             var before = s.HostsDock;
+            var hoverBefore = s.HostsDockHover;
             TabItem? probe = null;
             try
             {
@@ -688,6 +689,23 @@ public static class Release051Tests
                 if (host.Visibility != Visibility.Visible || col.Width.Value < 22 + 150) throw new Exception("auto: the panel did not open beside the tabs (column " + col.Width.Value + ")");
                 mw.SetHostPaneOpen(false);
                 if (host.Visibility == Visibility.Visible || Math.Abs(col.Width.Value - 22) > 0.5) throw new Exception("auto: the panel did not fold back");
+                // 0.6.42 (DarkCipher0x: "untick that and make it so i have to click to expand and click to minimize"):
+                // without auto-hide, pointing at the strip does nothing, a click opens it, nothing folds it but a second click.
+                s.HostsDockHover = false;
+                strip.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0) { RoutedEvent = System.Windows.Input.Mouse.MouseEnterEvent });
+                if (host.Visibility == Visibility.Visible) throw new Exception("auto-hide off: pointing at the strip opened the panel");
+                void ClickStrip() => strip.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left) { RoutedEvent = UIElement.MouseLeftButtonUpEvent });
+                ClickStrip();
+                if (host.Visibility != Visibility.Visible) throw new Exception("auto-hide off: a click on the strip didn't open the panel");
+                host.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0) { RoutedEvent = System.Windows.Input.Mouse.MouseLeaveEvent });
+                ClickStrip();
+                if (host.Visibility == Visibility.Visible || Math.Abs(col.Width.Value - 22) > 0.5) throw new Exception("auto-hide off: a second click didn't fold the panel");
+                s.HostsDockHover = true;
+                ClickStrip();
+                if (host.Visibility != Visibility.Visible) throw new Exception("auto-hide on: a click on the strip didn't open the panel");
+                ClickStrip();
+                if (host.Visibility != Visibility.Visible) throw new Exception("auto-hide on: a click on the open strip folded it (it folds when the pointer leaves)");
+                mw.SetHostPaneOpen(false);
                 // Closing the Hosts tab keeps the page (and so the panel) alive; reopening shows the same page.
                 mw.Navigate("hosts");
                 var hostsTab = mw.Panes.AllTabs.FirstOrDefault(t => t.Content == page) ?? throw new Exception("the Hosts tab isn't the main window's Hosts page");
@@ -706,6 +724,7 @@ public static class Release051Tests
                 if (probe != null && mw.Panes.Contains(probe)) mw.CloseTab(probe);
                 HostsView.SetFolderMode(before == "auto" ? "auto" : "pinned");
                 s.HostsDock = before;
+                s.HostsDockHover = hoverBefore;
             }
             return Task.CompletedTask;
         });

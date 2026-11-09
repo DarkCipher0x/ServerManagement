@@ -47,6 +47,7 @@ public sealed class ChatModule : IAppModule
         host.Startup(ChatHub.ResumeSavedAsync);
         // Locking the app or quitting wipes every chat's keys and ends the admin sign-in.
         AppLockEvents.Locking += ChatHub.LockAll;
+        AppLockEvents.Unlocked += why => _ = ChatPassphrases.AutoUnlockAllAsync(why);   // 0.6.42: saved passphrases only
         ChatIdleLock.Start();   // 0.6.39: ChatAutoLockMinutes
         host.Shutdown(() => ChatHub.LockAll("the app closed"));
 

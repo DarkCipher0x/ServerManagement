@@ -144,6 +144,8 @@ public sealed class ChatSession
     {
         Api!.Ask = Ask;
         var engine = new ChatEngine(Api, me) { Ask = Ask };
+        // 0.6.41: another of your devices asking for history is answered here, as in CipherChat (it was never asked before)
+        engine.ConfirmSync = (name, added, code) => System.Windows.Application.Current.Dispatcher.InvokeAsync(() => Views.ChatForm.ConfirmSync(name, added, code)).Task;
         // This PC keeps the room keys it opens (so the server can delete its wrapped copies), sealed by CipherChat to this
         // device and the passphrase, and the file by the app's store key. A store that can't be opened keeps nothing.
         try { engine.UseStore(me.OpenStore(SecureStoreGuard.PathFor(Origin, me.User), new SecureStoreGuard())); }
@@ -169,8 +171,14 @@ public sealed class ChatSession
     public async Task SignOutAsync(bool forgetPc)
     {
         Lock();
+        // 0.6.42: a saved passphrase goes with the pairing, or with a sign-in this PC doesn't keep
+        if (forgetPc || Account is null) ChatPassphrases.Forget(ChatPassphrases.KeyOf(this), Display, forgetPc ? "this PC was removed from the account" : "signed out");
         if (Api is not null) { try { await Api.LogoutAsync().ConfigureAwait(false); } catch (ApiException) { } }
-        if (forgetPc && Account is not null) { ChatAccounts.Remove(Account); AuditLog.Write("you", "chat", "pairing removed from this PC", Account.Display); }
+        if (forgetPc && Account is not null)
+        {
+            ChatAccounts.Remove(Account);
+            AuditLog.Write("you", "chat", "pairing removed from this PC", Account.Display);
+        }
         Api = null; State = null; Account = null;
         StageChanged?.Invoke();
     }

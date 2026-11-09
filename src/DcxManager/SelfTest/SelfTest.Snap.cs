@@ -15,7 +15,7 @@ namespace DcxManager;
 // SelfTest: the off-screen render helper every area uses (a static local function of RunFullAsync until 0.2.0 phase 6½).
 public static partial class SelfTest
 {
-    static void Snap(Window w, string path)
+    internal static void Snap(Window w, string path)
     {
         var root = (FrameworkElement)w.Content;
         // The UI text size is a LayoutTransform on the root: size the bitmap after it, or the right/bottom get cropped.

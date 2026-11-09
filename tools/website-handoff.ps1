@@ -47,7 +47,7 @@ $roles = @(
 foreach ($r in $roles) { if ($r.File -match '(?i)addon|\.dcxaddon') { throw "$($r.File) looks like an add-on: add-ons are never published" } }
 # ...except the ones DarkCipher0x released (release.json publishedAddons), checked by release-check.ps1.
 foreach ($a in @($cfg.publishedAddons | Where-Object { $_ })) {
-    $roles += @{ File = "$($a.id)-$($a.version).dcxaddon"; Role = 'addon'; Label = "Add-on: $($a.id) $($a.version) (.dcxaddon, install from Add-ons)"; Path = 'downloads/addons' }
+    $roles += @{ File = "$($a.id)-$($a.version).dcxaddon"; Role = 'addon'; Label = "Add-on: $($a.id) $($a.version) (.dcxaddon, install from Add-ons)"; Path = $sm }
 }
 foreach ($r in $roles) { if (-not (Test-Path (Join-Path $dist $r.File))) { throw "missing dist\$Version\$($r.File)" } }
 

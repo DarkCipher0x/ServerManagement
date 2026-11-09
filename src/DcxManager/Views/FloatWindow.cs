@@ -68,8 +68,8 @@ public sealed class FloatWindow : DetachedWindow
             SetPaneOpen(false);
         };
         _p.PaneHostBorder.MouseEnter += (_, _) => _paneClose.Stop();
-        _p.PaneHostBorder.MouseLeave += (_, _) => { if (Mode == "auto" && _paneOpen) _paneClose.Start(); };
-        _p.DocRoot.PreviewMouseDown += (_, _) => { if (Mode == "auto" && _paneOpen) SetPaneOpen(false); };
+        _p.PaneHostBorder.MouseLeave += (_, _) => { if (Mode == "auto" && HostsView.HoverOpens && _paneOpen) _paneClose.Start(); };
+        _p.DocRoot.PreviewMouseDown += (_, _) => { if (Mode == "auto" && HostsView.HoverOpens && _paneOpen) SetPaneOpen(false); };
         ApplyPaneMode();
     }
 
@@ -131,9 +131,9 @@ public sealed class FloatWindow : DetachedWindow
             _p.Strip.SetResourceReference(Border.BorderBrushProperty, on ? "Accent" : "Line");
             foreach (var t in new[] { icon, label }) t.SetResourceReference(TextBlock.ForegroundProperty, on ? "Accent" : "Muted");
         }
-        _p.Strip.MouseEnter += (_, _) => { Hot(true); SetPaneOpen(true); };
+        _p.Strip.MouseEnter += (_, _) => { Hot(true); if (HostsView.HoverOpens) SetPaneOpen(true); };
         _p.Strip.MouseLeave += (_, _) => Hot(false);
-        _p.Strip.MouseLeftButtonUp += (_, _) => SetPaneOpen(true);
+        _p.Strip.MouseLeftButtonUp += (_, _) => SetPaneOpen(HostsView.HoverOpens || !_paneOpen);   // 0.6.42: a click toggle without hover
     }
 
     /// <summary>Lays the host pane out for the current mode (also when the setting changes).</summary>
@@ -148,6 +148,7 @@ public sealed class FloatWindow : DetachedWindow
                    : "Pinned: the host pane stays open. Click to auto-collapse it.";
         var b = _p.PaneHostBorder;
         _p.Strip.Visibility = auto ? Visibility.Visible : Visibility.Collapsed;
+        _p.Strip.ToolTip = HostsView.HoverOpens ? "Hosts: point here to slide the host pane out" : "Hosts: click to open the host pane, click again to fold it";
         _p.Splitter.Visibility = auto ? Visibility.Collapsed : Visibility.Visible;
         if (auto)
         {

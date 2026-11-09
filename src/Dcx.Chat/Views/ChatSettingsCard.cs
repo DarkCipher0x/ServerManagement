@@ -38,8 +38,10 @@ internal static class ChatSettingsCard
                 var name = new TextBlock { Text = ChatRoomView.Clean(s.Display) + "  ·  " + state, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
                 var row = v.Row(name);
                 if (s.Engine is not null) row.Children.Add(v.Btn("Lock", () => { s.Lock(); AuditLog.Write("you", "chat", "chat locked from Settings", s.Display); }));
-                if (s.Account is { } acct)
-                    row.Children.Add(v.Btn("Forget this PC…", async () => await ForgetAsync(s, acct)));
+                if (ChatPassphrases.KeyOf(s) is { Length: > 0 } pk && ChatPassphrases.IsSaved(pk))
+                    row.Children.Add(v.Btn("Forget saved passphrase", () => { ChatPassphrases.Forget(pk, s.Display, "forgotten in Settings"); Render(); }));
+                if (s.Account is { } acct2)
+                    row.Children.Add(v.Btn("Forget this PC…", async () => await ForgetAsync(s, acct2)));
                 list.Children.Add(row);
             }
             lockAll.IsEnabled = ChatHub.Sessions.Any(s => s.Engine is not null);
@@ -51,7 +53,7 @@ internal static class ChatSettingsCard
         Render();
 
         return v.Card("Chat accounts",
-            "The CipherChat accounts this PC is paired with. Each is remembered encrypted (only the device's sign-in, never your chat passphrase); locking wipes the chat keys from memory and the next unlock asks for the passphrase. Forgetting this PC signs it out of that server and removes its pairing.",
+            "The CipherChat accounts this PC is paired with. Each is remembered encrypted (the device's sign-in, and the chat passphrase only if you ticked “Save” at the unlock); locking wipes the chat keys from memory and the next unlock asks for the passphrase, or Windows Hello when it is saved. Forgetting this PC signs it out of that server and removes its pairing and saved passphrase.",
             list, v.Row(v.Btn("Open Chats", ChatModule.OpenHome, "PrimaryButton"), lockAll));
     }
 

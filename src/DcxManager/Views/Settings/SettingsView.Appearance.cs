@@ -353,6 +353,9 @@ public sealed partial class SettingsView
         var windowPane = Choice(new[] { ("pinned", "Pinned open (default)"), ("auto", "Auto-collapse") }, _s.WindowHostPane,
             v => { if (MainWindow.Instance?.Panes.Floats.FirstOrDefault() is { } fw) fw.SetMode(v); else { _s.WindowHostPane = v; Save(); } },
             "The host pane of extra windows (Ctrl+Shift+N, or a tab's menu → New window): pinned open, or folded to a Hosts tab at the window's edge that slides out when you point at it.");
+        // 0.6.42 (DarkCipher0x): the folded panel can open on a click only, and stay open until clicked again.
+        var hoverOpens = Bound(new CheckBox { Content = "Auto-hide: a collapsed hosts panel opens when you point at its Hosts strip and folds again when the pointer leaves (untick: click the strip to open it, click again to fold it)", IsChecked = _s.HostsDockHover, Margin = new Thickness(0, 6, 0, 0) }, nameof(AppSettings.HostsDockHover));
+        hoverOpens.Click += (_, _) => HostsView.SetHoverOpens(hoverOpens.IsChecked == true);
         var restoreWindows = Bound(new CheckBox { Content = "Reopen extra windows where they were (monitor, position, size) when the app starts", IsChecked = _s.RestoreWorkspaceWindows, Margin = new Thickness(0, 6, 0, 0) }, nameof(AppSettings.RestoreWorkspaceWindows));
         restoreWindows.Click += (_, _) => { _s.RestoreWorkspaceWindows = restoreWindows.IsChecked == true; Save(); };
 
@@ -373,7 +376,7 @@ public sealed partial class SettingsView
         }
         FillPins();
         return Card("Sidebar", "",
-            Labeled("SIDEBAR", style), Labeled("SIDEBAR WIDTH (expanded)", width), Labeled("OPEN ON START", landing), Labeled("HOSTS PANEL", hostsDock),Labeled("HOST PANE IN EXTRA WINDOWS", windowPane), restoreWindows,
+            Labeled("SIDEBAR", style), Labeled("SIDEBAR WIDTH (expanded)", width), Labeled("OPEN ON START", landing), Labeled("HOSTS PANEL", hostsDock), hoverOpens, Labeled("HOST PANE IN EXTRA WINDOWS", windowPane), restoreWindows,
             L($"PINNED PAGES (at most {NavLayout.MaxPinned})"), pinsNote, pins);
     }
 

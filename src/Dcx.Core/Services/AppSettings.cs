@@ -184,6 +184,11 @@ public sealed class AppSettings
     /// a narrow strip inside the Hosts page; pointing at it slides the pane out over the list). 0.5.8–0.6.1's "tab" (no
     /// pane beside the sessions) reads as "pinned".</summary>
     public string HostsDock { get; set; } = "pinned";
+    /// <summary>0.6.42 (DarkCipher0x: "a way to toggle the auto-hide on the collapsable hosts pane ... untick that and make it
+    /// so i have to click to expand and click to minimize"): while the hosts panel (and the extra windows' host pane) is
+    /// collapsible, pointing at its Hosts strip opens it and it folds when the pointer leaves or you click into the tabs
+    /// (default). Off: only a click on the strip opens it, and another click on the strip folds it.</summary>
+    public bool HostsDockHover { get; set; } = true;
     /// <summary>0.6.7 (ADR-086; DarkCipher0x: "the terminal windows you open, should open within the tab... so that you can still
     /// pop out the hosts while viewing the terminal ... give the options to change it"): where sessions opened from the
     /// Hosts page go: "hosts" (default: tabs inside the Hosts tab, beside its folder pane) or "tab" (separate tabs).
@@ -340,6 +345,9 @@ public sealed class AppSettings
     /// <summary>Terminal, Remote Desktop and VNC tabs may be shared live into a chat (an end-to-end encrypted call showing
     /// only that tab's window; asked every time). Needs calls.</summary>
     public bool ChatAllowSessionShare { get; set; } = true;
+    /// <summary>0.6.42: the chat passphrase may be saved on this PC when ticked at the unlock (encrypted with the app's other
+    /// secrets, and only while the app opens with Windows Hello or a master password); turned off, saved ones are deleted.</summary>
+    public bool ChatAllowRemember { get; set; } = true;
     /// <summary>Windows management built in (0.6.39, ADR-119): load the module from the next start. On by default; Group
     /// Policy <c>WinToolsFeatures</c> can force it either way (<see cref="WinToolsFeatures"/>).</summary>
     public bool WinToolsFeatures { get; set; } = true;
