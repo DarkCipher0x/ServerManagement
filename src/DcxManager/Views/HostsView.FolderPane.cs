@@ -40,6 +40,7 @@ public partial class HostsView
         try { AppSettings.Save(); } catch (Exception ex) { App.Log("Hosts panel: open when pointed at", ex); }
         MainWindow.Instance?.ApplyHostPane();
         foreach (var w in MainWindow.Instance?.Panes.Floats ?? Enumerable.Empty<FloatWindow>()) w.ApplyPaneMode();
+        foreach (var hv in MainWindow.Instance?.Panes.AllTabs.Select(t => t.Content).OfType<HostsView>() ?? Enumerable.Empty<HostsView>()) hv.ApplyFolderPane();
         MainWindow.Instance?.Status(on ? "The folded hosts panel opens when you point at its Hosts strip." : "The folded hosts panel opens and folds only when you click its Hosts strip.");
     }
     /// <summary>The pane is showing (always when pinned; slid out when auto).</summary>
@@ -138,6 +139,14 @@ public partial class HostsView
             : auto ? "Auto-collapse: the folder pane folds to a strip on the left of this page and slides out when you point at it. Click to pin it open."
                    : "Pinned: the folder pane stays open beside the hosts. Click to auto-collapse it to a strip (it slides out when you point at it).";
         System.Windows.Automation.AutomationProperties.SetName(PinButton, auto ? "Pin the hosts panel open" : "Auto-collapse the hosts panel");
+        // 0.6.44: the auto-hide switch on the panel's own header while it folds (before, only Settings and a menu had it).
+        bool hoverManaged = PolicySettings.Get(nameof(AppSettings.HostsDockHover)) != null;
+        AutoHideBox.Visibility = auto ? Visibility.Visible : Visibility.Collapsed;
+        AutoHideBox.IsChecked = HoverOpens;
+        AutoHideBox.IsEnabled = !hoverManaged;
+        AutoHideBox.ToolTip = hoverManaged ? "🔒 Set by your organisation (Group Policy: HostsDockHover)."
+            : HoverOpens ? "On: the panel slides out when you point at the Hosts strip and folds when the pointer leaves. Untick to open and fold it only by clicking the strip."
+            : "Off: click the Hosts strip to open the panel, click again to fold it; nothing opens or folds it by itself. Tick to open it by pointing.";
         if (PaneInWindow) return;   // laid out by the main window
         FolderStrip.Visibility = auto ? Visibility.Visible : Visibility.Collapsed;
         FolderSplitter.Visibility = auto ? Visibility.Collapsed : Visibility.Visible;
@@ -203,4 +212,14 @@ public partial class HostsView
     }
 
     private void OnPinToggle(object sender, RoutedEventArgs e) => SetFolderMode(FolderMode == "auto" ? "pinned" : "auto");
+
+    private void OnAutoHideToggle(object sender, RoutedEventArgs e)
+    {
+        SetHoverOpens(AutoHideBox.IsChecked == true);
+        AutoHideBox.IsChecked = HoverOpens;   // refused by policy: back to what it is
+    }
+
+    /// <summary>Self-test: the header's auto-hide switch (shown, ticked) and a click on it.</summary>
+    internal (bool Shown, bool Ticked) AutoHideBoxForTest => (AutoHideBox.Visibility == Visibility.Visible, AutoHideBox.IsChecked == true);
+    internal void ClickAutoHideForTest() { AutoHideBox.IsChecked = AutoHideBox.IsChecked != true; OnAutoHideToggle(AutoHideBox, new RoutedEventArgs()); }
 }

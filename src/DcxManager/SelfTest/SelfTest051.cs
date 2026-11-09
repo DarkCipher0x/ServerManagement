@@ -706,6 +706,22 @@ public static class Release051Tests
                 ClickStrip();
                 if (host.Visibility != Visibility.Visible) throw new Exception("auto-hide on: a click on the open strip folded it (it folds when the pointer leaves)");
                 mw.SetHostPaneOpen(false);
+                // 0.6.44 (DarkCipher0x: "give the option for the auto-collapsable host bar"): the switch on the panel's header
+                // and on the strip's right-click menu, both in step with Settings.
+                if (page.AutoHideBoxForTest != (true, true)) throw new Exception("auto: the panel's header has no ticked Auto-hide switch " + page.AutoHideBoxForTest);
+                page.ClickAutoHideForTest();
+                if (s.HostsDockHover || page.AutoHideBoxForTest.Ticked) throw new Exception("unticking Auto-hide on the header didn't turn it off");
+                strip.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0) { RoutedEvent = System.Windows.Input.Mouse.MouseEnterEvent });
+                if (host.Visibility == Visibility.Visible) throw new Exception("header auto-hide off: pointing at the strip opened the panel");
+                var stripMenu = Menus.BuilderOf(strip)?.Invoke().OfType<MenuItem>().ToList() ?? throw new Exception("the Hosts strip has no right-click menu");
+                var turnOn = stripMenu.FirstOrDefault(m => (m.Header as string ?? "").StartsWith("Turn auto-hide on")) ?? throw new Exception("strip menu: no 'Turn auto-hide on' while it's off: " + string.Join(" | ", stripMenu.Select(m => m.Header)));
+                turnOn.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                if (!s.HostsDockHover || !page.AutoHideBoxForTest.Ticked) throw new Exception("the strip menu didn't turn auto-hide on (or the header didn't follow)");
+                if (!(Menus.BuilderOf(strip)!().OfType<MenuItem>().FirstOrDefault()?.Header as string ?? "").StartsWith("Turn auto-hide off")) throw new Exception("strip menu: no 'Turn auto-hide off' while it's on");
+                HostsView.SetFolderMode("pinned");
+                if (page.AutoHideBoxForTest.Shown) throw new Exception("pinned: the Auto-hide switch still shows (it means nothing there)");
+                HostsView.SetFolderMode("auto");
+                mw.SetHostPaneOpen(false);
                 // Closing the Hosts tab keeps the page (and so the panel) alive; reopening shows the same page.
                 mw.Navigate("hosts");
                 var hostsTab = mw.Panes.AllTabs.FirstOrDefault(t => t.Content == page) ?? throw new Exception("the Hosts tab isn't the main window's Hosts page");

@@ -50,6 +50,8 @@
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4" LastChildFill="False">
                         <Button x:Name="PinButton" DockPanel.Dock="Left" Content="📌" Style="{StaticResource SmallButton}" Click="OnPinToggle"/>
                         <TextBlock DockPanel.Dock="Left" Text="HOSTS" Style="{StaticResource Label}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        <!-- 0.6.44 (DarkCipher0x: "give the option for the auto-collapsable host bar"): auto-hide on the panel itself. -->
+                        <CheckBox x:Name="AutoHideBox" DockPanel.Dock="Right" Content="Auto-hide" VerticalAlignment="Center" Margin="6,0,2,0" Visibility="Collapsed" Click="OnAutoHideToggle"/>
                     </DockPanel>
                     <!-- 0.6.7 (DarkCipher0x: "it needs to be a fully working hosts pane"): hosts inside their folders, a filter, ＋ Host. -->
                     <TextBox x:Name="TreeFilter" DockPanel.Dock="Top" Margin="0,0,0,4" Padding="5,3" ui:Hint.Text="Filter hosts…" ToolTip="Show only hosts whose name, address, user, tag or folder matches"/>

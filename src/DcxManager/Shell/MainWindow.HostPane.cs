@@ -73,6 +73,12 @@ public partial class MainWindow
         HostPaneStrip.MouseLeftButtonUp += (_, _) => SetHostPaneOpen(HostsView.HoverOpens || !_hostPaneOpen);
         HostPaneStrip.MouseEnter += (_, _) => { if (HostsView.HoverOpens) SetHostPaneOpen(true); };
         HostPaneStrip.DragEnter += (_, _) => SetHostPaneOpen(true);   // drag hosts onto a folder while it's folded
+        // 0.6.44 (DarkCipher0x: "its really annoying how it constantly pops out"): right-click the strip to switch auto-hide.
+        Menus.Attach(HostPaneStrip, () => new object?[]
+        {
+            Menus.Item(HostsView.HoverOpens ? "Turn auto-hide off (open and fold with a click)" : "Turn auto-hide on (open when pointed at)", () => HostsView.SetHoverOpens(!HostsView.HoverOpens)),
+            Menus.Item("📌 Pin the hosts panel open", () => HostsView.SetFolderMode("pinned")),
+        });
         HostPaneHost.MouseEnter += (_, _) => _hostPaneClose.Stop();
         HostPaneHost.MouseLeave += (_, _) => { if (HostsView.FolderMode == "auto" && HostsView.HoverOpens && _hostPaneOpen) _hostPaneClose.Start(); };
         HostPaneHost.DragLeave += (_, _) => { if (HostsView.FolderMode == "auto" && HostsView.HoverOpens && _hostPaneOpen) _hostPaneClose.Start(); };
