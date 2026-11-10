@@ -74,11 +74,19 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
     internal int Blocked { get; private set; }
     /// <summary>A pop-up tab waits for its opener to hand over the new window instead of navigating itself.</summary>
     internal bool IsPopup { get; }
+    /// <summary>0.6.46 incognito (DarkCipher0x: "quick one-off portals that i need zero cache retained on"): WebView2's
+    /// InPrivate mode in a profile of its own per tab (its pop-ups share it). Cookies, cache, storage and history stay in
+    /// memory and are gone when the tab closes; nothing is saved, restored, pinned or added to history.</summary>
+    public bool Incognito { get; }
 
-    public BrowserView(PortalBookmark bookmark, string? url, string? profile = null, bool popup = false)
+    /// <summary>A new incognito profile name: one per tab, so two incognito tabs never share a sign-in.</summary>
+    internal static string NewIncognitoProfile() => "incognito-" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+
+    public BrowserView(PortalBookmark bookmark, string? url, string? profile = null, bool popup = false, bool incognito = false)
     {
         Bookmark = bookmark;
-        ProfileName = profile ?? Portals.ProfileFor(bookmark);
+        Incognito = incognito;
+        ProfileName = profile ?? (incognito ? NewIncognitoProfile() : Portals.ProfileFor(bookmark));
         _initialUrl = url;
         IsPopup = popup;
         SetResourceReference(BackgroundProperty, "Bg");
@@ -121,6 +129,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         Menus.ForText(_addr);
         // A grid, not a dock panel: the address always keeps a usable width, however narrow the tab (AI sidebar open, split panes).
         var bar = _bar = new Grid { Margin = new Thickness(8, 6, 8, 6) };
+        if (incognito) home.Visibility = _fill.Visibility = fillMore.Visibility = Visibility.Collapsed;   // no bookmark, no vault
         var cells = new UIElement[] { _back, _fwd, _reload, home, _chip, _addr, _profilePill, _popupBtn, _sound, _fill, fillMore, more };
         for (int i = 0; i < cells.Length; i++)
         {
@@ -140,8 +149,9 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         };
         _profilePill.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
         var label = Portals.ProfileLabel(ProfileName);
-        _profilePill.Text = "⚇ " + (label.StartsWith("general") ? "general" : label);
-        _profilePill.ToolTip = $"Browser profile “{label}” ({ProfileName}): cookies and sign-ins of this tab live here, separate from the other environments' profiles.";
+        _profilePill.Text = incognito ? "🕶 Incognito" : "⚇ " + (label.StartsWith("general") ? "general" : label);
+        _profilePill.ToolTip = incognito ? "Incognito: cookies, cache, storage and history are kept in memory only and are gone when this tab closes."
+            : $"Browser profile “{label}” ({ProfileName}): cookies and sign-ins of this tab live here, separate from the other environments' profiles.";
         _profilePill.Fs(FontStep.Small);
 
         var bannerRow = new DockPanel();
@@ -152,6 +162,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         _banner.SetResourceReference(Border.BackgroundProperty, "Surface");
 
         var root = new DockPanel();
+        if (incognito) _addr.SetResourceReference(Control.BorderBrushProperty, "Accent");
         DockPanel.SetDock(bar, Dock.Top); DockPanel.SetDock(_banner, Dock.Top);
         root.Children.Add(bar); root.Children.Add(_banner); root.Children.Add(_web);
         Content = root;
@@ -184,12 +195,12 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
             var env = await envTask;
             var opts = env.CreateCoreWebView2ControllerOptions();
             opts.ProfileName = ProfileName;
-            opts.IsInPrivateModeEnabled = false;
+            opts.IsInPrivateModeEnabled = Incognito;
             await _web.EnsureCoreWebView2Async(env, opts);
             if (_disposed) return;
             if (starting) HideBanner();
             var core = _web.CoreWebView2;
-            _ = PortalHistory.OnStartedAsync(core, ProfileName);   // ADR-116: while history is off, earlier runs' pages go
+            if (!Incognito) _ = PortalHistory.OnStartedAsync(core, ProfileName);   // ADR-116: while history is off, earlier runs' pages go
             var s = core.Settings;
             // No password saving or form autofill: sign-in comes from the vault on request ("Fill sign-in"), never the browser.
             core.Profile.IsPasswordAutosaveEnabled = false;
@@ -208,6 +219,13 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
             // 0.6.33: sound — the tab shows 🔊 while the page plays audio and 🔇 while muted.
             core.IsDocumentPlayingAudioChanged += (_, _) => Dispatcher.BeginInvoke(UpdateSound);
             core.IsMutedChanged += (_, _) => Dispatcher.BeginInvoke(UpdateSound);
+            // 0.6.46: a video's full-screen button fills the tab (the bar and banner step aside until it leaves full screen).
+            core.ContainsFullScreenElementChanged += (_, _) => Dispatcher.BeginInvoke(() =>
+            {
+                bool full = core.ContainsFullScreenElement;
+                if (_bar != null) _bar.Visibility = full ? Visibility.Collapsed : Visibility.Visible;
+                if (full) HideBanner();
+            });
             Portals.SitesChanged += OnSitesChanged;
             core.NavigationStarting += OnNavigationStarting;
             core.NavigationCompleted += OnNavigationCompleted;
@@ -230,6 +248,7 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
             await core.ClearServerCertificateErrorActionsAsync();
             _ready.TrySetResult();
             if (!IsPopup && _initialUrl != null) Go(_initialUrl);
+            else if (Incognito && !IsPopup) _addr.Focus();
         }
         catch (Exception ex)
         {
@@ -660,8 +679,11 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
     {
         var src = CurrentUrl;
         var saved = Portals.Find(Bookmark.Id) != null;
-        yield return Menus.Item(saved ? "✎ Edit this portal…" : "☆ Save as a portal…", () => PortalUi.Edit(saved ? Bookmark : new PortalBookmark { Title = Core?.DocumentTitle ?? "", Url = src, Environment = Bookmark.Environment, HostId = Bookmark.HostId }));
-        yield return PortalUi.PinMenu(Bookmark);
+        if (!Incognito)
+        {
+            yield return Menus.Item(saved ? "✎ Edit this portal…" : "☆ Save as a portal…", () => PortalUi.Edit(saved ? Bookmark : new PortalBookmark { Title = Core?.DocumentTitle ?? "", Url = src, Environment = Bookmark.Environment, HostId = Bookmark.HostId }));
+            yield return PortalUi.PinMenu(Bookmark);
+        }
         foreach (var item in SoundMenu()) yield return item;
         yield return Menus.Item("Copy address", () => Menus.Clip(_shown), tip: "As shown: token-like query values are masked");
         yield return Menus.Item("Open in your default browser…", () =>
@@ -671,6 +693,13 @@ public sealed partial class BrowserView : UserControl, IDisposable, IHostView
         }, enabled: src.StartsWith("http"));
         yield return Menus.Item("Certificate…", ShowCertificate, enabled: src.StartsWith("https"));
         yield return Menus.Sep();
+        if (Incognito)
+        {
+            yield return Menus.Item("Clear this tab's cookies and cache now", async () => { if (Core == null) return; await Core.Profile.ClearBrowsingDataAsync(); Reload(); },
+                tip: "They go anyway when the tab closes");
+            yield return Menus.Item("🕶 New incognito tab", () => PortalUi.OpenIncognito());
+        }
+        else
         yield return Menus.Item($"Clear cookies and site data of profile “{Portals.ProfileLabel(ProfileName)}”…", async () =>
         {
             if (Core == null || !Dialogs.Confirm("Clear profile", $"Sign out of every portal in the “{Portals.ProfileLabel(ProfileName)}” profile (cookies, storage, cache)?", "Clear", danger: true)) return;

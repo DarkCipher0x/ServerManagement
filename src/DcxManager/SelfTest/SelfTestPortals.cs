@@ -536,6 +536,33 @@ public static class PortalTests
             catch (Exception ex) { fail("portal certificates (TOFU)", ex); }
             finally { Dialogs.ConfirmForTests = confirmWas; }
 
+            // ---- 5b. 0.6.46 incognito: InPrivate, a profile per tab, nothing shared or kept -----------------------------
+            try
+            {
+                s.PortalOpenIn = "tab";
+                var i1 = PortalUi.OpenIncognito($"http://127.0.0.1:{http!.Port}/") ?? throw new Exception("not opened");
+                if (!await Until(() => i1.Core != null || i1.InitError != null)) throw new Exception("browser did not start");
+                if (i1.InitError != null) throw new Exception("init: " + i1.InitError);
+                await Until(() => i1.Core!.DocumentTitle == "DCX portal test");
+                if (i1.Core!.DocumentTitle != "DCX portal test") throw new Exception("page not loaded: " + i1.Core.Source);
+                if (!i1.Incognito || !i1.Core.Profile.IsInPrivateModeEnabled || !i1.ProfileName.StartsWith("incognito-")) throw new Exception("not InPrivate: " + i1.Core.Profile.ProfileName);
+                if (i1.Core.Profile.IsPasswordAutosaveEnabled || i1.Core.Profile.IsGeneralAutofillEnabled) throw new Exception("password save / autofill on");
+                if (!(i1.Tab?.Header as string ?? "").StartsWith("🕶")) throw new Exception("tab title " + i1.Tab?.Header);
+                if (Portals.Find(i1.Bookmark.Id) != null) throw new Exception("an incognito tab was saved as a portal");
+                await i1.Core.ExecuteScriptAsync("document.cookie='dcxinc=1; path=/'; localStorage.setItem('dcxinc','1')");
+                var i2 = PortalUi.OpenIncognito($"http://127.0.0.1:{http!.Port}/") ?? throw new Exception("second not opened");
+                if (!await Until(() => i2.Core != null || i2.InitError != null) || i2.Core == null) throw new Exception("second did not start");
+                await Until(() => i2.Core!.DocumentTitle == "DCX portal test");
+                if (i2.ProfileName == i1.ProfileName) throw new Exception("two incognito tabs share a profile");
+                var seen = await i2.Core.ExecuteScriptAsync("document.cookie + '|' + (localStorage.getItem('dcxinc') || '')");
+                if (seen.Contains("dcxinc") || seen.Contains("1")) throw new Exception("the second tab sees the first's cookie / storage: " + seen);
+                main.CloseTab(i1.Tab!); main.CloseTab(i2.Tab!);
+                await Settle(300);
+                if (BrowserView.Live.Contains(i1) || BrowserView.Live.Contains(i2)) throw new Exception("closed incognito tabs still running");
+                ok("incognito portal (0.6.46): InPrivate in a profile of its own per tab (🕶 tab, no password saving or autofill, never saved as a portal); a second incognito tab doesn't see the first's cookie or storage; closing them closes their browsers");
+            }
+            catch (Exception ex) { fail("incognito portal", ex); }
+
             // ---- 6. offline mode: an external portal is refused before any connection ---------------------------------
             try
             {

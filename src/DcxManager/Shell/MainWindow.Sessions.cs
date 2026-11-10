@@ -252,7 +252,36 @@ public partial class MainWindow
         AddTab("⇆ " + host.Display, new CommanderView(host, path));
     }
 
-    public void Status(string text) => StatusText.Text = text;
+    /// <summary>0.6.46 (DarkCipher0x: "please remove these bottom comment things... it looks silly"): the status bar no
+    /// longer narrates. Confirmations, progress and explanations aren't shown; only a problem the user has to act on
+    /// (couldn't, failed, select … first, blocked, locked) shows, briefly, then clears.</summary>
+    public void Status(string text)
+    {
+        LastStatus = text;
+        _statusClear.Stop();
+        if (!IsProblem(text)) { StatusText.Text = ""; return; }
+        StatusText.Text = text;
+        _statusClear.Start();
+    }
+
+    /// <summary>The last message asked for, shown or not (self-test).</summary>
+    internal string LastStatus { get; private set; } = "";
+
+    private System.Windows.Threading.DispatcherTimer? _statusClearTimer;
+    private System.Windows.Threading.DispatcherTimer _statusClear => _statusClearTimer ??= MakeStatusClear();
+    private System.Windows.Threading.DispatcherTimer MakeStatusClear()
+    {
+        var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+        t.Tick += (_, _) => { t.Stop(); StatusText.Text = ""; };
+        return t;
+    }
+
+    private static readonly Regex ProblemWords = new(@"couldn't|can't|cannot|failed|first\b|not found|needs at least|has no text|is busy|not connected|stopped|cancelled|blocked|only this tab|no shared library|not protected|try again",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>A message the user has to act on.</summary>
+    internal static bool IsProblem(string text) =>
+        !string.IsNullOrWhiteSpace(text) && (text.StartsWith('⛔') || text.StartsWith('✕') || text.StartsWith("🔒") || text.StartsWith('⚠') || ProblemWords.IsMatch(text));
 
     private void OnQuickConnectAdvanced(object sender, RoutedEventArgs e)
     {

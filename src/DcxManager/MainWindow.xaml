@@ -66,7 +66,7 @@
                 <Button DockPanel.Dock="Right" x:Name="OfflineBadge" Visibility="Collapsed" Margin="0,0,10,0" Padding="8,0" Background="{DynamicResource Good}" Foreground="{DynamicResource Bg}" BorderThickness="0" FontSize="{DynamicResource FsCaption}" FontWeight="SemiBold" ToolTip="Offline mode is on: only this PC, your private network and approved destinations can be reached. Click for Settings → Offline mode."/>
                 <Button DockPanel.Dock="Right" x:Name="BroadcastBadge" Visibility="Collapsed" Margin="0,0,10,0" Padding="8,0" Background="{DynamicResource Bad}" Foreground="White" BorderThickness="0" FontSize="{DynamicResource FsCaption}" FontWeight="SemiBold" ToolTip="Something in this app is being broadcast (OBS). Click to stop every broadcast."/>
                 <TextBlock DockPanel.Dock="Right" x:Name="LockText" Foreground="{DynamicResource Muted}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsCaption}"/>
-                <TextBlock x:Name="StatusText" Foreground="{DynamicResource Muted}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsCaption}" Text="ready"/>
+                <TextBlock x:Name="StatusText" Foreground="{DynamicResource Muted}" FontFamily="{DynamicResource MonoFont}" FontSize="{DynamicResource FsCaption}" Text="" TextTrimming="CharacterEllipsis"/>
             </DockPanel>
         </Border>
 

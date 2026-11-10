@@ -123,7 +123,7 @@ public sealed partial class BrowserView
     {
         if (Tab == null || Core == null) return;
         var mark = Core.IsMuted ? " 🔇" : Core.IsDocumentPlayingAudio ? " 🔊" : "";
-        Tab.Header = "🌐 " + Short(_title.Length > 0 ? _title : Bookmark.Title, 36) + mark;
+        Tab.Header = (Incognito ? "🕶 " : "🌐 ") + Short(_title.Length > 0 ? _title : Bookmark.Title, 36) + mark;
     }
 
     /// <summary>Sound and pop-up items for the tab's menus (right-click on the tab, ⋯).</summary>

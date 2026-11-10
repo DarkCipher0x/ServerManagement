@@ -70,11 +70,17 @@ public static class ArchitectureTests
             if (answer != null || !recorded) throw new Exception("the dialog seam did not reach Views.Dialogs' self-test refusal");
 
             // The window seam reaches the real window.
-            var was = main.StatusText.Text;
             Ui.Window.Status("architecture seam probe");
-            bool shown = main.StatusText.Text == "architecture seam probe";
-            Ui.Window.Status(was);
-            if (!shown) throw new Exception("Status did not reach the main window");
+            bool reached = main.LastStatus == "architecture seam probe";
+            // 0.6.46: the bar doesn't narrate; only a problem shows (briefly).
+            bool quiet = main.StatusText.Text == "";
+            Ui.Window.Status("✕ architecture seam probe failed");
+            bool problemShown = main.StatusText.Text == "✕ architecture seam probe failed";
+            Ui.Window.Status("Settings saved (encrypted).");
+            if (!reached) throw new Exception("Status did not reach the main window");
+            if (!quiet || !problemShown || main.StatusText.Text != "") throw new Exception("the status bar narrates, or hides a problem");
+            if (MainWindow.IsProblem("The hosts panel is pinned open beside every tab.") || !MainWindow.IsProblem("Select files or folders first.") || !MainWindow.IsProblem("📞 The call couldn't start: x"))
+                throw new Exception("problem messages aren't told apart");
 
             // Log.Write is the error log; App.Log forwards to it.
             int errors = Log.ErrorsThisSession;

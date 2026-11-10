@@ -40,11 +40,25 @@ public static class PortalUi
     public static BrowserView? OpenAddress(string url, string environment = "") =>
         Open(new PortalBookmark { Title = Offline.HostOf(url), Url = Portals.Normalize(url), Environment = environment });
 
+    /// <summary>0.6.46: an incognito tab (WebView2 InPrivate, a profile of its own): nothing is kept once it closes. Opens
+    /// blank with the address bar ready, or at <paramref name="url"/>.</summary>
+    public static BrowserView? OpenIncognito(string? url = null, bool? window = null)
+    {
+        if (!PortalBrowser.Enabled) { Dialogs.Info("Portals", PortalBrowser.OffText); return null; }
+        var start = string.IsNullOrWhiteSpace(url) ? null : Portals.Normalize(url);
+        if (start != null && Portals.ValidateUrl(start) is { } why) { Dialogs.Info("Incognito", $"That address can't be opened: {why}."); return null; }
+        var view = new BrowserView(new PortalBookmark { Title = "Incognito", Url = start ?? "" }, start, incognito: true);
+        var tab = MainWindow.Instance.AddTab("🕶 Incognito", view);
+        view.Tab = tab;
+        if (window ?? AppSettings.Current.PortalOpenIn == "window") MainWindow.Instance.Panes.PopOut(tab);
+        return view;
+    }
+
     /// <summary>A pop-up as a new tab in the opener's profile; the opener hands it the new window (no navigation of its own).</summary>
     public static BrowserView OpenPopup(BrowserView opener)
     {
-        var view = new BrowserView(opener.Bookmark, null, opener.ProfileName, popup: true);
-        var tab = MainWindow.Instance.AddTab("🌐 Pop-up", view);
+        var view = new BrowserView(opener.Bookmark, null, opener.ProfileName, popup: true, incognito: opener.Incognito);
+        var tab = MainWindow.Instance.AddTab(opener.Incognito ? "🕶 Pop-up" : "🌐 Pop-up", view);
         view.Tab = tab;
         // 0.6.4: in the opener's window (an extra window keeps its pop-ups), not a new one.
         if (opener.Tab != null && MainWindow.Instance.Panes.WindowOf(opener.Tab) is { } w) MainWindow.Instance.Panes.MoveToWindow(tab, w);
@@ -217,6 +231,7 @@ public sealed class PortalsView : UserControl
         Button B(string t, Action a, string style = "SmallButton", string? tip = null) { var b = new Button { Content = t, Style = (Style)FindResource(style), Margin = new Thickness(0, 0, 6, 4), ToolTip = tip }; b.Click += (_, _) => a(); bar.Children.Add(b); return b; }
         B("＋ Add portal…", () => PortalUi.Edit(new PortalBookmark()), "PrimaryButton");
         B("Open address…", () => { if (Dialogs.Prompt("Open address", "Address (https://… or a host name):", "https://") is { Length: > 0 } u) PortalUi.OpenAddress(u); });
+        B("🕶 Incognito", () => PortalUi.OpenIncognito(), tip: "A private tab for one-off pages: cookies, cache, storage and history stay in memory and are gone when it closes");
         _filter.SetResourceReference(StyleProperty, "Field");
         _filter.ToolTip = "Filter by title, address, folder or host";
         _filter.TextChanged += (_, _) => Refresh();

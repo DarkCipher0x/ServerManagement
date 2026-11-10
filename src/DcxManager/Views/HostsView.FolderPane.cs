@@ -231,13 +231,6 @@ public partial class HostsView
         try { AppSettings.Save(); } catch (Exception ex) { App.Log("Hosts folder pane mode", ex); }
         MainWindow.Instance?.ApplyHostPane();   // 0.6.31: the hosts panel beside every tab (0.6.45: or back inside the Hosts page)
         foreach (var hv in MainWindow.Instance?.Panes.AllTabs.Select(t => t.Content).OfType<HostsView>() ?? Enumerable.Empty<HostsView>()) { hv._folderOpen = false; hv.ApplyFolderPane(); }
-        MainWindow.Instance?.Status(mode switch
-        {
-            "hosts" => "The hosts panel is closed beside your tabs. It's still on the Hosts tab (sidebar → Hosts): click 📌 there to pin it beside every tab again.",
-            "auto" => HoverOpens ? "The hosts panel auto-collapses: point at the Hosts strip beside the tabs to open it."
-                : "The hosts panel folds to a Hosts strip beside the tabs: click it to open the panel, and again to fold it.",
-            _ => "The hosts panel is pinned open beside every tab.",
-        });
     }
 
     /// <summary>📌 / 📍: pinned ⇄ auto-collapse; on the Hosts tab only, 📌 pins it beside every tab again.</summary>
