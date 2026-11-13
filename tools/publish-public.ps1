@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Release pipeline step 5: the sanitised source into the public mirror on GitHub (docs\RELEASE-PIPELINE.md).
 #
 # Source of truth: dist\<ver>\DarkCipherServerManagement-<ver>-source.zip, which write-public-source.ps1 built from the
@@ -17,6 +18,7 @@
 param([Parameter(Mandatory)][string]$Version, [switch]$DryRun, [switch]$NoPush)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'release-common.ps1')
+Assert-NotPreflight $Version 'publish-public.ps1'
 $cfg = Get-ReleaseConfig
 $repo = $cfg.CloneFull
 $zip = Join-Path $ReleaseRoot "dist\$Version\DarkCipherServerManagement-$Version-source.zip"

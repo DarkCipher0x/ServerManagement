@@ -40,13 +40,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <!-- 0.6.12 post-quantum (ML-KEM-768, ML-DSA-65): the same version SSH.NET already brings in (no new dependency). -->
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
-    <PackageReference Include="System.IO.Ports" Version="10.0.13" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.13" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.15" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.15" />
     <!-- 0.3.0 §23: LDAPS / StartTLS sign-in (Microsoft, part of dotnet/runtime; the only new dependency of the release). -->
-    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.13" />
+    <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.15" />
   </ItemGroup>
 
 </Project>

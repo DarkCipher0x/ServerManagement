@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Checks a build against tools\budgets.json (0.2.0 phase 7); build.ps1 calls it after the self-tests and after packaging.
 #   -Report / -ReportAiOff   self-test reports: their "start-up: N ms ... M MB private" line against aiOn / aiOff
 #   -Exe / -Msi              sizes against exeMaxMb / msiMaxMb

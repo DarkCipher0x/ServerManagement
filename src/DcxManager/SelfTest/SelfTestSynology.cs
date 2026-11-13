@@ -18,7 +18,7 @@ public static class SynologyTests
 {
     public static async Task RunAsync(Action<string> ok, Action<string, Exception?> fail)
     {
-        var cred = new Credential { Name = "selftest-dsm", Kind = CredentialKind.Password, Username = "dcx-svc", Secret = "Dsm-Secret-qx9" };
+        var cred = new Credential { Name = "selftest-dsm", Kind = CredentialKind.Password, Username = "dcx-svc", Secret = "Dsm-Secret-qx9" };   // secret-scan: example (synthetic fixture)
         AppData.Current.Credentials.Add(cred);
         try
         {

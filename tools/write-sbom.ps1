@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Writes a CycloneDX 1.5 SBOM for one release (0.2.0 phase 7) to dist\<ver>\DarkCipherServerManagement-<ver>-sbom.cdx.json:
 #   every NuGet package the projects resolve (from the packages.lock.json files: exact versions and their SHA-512 content
 #   hashes, the same pins the locked restore enforces), the .NET runtime the self-contained exe bundles, and the
@@ -6,8 +7,11 @@
 param([Parameter(Mandatory)][string]$Version, [string]$Numeric = $Version)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$dist = Join-Path (Join-Path $root 'dist') $Version
+. (Join-Path $PSScriptRoot 'release-common.ps1')
+$dist = Join-Path (Get-DistRoot) $Version
 if (-not (Test-Path $dist)) { throw "no dist folder for $Version" }
+. (Join-Path $PSScriptRoot 'release-common.ps1')
+Assert-PipelineRun $Version 'write-sbom'   # ADR-123: outside build.ps1 this taints the version
 
 # Licences of the direct dependencies (THIRD-PARTY-NOTICES.md); Microsoft's System.* / Microsoft.* packages are MIT
 # unless listed.
@@ -49,9 +53,17 @@ foreach ($lock in Get-ChildItem (Join-Path $root 'src') -Recurse -Filter package
 }
 if ($components.Count -eq 0) { throw 'no packages found in the lock files' }
 
-# The runtime bundled by the self-contained publish: the newest 8.0 runtime of this SDK.
-$rt = (& dotnet --list-runtimes) | ForEach-Object { if ($_ -match '^(Microsoft\.(NETCore|WindowsDesktop)\.App) (8\.0\.\d+)') { [pscustomobject]@{ Name = $Matches[1]; Version = [version]$Matches[3] } } } |
-    Group-Object Name | ForEach-Object { $_.Group | Sort-Object Version -Descending | Select-Object -First 1 }
+# The runtime bundled by the self-contained publish, read from the published exe itself (its embedded dependency
+# manifest names the runtime packs, e.g. Microsoft.NETCore.App.Runtime.win-x64/10.0.15). 0.6.52: until then this took
+# the newest 8.0 runtime on the build PC, so every SBOM since the .NET 10 move (0.6.13, ADR-092) named the wrong runtime.
+$exePath = Join-Path $root 'publish\DcxServerManager.exe'
+if (-not (Test-Path $exePath)) { throw "no published exe at ${exePath}: write-sbom.ps1 runs after the publish step" }
+$exeText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exePath))
+$rt = foreach ($name in 'Microsoft.NETCore.App', 'Microsoft.WindowsDesktop.App') {
+    $hits = @([regex]::Matches($exeText, [regex]::Escape("$name.Runtime.win-x64/") + '(\d+\.\d+\.\d+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    if ($hits.Count -ne 1) { throw "the published exe names $($hits.Count) versions of $name.Runtime.win-x64 ($($hits -join ', ')), expected exactly one" }
+    [pscustomobject]@{ Name = $name; Version = [version]$hits[0] }
+}
 foreach ($r in $rt) {
     $pack = "$($r.Name).Runtime.win-x64" -replace '^Microsoft\.WindowsDesktop\.App\.Runtime', 'Microsoft.WindowsDesktop.App.Runtime'
     $components.Add([ordered]@{

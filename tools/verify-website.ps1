@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Release pipeline step 7b: after the Website session has deployed a version, check the live site serves exactly the
 # hand-off's files (dist\<ver>\website\release-manifest.json): every site_path downloaded and its SHA-256 compared.
 # Read-only. Records "website" as done only when every file matches.

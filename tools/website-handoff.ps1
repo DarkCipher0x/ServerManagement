@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Release pipeline step 7: the website hand-off (docs\RELEASE-PIPELINE.md). Writes dist\<ver>\website\ for the
 # Website & Deployments session, in the manifest shape its sync-downloads.ps1 reads for the other manifest apps
 # (AgentControl, MaskedMail, ServerDeploy):

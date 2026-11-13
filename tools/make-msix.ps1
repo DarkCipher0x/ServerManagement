@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Packages the already-published app (.\publish, from build.ps1) as an MSIX for the Microsoft Store (ADR-029).
 # The Store signs MSIX packages for free after certification, so the Store package is uploaded UNSIGNED.
 #   .\tools\make-msix.ps1             -> dist\<ver>\DarkCipherServerManagement-<ver>-x64.msix   (Store upload; needs

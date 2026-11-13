@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Builds a PDF from a chapter manifest (docs\guide\*.txt): tools\guide turns the listed Markdown files into one HTML page and
 # Microsoft Edge (headless) prints it to dist\<ver>\. One manifest per PDF of the release bundle (0.4.0 rule):
 #   guide.txt                 → DarkCipherServerManagement-<ver>-Guide.pdf              (everything)
@@ -19,6 +20,8 @@ if (-not $Version) {
     # A release with a label (0.2.0-preview.1) is named and filed by the label, as build.ps1 does.
     if ($proj -match '<ReleaseLabel>([^<]+)</ReleaseLabel>') { $Version = $Matches[1] }
 }
+. (Join-Path $PSScriptRoot 'release-common.ps1')
+Assert-PipelineRun $Version 'make-guide'   # ADR-123: outside build.ps1 this taints the version
 $edge = @("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $edge) { throw 'Microsoft Edge is needed to print the PDF' }
 
@@ -41,8 +44,8 @@ foreach ($pair in $specs) {
         $html = Join-Path $work 'guide.html'
         dotnet run --project (Join-Path $PSScriptRoot 'guide\Guide.csproj') -c Release -- $root $manifest $Version $html
         if ($LASTEXITCODE) { throw "guide HTML failed for $($pair[0])" }
-        New-Item -ItemType Directory -Force (Join-Path $root "dist\$Version") | Out-Null
-        $pdf = Join-Path $root "dist\$Version\DarkCipherServerManagement-$Version-$($pair[1]).pdf"
+        New-Item -ItemType Directory -Force (Join-Path (Get-DistRoot) $Version) | Out-Null
+        $pdf = Join-Path (Get-DistRoot) "$Version\DarkCipherServerManagement-$Version-$($pair[1]).pdf"
         # A throwaway browser profile: nothing touches the user's Edge profile.
         $uri = ([Uri]$html).AbsoluteUri
         $p = Start-Process $edge -ArgumentList '--headless=new', '--disable-gpu', '--no-first-run', "--user-data-dir=$work\edge",

@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Zip archives with forward-slash entry names (0.6.23). Windows PowerShell 5.1 runs on .NET Framework, whose
 # ZipFile.CreateFromDirectory and Compress-Archive write "folder\file": against the ZIP specification (APPNOTE 4.4.17),
 # so Linux and macOS tools warn or extract files with backslashes in their names. The website's source check found it

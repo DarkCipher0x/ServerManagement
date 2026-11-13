@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Signs ServerManagement's update manifest with the release key (ADR-079): update.json -> update.json.sig, the base64
 # ECDSA P-256 / SHA-256 signature (IEEE P1363, r||s) over the exact bytes of update.json. The app pins the public key
 # (Services\Updater.cs ReleaseKeyX / ReleaseKeyY) and installs an update only when this signature verifies, so a
@@ -369,6 +370,9 @@ if ($Verify) {
 }
 
 if ($Path) {
+    # ADR-123: signing a dist\<ver>\update.json outside build.ps1 taints that version (release-check refuses it).
+    $verDir = Split-Path (Split-Path ([IO.Path]::GetFullPath($Path)) -Parent) -Leaf
+    if ($verDir -match '^\d+\.\d+\.\d+') { . (Join-Path $PSScriptRoot 'release-common.ps1'); Assert-PipelineRun $verDir 'sign-update' }
     if (-not [System.Security.Cryptography.CngKey]::Exists($KeyName)) { throw "No release key on this account: the update manifest can't be signed (tools\sign-update.ps1 -NewKey, once)." }
     $key = [System.Security.Cryptography.CngKey]::Open($KeyName)
     $ec = New-Object System.Security.Cryptography.ECDsaCng $key

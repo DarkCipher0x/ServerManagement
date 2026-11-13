@@ -1,3 +1,4 @@
+#Requires -Version 7
 # CipherChat's engine inside ServerManagement (ADR-117): a pinned, vendored copy of CipherChat's four UI-free libraries
 # (Crypto, Transport, Api, Engine) in src\Vendor\CipherChat, taken from a git commit of the CipherChat repository (never
 # its working tree), with VENDOR.json recording the version, the commit and the SHA-256 of every file.

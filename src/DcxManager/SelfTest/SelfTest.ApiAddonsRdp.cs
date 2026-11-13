@@ -163,7 +163,7 @@ public static partial class SelfTest
         catch (Exception ex) { Fail("local API / broadcast", ex); try { Api.Broadcasts.StopAll("self-test failure"); AppSettings.Current.LocalApiEnabled = false; Api.LocalServer.Sync(); } catch { } }
 
         // ADR-012: add-ons — package checks, approval grants, a REAL sandboxed run (Low integrity + job) with the bridge,
-        // permission denials, user-mediated credentials, crash/hang/flood/garbage handled, tamper detection, updates that
+        // permission denials, user-mediated credentials, crash/hang/flood/garbage handled, tamper detection, updates that   // secret-scan: example (synthetic fixture)
         // can't gain permissions silently, downgrade/zip-slip refused, disable/revoke/remove; the repo sample too.
         try
         {
@@ -419,7 +419,7 @@ public static partial class SelfTest
             if (Rdp.RdpAxHost.AvailableClsid() is not { } clsid) Ok("embedded RDP: the Windows RDP control isn't registered on this PC — mstsc fallback (nothing to test)");
             else
             {
-                var rc = new Credential { Name = "rdp-selftest", Kind = CredentialKind.Password, Username = "tester", Secret = "Rdp-Pa55-selftest-9f" };
+                var rc = new Credential { Name = "rdp-selftest", Kind = CredentialKind.Password, Username = "tester", Secret = "Rdp-Pa55-selftest-9f" };   // secret-scan: example (synthetic fixture)
                 var rh = new HostEntry { Name = "rdp-selftest", Address = "127.0.0.1", Port = 1, Username = "tester", Protocol = "rdp", Auth = AuthMethod.Password, CredentialId = rc.Id };
                 AppData.Current.Credentials.Add(rc); AppData.Current.Hosts.Add(rh); AppData.Save();
                 main.OpenRdp(rh);

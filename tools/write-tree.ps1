@@ -1,11 +1,17 @@
+#Requires -Version 7
 # Writes docs\PROJECT-TREE.generated.md: the source tree as a table (every folder under src\, samples\, tools\, installer\
 # and docs\ with its files, lines of code and a one-line purpose from the folder's README or first file comment). The
 # project PDF (docs\guide\guide-project.txt) includes it, so the published tree never lags the repository. Generated;
 # never edit by hand. Usage: .\tools\write-tree.ps1
+param([switch]$Settled)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 $enc = New-Object Text.UTF8Encoding $false
+# Only files git tracks are counted (ADR-123): the table is the same in every clone, whatever lies around untracked.
+$tracked = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($t in (& git -C $root -c core.quotepath=off ls-files)) { [void]$tracked.Add((Join-Path $root ($t -replace '/', '\'))) }
+if ($tracked.Count -lt 100) { throw 'git ls-files listed almost nothing - is this the repository root?' }
 $skip = '\\(bin|obj|\.vs|publish|dist|node_modules|\.git)(\\|$)'
 $codeExt = '.cs', '.xaml', '.ps1', '.md', '.json', '.wxs', '.html', '.js', '.css', '.txt', '.props', '.csproj', '.sln', '.xml'
 
@@ -20,7 +26,7 @@ foreach ($top in 'src', 'samples', 'tools', 'installer', 'docs') {
     if (-not (Test-Path $top)) { continue }
     $dirs = @(Get-Item $top) + @(Get-ChildItem $top -Directory -Recurse | Where-Object { $_.FullName -notmatch $skip })
     foreach ($d in ($dirs | Sort-Object FullName)) {
-        $files = @(Get-ChildItem $d.FullName -File | Where-Object { $_.Name -notlike '*_wpftmp.csproj' -and $_.Name -ne 'packages.lock.json' })
+        $files = @(Get-ChildItem $d.FullName -File | Where-Object { $_.Name -notlike '*_wpftmp.csproj' -and $_.Name -ne 'packages.lock.json' -and $tracked.Contains($_.FullName) })
         if ($files.Count -eq 0) { continue }
         $lines = 0; foreach ($f in $files) { $n = Lines $f; $lines += $n; if ($f.Extension -eq '.cs') { $csLines += $n } }
         $totalFiles += $files.Count; $totalLines += $lines
@@ -62,3 +68,6 @@ $($rows -join "`n")
 "@
 [IO.File]::WriteAllText((Join-Path $root 'docs\PROJECT-TREE.generated.md'), $out, $enc)
 Write-Host "docs\PROJECT-TREE.generated.md: $($rows.Count) folders, $totalFiles files, $('{0:N0}' -f $totalLines) lines"
+# The table counts its own lines too, so one pass can change the count it just wrote: a second pass settles it (the
+# row count, and so the file's own line count, doesn't change). build.ps1 compares the result with the commit.
+if (-not $Settled) { & $PSCommandPath -Settled }

@@ -95,9 +95,42 @@ One entry point, `.\build.ps1`. Local steps 1 to 3 always run. Public steps 4 to
 Test-fixture lines that must hold a pattern-shaped fake (the self-test's redaction tests) carry
 `// secret-scan: example`; the scanner skips only those lines.
 
-**Still open:** gitleaks. The scan runs the project rules now; gitleaks joins it once DarkCipher0x OKs downloading one pinned
-release (`tools\gitleaks.pin` records its version and SHA-256; the binary lives in `%LOCALAPPDATA%\DarkCipher\tools`).
-The website hand-off is implemented (0.6.9, for the public beta launch). Discord: the hand-off writes the card; it is
-posted with the website's `announce-discord.ps1` (preview first) once the site is live and DarkCipher0x says go, never by
-`release.ps1`. 0.6.9 is built with publishing held (`build.ps1 -NoPublish`) until DarkCipher0x's go; then
-`tools\release.ps1 -Version 0.6.9 -Resume` publishes it.
+**gitleaks** is mandatory since 0.6.52 (below). Discord: the hand-off writes the card; it is posted with the website's
+`announce-discord.ps1` (preview first) once the site is live and DarkCipher0x says go, never by `release.ps1`.
+
+## Guards (mandatory since 0.6.52, ADR-123)
+
+DarkCipher0x's rule of 2026-11-12 (the shared standard's "Mandatory release guards"): every mistake that cost 0.6.48 and
+0.6.49 is made impossible in code. Any guard that fails stops the pipeline. `tools\test-release-guards.ps1 -Version <ver>`
+proves each one with a negative test on a scratch copy of the built clone; its results go in the version's gate report.
+
+| Guard | Where | What stops |
+|-------|-------|------------|
+| Hold (7a) | `Assert-NoHold`, first thing in `build.ps1` and `release.ps1` | Any run while `DCX_HOLD` is set (not 0) or `dist\HOLD` / `%USERPROFILE%\.darkcipher\hold` exists: a hold works even while an agent is mid-task. Agents also check pending inputs before any build, bump, push or publish, and never spend two versions in a row without a go |
+| Preflight build (0.6.54) | `build.ps1 -Preflight`; `Get-DistRoot` / `DCX_DIST_ROOT`; `Assert-NotPreflight` in release.ps1, publish-public, publish-github-release | Releasing anything that has only been rehearsed. The preflight runs every build step in order plus release-check as `<x.y.z>-preflight.<run>` into `%LOCALAPPDATA%\DarkCipher\preflight-dist`, never touches the version ledger; a release refuses a `-preflight` version, a dist marked preflight and any `DCX_DIST_ROOT`. Run it before every real build: a failure there costs no version |
+| Pre-flight (0.6.53) | `Invoke-BuildPreflight` in build.ps1, after the guards and **before the version is spent**; `build.ps1 -PreflightOnly` runs it alone | A locked `dotnet restore` (solution, guide, pdftext, setup) or a compile-only Release build of the exe failing under the pinned SDK - e.g. a lock file made under another SDK patch (what spent 0.6.52). Nothing is recorded; the version stays unspent |
+| Toolchain | `#Requires -Version 7` on `build.ps1` and every release script; `Get-ReleaseToolchain` | Windows PowerShell 5.1 (it garbled 0.6.48's docs). pwsh, .NET SDK, WiX, git, Edge and gitleaks versions are written to `release-state.json` "toolchain" |
+| Clean clone | `Assert-CleanCheckout` (build.ps1, first) | Modified or untracked files, any build output or ignored file (except the fetched `*.local.txt`), HEAD not on the gateway origin. Build from a fresh clone of the gateway origin at the release commit |
+| Generated files | build.ps1, first | README badge/history or `PROJECT-TREE.generated.md` that differ from what the generators write: commit them first. At the end, the tree must still be exactly the commit |
+| Remotes | `Assert-ReleaseRemotes` (build, release-check, public clone) | No remote on the gateway origin (`<gatewayHost>:<gatewayHome>/git/<repo>.git`), or any remote on a decommissioned server. Both come from `%USERPROFILE%\.darkcipher\release-hosts.json` on the build PC (internal names: never in git); without it the guard fails |
+| Version | `Assert-NewVersion` (build) | A version already built: the ledger `%USERPROFILE%\.darkcipher\servermanagement-built-versions.json`, any `dist\<ver>` of a sibling clone, or a public tag. The version is spent once the guards pass |
+| Required assets | `Copy-PublishedAddons` (build) | A published add-on missing from the add-on store, or different from its `.sha256` or from the SHA-256 pinned in `release.json`. The private term list is fetched from the main clone, and its absence fails the privacy scan |
+| No hand-run steps | build.ps1 records each step under one run id (`release-state.json` "pipeline"); `Assert-PipelineRun` in the dist-writing tools; release-check | Any step missing or out of order, SHA256SUMS changed after the run, or a tool (`write-checksums`, `write-public-source`, `make-guide`, `write-sbom`, `sign-update -Path`) run by hand for that version: it records `hand-run:<tool>` = tainted. Bump and build again |
+| Encoding | release-check | Mojibake (`U+00C2`, `U+00E2 U+20AC`, `U+00C3` + `U+0080..U+00BF`) in the generated docs, any text file in `dist\<ver>\`, any text entry of the source / portable / policy zips and published add-ons, or the text of any PDF (`tools\pdftext`, PdfPig). `tools\encoding-exceptions.txt` pins genuine hits by path, exact count and reason |
+| gitleaks | `Get-PinnedGitleaks` (release-check, secret-scan) | `tools\gitleaks.pin` missing, gitleaks not installed (`tools\get-gitleaks.ps1`) or not the pinned binary. Findings are resolved or allowed in `tools\gitleaks.toml` with a reason |
+| Bundled runtime | `global.json` (SDK 10.0.404, latest patch), release-check | A build with any other SDK band (dotnet refuses to run), or an exe whose self-contained .NET runtime is older than `release.json` "minBundledRuntime" (the newest .NET security release) |
+| Paste regression | `tools\test-terminal-paste.ps1` (build step paste-test) | The terminal page sending more or fewer paste requests than one per Ctrl+Shift+V (once, held, twice) or Shift+Insert, in headless Edge |
+| README history | release-check | A `docs\release-notes\0.6.*.md` without its README history entry |
+| Real-UI check | `dist\<ver>\real-ui-test.md` (from `tools\real-ui-test-template.md`), release-check, release.ps1 | Publishing without a passing hand-test record for this exact exe (SHA-256). A harness-only test is "unverified in the real UI"; a dry run only reports it |
+| Gate report | release-check writes `dist\<ver>\guard-results.md`; `tools\gate-report-template.md` | Each guard's result and evidence, pasted into `reports/<ver>-gate.md` for the reviewer |
+
+Release from a fresh clone:
+```
+git clone <gateway origin>/DarkCipher-ServerManagement.git <Projects>\_dcx-sm-<ver>
+cd <Projects>\_dcx-sm-<ver>; git checkout <branch>; git config core.autocrlf false
+pwsh .\tools\get-gitleaks.ps1          # once per PC
+pwsh .\build.ps1 -Preflight             # the whole build, rehearsed: no version spent
+pwsh .\build.ps1 -NoPublish             # guards, build, bundle, record (fresh clone again)
+$env:DCX_PUBLISH_OFF = '1'; pwsh .\tools\release.ps1 -Version <ver> -DryRun
+pwsh .\tools\test-release-guards.ps1 -Version <ver>
+```

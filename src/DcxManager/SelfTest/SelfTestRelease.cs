@@ -655,7 +655,7 @@ public static class ReleaseTests
 internal sealed class FakeHetzner : HttpMessageHandler
 {
     public const string Token = "dcxSelftestHetznerToken0000000000000000000000000000000000000000AB";
-    public const string RootPassword = "Gen3rated-Root-Pw-Selftest";
+    public const string RootPassword = "Gen3rated-Root-Pw-Selftest";   // secret-scan: example (synthetic fixture)
     public sealed record Call(string Method, string Path, string Query, string? Auth, string? Body);
     public List<Call> Calls { get; } = new();
     public List<JsonObject> Servers { get; } = new();

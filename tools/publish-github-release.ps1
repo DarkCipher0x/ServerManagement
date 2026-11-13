@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Release pipeline step 6: the GitHub Release for a version whose tag publish-public.ps1 has pushed
 # (docs\RELEASE-PIPELINE.md; modelled on CaseKeeper's script).
 #
@@ -15,6 +16,7 @@
 param([Parameter(Mandatory)][string]$Version, [switch]$DryRun, [switch]$NotLatest)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'release-common.ps1')
+Assert-NotPreflight $Version 'publish-github-release.ps1'
 $cfg = Get-ReleaseConfig
 $out = Join-Path $ReleaseRoot "dist\$Version"
 $tag = "v$Version"

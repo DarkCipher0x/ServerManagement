@@ -6,8 +6,8 @@ using DcxManager.Services;
 namespace DcxManager.DcxCtl;
 
 /// <summary>
-/// A DarkCipher portal (darkciphersystems.com, the JAT portal, any portal on the same code) in Infrastructure (0.3.0 §9),
-/// over dcx-ctl/1. Config: <see cref="ProviderConfig.HostId"/> = the saved host for the portal server (user dcx-ctl, its
+/// A DarkCipher portal (darkciphersystems.com, or any portal on the same code) in Infrastructure (0.3.0 §9),
+/// over dcx-ctl/2. Config: <see cref="ProviderConfig.HostId"/> = the saved host for the portal server (user dcx-ctl, its
 /// Ed25519 key, the host key pinned in Known hosts), <see cref="ProviderConfig.CredentialId"/> = a vault password credential
 /// whose secret is the enrolment string. Shows the portal (brand, version, health), statistics, security, mail, access
 /// overview and users — read-only by default; with "Allow changes" and an admin-scope key, sensitive actions ask for the
@@ -17,7 +17,7 @@ namespace DcxManager.DcxCtl;
 public sealed class DcxPortalProvider(ProviderConfig c) : IInfraProvider
 {
     public ProviderConfig Config => c;
-    public string Where => AppData.Current.FindHost(c.HostId) is { } h ? $"ssh:{h.Address} (dcx-ctl/1)" : "no host set";
+    public string Where => AppData.Current.FindHost(c.HostId) is { } h ? $"ssh:{h.Address} (dcx-ctl/2)" : "no host set";
     public NetClass? NetworkClass => AppData.Current.FindHost(c.HostId) is { } h ? NetworkPolicy.ClassifyHost(h.Address) : null;
 
     /// <summary>Self-test seam: opens a session over another transport (the loopback fake).</summary>
@@ -46,7 +46,7 @@ public sealed class DcxPortalProvider(ProviderConfig c) : IInfraProvider
             var version = Str(sys.Json, "version") ?? Str(sys.Json, "app_version") ?? "";
             var o = s.Opened;
             return new ProviderCaps(true, true, s.Scope == "admin", version,
-                $"{Str(o, "brand") ?? Str(o, "portal")} · account {Str(o, "account")} · scope {s.Scope}", new[] { "dcx-ctl/1: SSH + PSK/X25519 handshake, end-to-end MACs" });
+                $"{Str(o, "brand") ?? Str(o, "portal")} · account {Str(o, "account")} · scope {s.Scope}", new[] { "dcx-ctl/2: SSH + PSK/X25519 + ML-KEM-768 handshake, end-to-end MACs" });
         }
         catch (Exception ex) { return ProviderCaps.Unreachable(ex.Message); }
     }

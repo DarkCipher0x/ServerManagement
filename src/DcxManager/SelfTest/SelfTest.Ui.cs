@@ -229,8 +229,8 @@ public static partial class SelfTest
                     var keep = ws.Active;
                     var c = ws.NewConversation();
                     const string pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH PRIVATE KEY-----"; // secret-scan: example
-                    var secrets = new[] { "hunter2-demo-secret", "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ", "sk-demo0123456789abcdefghijk", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.c2lnbmF0dXJlZGVtbw", "vault-pass-demo-77" };
-                    ws.AddContext("deploy notes password=hunter2-demo-secret", $"db_password = hunter2-demo-secret\n{pem}\napi_key: sk-demo0123456789abcdefghijk\nAuthorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.c2lnbmF0dXJlZGVtbw\n");
+                    var secrets = new[] { "hunter2-demo-secret", "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ", "sk-demo0123456789abcdefghijk", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.c2lnbmF0dXJlZGVtbw", "vault-pass-demo-77" };   // secret-scan: example (synthetic fixture)
+                    ws.AddContext("deploy notes password=hunter2-demo-secret", $"db_password = hunter2-demo-secret\n{pem}\napi_key: sk-demo0123456789abcdefghijk\nAuthorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.c2lnbmF0dXJlZGVtbw\n");   // secret-scan: example (synthetic fixture)
                     var cred = ws.AddContext("vault credential demo-root", "Secret=vault-pass-demo-77", Ai.AiContextKind.Credential);
                     ws.SetIncluded(cred, true);
                     var probe = new Credential { Name = "demo-key", Kind = CredentialKind.Password, Secret = "vault-pass-demo-77" };

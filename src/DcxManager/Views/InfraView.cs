@@ -146,7 +146,7 @@ public sealed class InfraView : UserControl, IDisposable
         ProviderKinds.All.GroupBy(k => k.MenuGroup)
             .Select(g => (object?)Menus.Group(g.Key, g.Select(k => (object?)Menus.Item(k.MenuLabel, () => Edit(k.New(), true))).ToArray())),
         Menus.Sep(),
-        Menus.Item("DCX-CTL (dcx-ctl/1 over SSH)…", () => Edit(new ProviderConfig { Kind = "dcx-portal", Name = "DCX-CTL", Environment = "PRODUCTION" }, true)),
+        Menus.Item("DCX-CTL (dcx-ctl/2 over SSH)…", () => Edit(new ProviderConfig { Kind = "dcx-portal", Name = "DCX-CTL", Environment = "PRODUCTION" }, true)),
     };
 
     /// <summary>The provider row under the mouse (right-click selects it first), or null on the empty part of the list.</summary>

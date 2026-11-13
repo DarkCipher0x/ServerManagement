@@ -69,7 +69,7 @@ public static class SavedSessionsTests
         var archived = file.FirstOrDefault(kv => kv.Key.Equals("Archived", StringComparison.OrdinalIgnoreCase)).Value;
         Expect(archived.ValueKind == JsonValueKind.Array && archived.GetArrayLength() == 1, "kept in the archive, not deleted");
 
-        const string Secret = "probe-Secret-0629";
+        const string Secret = "probe-Secret-0629";   // secret-scan: example (synthetic fixture)
         var adHoc = new HostEntry { Name = "ops@192.0.2.29", Address = "192.0.2.29", Username = "ops", IsAdHoc = true, Auth = AuthMethod.Password, Transient = new Credential { Secret = Secret } };
         var entry = new Workspace.Entry("terminal", adHoc.Id) { AdHoc = adHoc.Clone() };
         Expect(!JsonSerializer.Serialize(new[] { entry }, SecureStore.Json).Contains(Secret), "the secret is never serialised");

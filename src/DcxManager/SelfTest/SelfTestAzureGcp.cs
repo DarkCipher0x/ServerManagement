@@ -52,7 +52,7 @@ public static class AzureGcpTests
         using var cert = new CertificateRequest("CN=dcx-selftest-azure", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1).CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
         using var otherRsa = RSA.Create(2048);
         using var otherCert = new CertificateRequest("CN=dcx-selftest-other", otherRsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1).CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30));
-        const string pfxPassword = "Pfx-Selftest-Pw-0042";
+        const string pfxPassword = "Pfx-Selftest-Pw-0042";   // secret-scan: example (synthetic fixture)
         var pfx = Convert.ToBase64String(cert.Export(X509ContentType.Pfx, pfxPassword));
         var fakeAz = new FakeAzure(cert);
         AzureClient.UseHandler(fakeAz);

@@ -557,7 +557,7 @@ public static class BitwardenTests
                     ("SHA256", A("12345678901234567890123456789012"), 59L, "46119246"), ("SHA512", A("1234567890123456789012345678901234567890123456789012345678901234"), 59L, "90693936") };
                 foreach (var (algo, key, t, want) in vectors)
                     if (Totp.Now(new Totp.Spec(key, 8, 30, algo, false), DateTimeOffset.FromUnixTimeSeconds(t)).Code != want) throw new Exception($"RFC 6238 {algo} at {t}");
-                if (Totp.Parse("GEZD GNBV-GY3T QOJQ gezdgnbvgy3tqojq") is not { Digits: 6, Period: 30 } || Totp.Parse("otpauth://hotp/x?secret=GEZDGNBVGY3TQOJQ") != null || Totp.Parse("not base32!") != null
+                if (Totp.Parse("GEZD GNBV-GY3T QOJQ gezdgnbvgy3tqojq") is not { Digits: 6, Period: 30 } || Totp.Parse("otpauth://hotp/x?secret=GEZDGNBVGY3TQOJQ") != null || Totp.Parse("not base32!") != null   // secret-scan: example (synthetic fixture)
                     || Totp.Parse("otpauth://totp/x?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8&period=60&algorithm=sha256") is not { Digits: 8, Period: 60, Algorithm: "SHA256" }
                     || Totp.Parse("steam://GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ") is not { } steam || Totp.Now(steam).Code is not { Length: 5 } sc || sc.Any(ch => !"23456789BCDFGHJKMNPQRTVWXY".Contains(ch)))
                     throw new Exception("TOTP settings");

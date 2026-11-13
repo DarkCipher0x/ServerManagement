@@ -1,3 +1,4 @@
+#Requires -Version 7
 # The release pipeline for one built version (docs\RELEASE-PIPELINE.md). build.ps1 runs it last; run it by hand to
 # publish an already-built dist\<ver>\, to resume after a failure, or to rehearse with -DryRun.
 #
@@ -16,6 +17,8 @@
 param([Parameter(Mandatory)][string]$Version, [switch]$DryRun, [switch]$Resume, [switch]$Backfill, [switch]$NotLatest)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'release-common.ps1')
+Assert-NoHold 'release.ps1'                 # guard 7a: a hold stops dry runs and real runs alike
+Assert-NotPreflight $Version 'release.ps1'  # 0.6.54: a preflight build is never released (nor anything outside dist\)
 $cfg = Get-ReleaseConfig
 if (-not (Test-Path (Join-Path $ReleaseRoot "dist\$Version"))) { throw "dist\$Version doesn't exist: build it first" }
 $mode = if ($DryRun) { 'DRY RUN' } else { 'release' }
@@ -31,6 +34,14 @@ function Step([string]$Name, [scriptblock]$Run) {
 }
 
 Step 'check' { & (Join-Path $PSScriptRoot 'release-check.ps1') -Version $Version -Backfill:$Backfill }
+# Guard 7 (ADR-123): nothing is published until the changed feature was hand-tested in the real app for this exact exe
+# (dist\<ver>\real-ui-test.md, checked by release-check.ps1 into guard-results.md). A dry run only reports it.
+$gr = Join-Path $ReleaseRoot "dist\$Version\guard-results.md"
+$realUiPass = (Test-Path $gr) -and (Select-String -Path $gr -Pattern '^\| 7 Real-UI verification \| pass \|' -Quiet)
+if (-not $realUiPass) {
+    if ($DryRun -or $off) { Write-Host '  real-UI test - UNVERIFIED in the real UI: a real run would stop here (guard 7)' -ForegroundColor Yellow }
+    else { throw "guard 7: $Version has no passing real-UI test record (dist\$Version\real-ui-test.md, see tools\real-ui-test-template.md): nothing was published" }
+}
 Step 'public' { & (Join-Path $PSScriptRoot 'publish-public.ps1') -Version $Version -DryRun:$DryRun }
 Step 'github-release' { & (Join-Path $PSScriptRoot 'publish-github-release.ps1') -Version $Version -DryRun:$DryRun -NotLatest:$NotLatest }
 foreach ($s in @(@{ Name = 'website'; Cfg = $cfg.website }, @{ Name = 'discord'; Cfg = $cfg.discord })) {

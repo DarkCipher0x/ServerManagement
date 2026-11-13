@@ -14,14 +14,15 @@ Related chapters: [SOURCE.md](SOURCE.md) (what the code does), [TESTING.md](TEST
 | Tool | Version / how it is pinned | Needed for |
 |---|---|---|
 | Windows 10 1809+ or Windows 11, x64 | — | everything (the app targets `net10.0-windows10.0.19041.0`, minimum OS `10.0.17763.0`) |
-| **.NET 10 SDK** | any 10.0 SDK (built with 10.0.402; .NET 10 is the LTS release, supported until November 2028) | `dotnet build` / `publish`, the guide tool, the WiX and MSIX tool restores |
+| **.NET 10 SDK** | **10.0.404** or a later 10.0.4xx patch, pinned by `global.json` (runtime 10.0.15, the 2026-11-10 security release; release-check refuses a bundled runtime below `release.json` minBundledRuntime). Installer: `dotnet-sdk-10.0.404-win-x64.exe` from Microsoft. .NET 10 is the LTS release, supported until November 2028 | `dotnet build` / `publish`, the guide tool, the WiX and MSIX tool restores |
 | **WebView2 Runtime** | evergreen (Windows 11 has it) | running the app and its self-test (terminals, viewers and web windows render in WebView2) |
 | **WiX Toolset 5** | `wix` **5.0.2** as a dotnet local tool in `.config\dotnet-tools.json` (`rollForward: false`); `build.ps1` adds the extension `WixToolset.UI.wixext/5.0.2` | the MSI |
 | **Microsoft Edge** | installed Edge (either Program Files folder) | printing the PDF guide headless (`tools\make-guide.ps1`) |
 | **Windows SDK build tools** | NuGet `Microsoft.Windows.SDK.BuildTools` **[10.0.28000.1839]** via `tools\msix\MsixTools.csproj` (restore only, `PackageDownload`) | `makeappx.exe` / `signtool.exe` for the MSIX (`tools\make-msix.ps1`) |
 | Windows SDK `signtool.exe` | found under `%ProgramFiles(x86)%\Windows Kits\10\bin\…\x64\` | only for Authenticode signing in `build.ps1` (optional) |
 | .NET Framework 4.x `csc.exe` | `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe` (part of Windows) | only to rebuild the add-on SDK's `DcxBridge.dll` |
-| Windows PowerShell 5.1 | part of Windows | all scripts; PowerShell add-ons run in it |
+| **PowerShell 7** (`pwsh`) | 7.4 or newer (Microsoft Store or `winget install Microsoft.PowerShell`) | `build.ps1` and every release-pipeline script in `tools\`: they start with `#Requires -Version 7` and refuse Windows PowerShell 5.1 (ADR-122) |
+| Windows PowerShell 5.1 | part of Windows | PowerShell add-ons run in it; not used to build |
 | **Git for Windows** | 2.55 (installed with `winget install Git.Git`, 2026-10-20) | the tree is a local repository on `main` since 0.2.0 phase 0; one commit per phase. `dist\`, `publish\`, `bin\`, `obj\` and signing material are ignored |
 
 The solution file `DarkCipher.ServerManagement.sln` (repository root) lists the ten projects (`src\Dcx.*` and the app,
@@ -45,6 +46,10 @@ NuGet packages (each in the project that uses it; restored automatically):
 
 The guide tool (`tools\guide\Guide.csproj`) uses `Markdig` 0.37.0.
 
+> **Build with PowerShell 7 (ADR-122).** Windows PowerShell 5.1 reads a UTF-8 script without a BOM as the ANSI code page,
+> so a literal such as `·` or `…` in a script comes out as mojibake in what it writes. The build and release scripts
+> therefore require PowerShell 7 and stop at once in 5.1.
+>
 > **PowerShell 5.1 and UTF-8.** Never round-trip source or docs through `Get-Content`/`Set-Content` in Windows
 > PowerShell 5.1: without a BOM it reads UTF-8 as the ANSI code page and writes mojibake. The scripts here read with
 > `-Encoding UTF8` or `[IO.File]` and write with `UTF8Encoding($false)`.
@@ -188,7 +193,7 @@ back to inline packages and the report says "repo sample not found").
 
 ## 5. `build.ps1`, step by step
 
-Run from the repository root in Windows PowerShell: `.\build.ps1` (clear `DCX_DATA_DIR` first). It stops at the first
+Run from the root of a **fresh clone of the gateway origin** (the guards refuse anything else; docs\RELEASE-PIPELINE.md "Guards", ADR-123) in PowerShell 7: `pwsh .\build.ps1` (or `.\build.ps1` from a `pwsh` window; Windows PowerShell 5.1 is refused, ADR-122) (clear `DCX_DATA_DIR` first). It stops at the first
 error (`$ErrorActionPreference = 'Stop'`).
 
 0. **Version and guard.** Reads `<Version>` from the csproj. Refuses when `dist\<ver>\DarkCipherServerManagement-<ver>-x64.msi`

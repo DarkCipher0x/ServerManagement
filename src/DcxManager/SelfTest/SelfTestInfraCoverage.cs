@@ -236,7 +236,7 @@ public static class InfraCoverageTests
         catch (Exception ex) { fail("Docker coverage", ex); }
 
         // 5. Unraid: the official schema's extra id-only mutations are discovered and offered (and only then).
-        var key = new Credential { Name = "unraid key (coverage)", Kind = CredentialKind.Password, Username = "unraid-api", Secret = "unraid-cov-4242" };
+        var key = new Credential { Name = "unraid key (coverage)", Kind = CredentialKind.Password, Username = "unraid-api", Secret = "unraid-cov-4242" };   // secret-scan: example (synthetic fixture)
         AppData.Current.Credentials.Add(key);
         try
         {

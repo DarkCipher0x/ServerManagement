@@ -3496,3 +3496,67 @@ where the AI wrote `terminal_run` then its arguments as JSON on the next lines, 
 - **Self-test:** `SelfTestNavSections.cs`: a throwaway module with a live-only section, its count, opening through the
   key, the skipped entries and a failing provider, RefreshNav from a worker thread, pinning, the section leaving with an
   empty list; `AddonPackages.AppTooOld` for none, equal, older, newer and malformed minimums.
+
+## ADR-122: Build and release scripts require PowerShell 7 (0.6.49)
+- **Context:** the 0.6.48 bundle was built under Windows PowerShell 5.1. 5.1 reads a UTF-8 script without a BOM as the
+  ANSI code page, so `tools\write-tree.ps1`'s literals (`·`, `…`) came out as mojibake in
+  `docs\PROJECT-TREE.generated.md`, the source archive and the Project-Structure PDF, and the tree's sort order and
+  line counts differed from a PowerShell 7 run. The binaries were unaffected. 0.6.48 was never published; it was
+  rebuilt as 0.6.49 (a version is never rebuilt).
+- **Decision:** `build.ps1` and every script it or `tools\release.ps1` runs (`write-readme-version`, `sync-cipherchat`,
+  `check-budgets`, `sign-update`, `zip-tools`, `write-sbom`, `write-checksums`, `make-guide`, `write-tree`,
+  `write-public-source`, `release`, `release-common`, `release-check`, `publish-public`, `secret-scan`,
+  `publish-github-release`, `website-handoff`, `verify-website`, `make-msix`) start with `#Requires -Version 7`, so a 5.1
+  run stops before it writes anything. Saving the scripts with a BOM was rejected: it fixes only the reading, keeps
+  the other 5.1/7 differences (sorting, `Compress-Archive`) and is easy to lose with an editor.
+- **Not changed:** PowerShell add-ons and the add-on SDK still target Windows PowerShell 5.1.
+- **Check:** `powershell -File .\build.ps1` fails at once with the #Requires error; `pwsh .\build.ps1` runs.
+
+## ADR-123: Mandatory release guards (0.6.52)
+- **Context:** 0.6.48 and 0.6.49 were abandoned. 0.6.48 was built under Windows PowerShell 5.1 and its docs came out as
+  mojibake; two pipeline steps were run by hand, which skipped the bundle check; the signed stream add-on was missing
+  from the fresh clone; gitleaks silently didn't run (no pin); the verify clone pointed at a server being
+  decommissioned. Notes didn't prevent any of it. DarkCipher0x (2026-11-12): make this class of mistake impossible.
+  0.6.49 failed review (an unreviewed protocol change from a WIP commit, no real-UI test, a hand step); this release
+  is cut from main without that commit. The first guarded builds, 0.6.50 and 0.6.51, are spent (start-up budget).
+- **Decision:** the pipeline enforces the shared standard's guards in code (docs/RELEASE-PIPELINE.md "Guards"):
+  PowerShell 7 and a recorded toolchain; a fresh clone of the gateway origin with its remotes checked; a version ledger
+  so no version is rebuilt; required assets fetched by script and hash-pinned; one recorded build run per version, with
+  hand-run tools tainting it; an encoding gate over docs, zips and PDF text; gitleaks pinned and mandatory, with a
+  reviewed allowlist. tools/test-release-guards.ps1 proves each guard with a negative test.
+  0.6.52 adds: a minimum bundled .NET runtime (release.json minBundledRuntime; 0.6.46 and 0.6.49 bundled 10.0.14,
+  older than the 10.0.15 security release), a real-UI test record per exe that publishing requires (guard 7), the
+  terminal paste regression test in the build (tools/test-terminal-paste.ps1), per-guard results written by
+  release-check (dist/<ver>/guard-results.md, used by tools/gate-report-template.md), the README history check, and
+  the SBOM reading the runtime from the published exe (it named the 8.0 runtime since 0.6.13).
+  0.6.53 adds the pre-flight: a locked restore and a compile-only Release build under the pinned SDK, before the
+  version is spent (0.6.52 was spent by a lock file made under SDK 10.0.403: NU1004 for Microsoft.NET.ILLink.Tasks).
+  0.6.54 makes the rehearsal the whole build: build.ps1 -Preflight runs every step under <x.y.z>-preflight.<run> into a
+  dist outside the repository, never touching the ledger, and release.ps1 refuses it (0.6.53 was spent by the stream
+  add-on's lock file, which the narrower pre-flight did not restore).
+- **Deviation:** the encoding gate fails on any hit except those pinned in tools/encoding-exceptions.txt (path, exact
+  count, reason). The only one is the vendored ml-kem.js, whose comments use a genuine U+00C2 and which must stay
+  byte-exact (ADR-117).
+- **Cost:** builds need a fresh clone (no incremental release builds), network for the gateway fetch, and the PDF text
+  tool (PdfPig 0.1.11, locked). write-tree.ps1 now counts only tracked files, so the tree is the same in every clone.
+
+## ADR-124: DCX-CTL portals move to dcx-ctl/2, hybrid X25519 + ML-KEM-768 (0.6.54)
+- **Context:** dcx-ctl/1 (ADR-045) agreed its session keys with X25519 alone, so a recorded session could be decrypted
+  later by anyone able to break X25519 (harvest now, decrypt later). The portals moved to dcx-ctl/2 and refuse version 1
+  since 2026-11-10, so a client that only speaks version 1 can't connect at all.
+- **Decision:** the client speaks dcx-ctl/2 only, a byte-for-byte port of the portal's reference implementation. The
+  hello ("DCXCTL2", version 2, 1,312 bytes) carries an X25519 key and an ML-KEM-768 public key; the reply (1,184 bytes)
+  carries the server's X25519 key and the ML-KEM ciphertext under the server's MAC, which covers the hello too. The
+  session keys are HKDF-Extract(salt = K_hs, X25519 secret | ML-KEM secret), expanded per label with the transcript
+  hash. The enrolment key derivation keeps its dcx-ctl/1 labels, so existing enrolment strings stay valid. A portal
+  that doesn't confirm "proto": 2 on open is refused. The one-use X25519 key and ML-KEM seed are wiped after the
+  handshake. No new dependency: ML-KEM comes from the BouncyCastle already used by Pqc (ADR-090). The SSH channel is
+  opened as a shell request with no terminal and no command (like `ssh -T`), because the server's forced relay command
+  refuses a connection that asks for a command of its own.
+- **Alternatives:** keeping a version 1 fallback (rejected: a downgrade path, and the portals refuse it anyway);
+  ML-KEM alone (rejected: the hybrid keeps X25519's security if ML-KEM is ever weakened).
+- **Consequences:** BREAKING for portal servers: they must run dcx-ctl/2, which needs OpenSSL 3.5 or newer. The
+  handshake frames grow from 129/96 to 1,312/1,184 bytes.
+- **Check:** the DCX-CTL self-test: RFC 5869/7748/8439 vectors and an ML-KEM-768 exchange, the wire sizes, both sides
+  deriving the same keys, the secrets wiped, and refusals of a version 1 hello and reply, a changed ML-KEM ciphertext,
+  a tampered reply, a wrong key and a portal without "proto": 2 (loopback fake only; the live test is on the test VPS).

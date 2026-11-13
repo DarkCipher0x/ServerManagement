@@ -12,7 +12,7 @@ namespace DcxManager;
 /// </summary>
 public static class VpnTests
 {
-    private const string WgKey = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=";
+    private const string WgKey = "yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=";   // secret-scan: example (synthetic fixture)
     private const string WgPub = "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=";
     private const string WgPsk = "FpCyhws9cxwWoV4xELtfJvjJN+zQVRPISllRWgeopVE=";
 

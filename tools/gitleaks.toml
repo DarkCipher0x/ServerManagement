@@ -1,0 +1,47 @@
+# gitleaks configuration for ServerManagement's public source (tools\secret-scan.ps1, ADR-123): gitleaks' own rules, plus
+# the findings examined by hand and allowed, each with its reason. Anything else found stops the publish.
+title = "DarkCipher ServerManagement"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "discord-webhook-url"
+description = "Discord webhook URL"
+regex = '''https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[\w-]+'''
+keywords = ["discord"]
+
+[[rules]]
+id = "github-token"
+description = "GitHub token (classic, OAuth, app or fine-grained)"
+regex = '''\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b'''
+keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]
+
+[[rules]]
+id = "login-at-ip"
+description = "A user@IPv4 login, as used for deploy targets"
+regex = '''\b[a-z_][a-z0-9_-]{1,31}@(?:\d{1,3}\.){3}\d{1,3}\b'''
+[[rules.allowlists]]
+description = "Documentation (RFC 5737), private (RFC 1918) and loopback addresses: examples and lab hosts, not deploy targets"
+regexTarget = "match"
+regexes = ['''@(?:192\.0\.2|198\.51\.100|203\.0\.113)\.\d{1,3}$''', '''@(?:10|127)\.\d{1,3}\.\d{1,3}\.\d{1,3}$''', '''@192\.168\.\d{1,3}\.\d{1,3}$''', '''@172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$''']
+
+[[allowlists]]
+description = "Synthetic secrets in self-test fixtures (redaction, pen-test and parser tests), each line marked 'secret-scan: example' - the same marker the project's own scan honours"
+regexTarget = "line"
+regexes = ['''secret-scan: example''']
+
+[[allowlists]]
+description = "The PUBLIC update-verification keys pinned in the app (ECDSA P-256 X/Y and ML-DSA-65): public by design, ADR-079"
+condition = "AND"
+paths = ['''(^|[\\/])src[\\/]Dcx\.Core[\\/]Services[\\/]Updater\.cs$''']
+regexTarget = "line"
+regexes = ['''public const string Release(KeyX|KeyY|PqKey) = ''']
+
+[[allowlists]]
+description = "SHA-256 hashes of the vendored CipherChat files (ADR-117 pin list), not secrets"
+paths = ['''(^|[\\/])src[\\/]Vendor[\\/]CipherChat[\\/]VENDOR\.json$''']
+
+[[allowlists]]
+description = "xterm.js 5.x, minified third-party library (MIT): identifiers in minified code, not secrets"
+paths = ['''(^|[\\/])src[\\/]DcxManager[\\/]Assets[\\/]web[\\/]xterm\.js$''']

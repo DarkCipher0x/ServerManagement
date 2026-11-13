@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Writes the sanitised public source archive of one release (0.4.0 rule: every dist\<ver>\ carries the source it was built
 # from, fit for publication):
 #   dist\<ver>\DarkCipherServerManagement-<ver>-source.zip
@@ -12,6 +13,9 @@ Set-Location $root
 $git = 'C:\Program Files\Git\cmd\git.exe'
 if (-not (Test-Path $git)) { $git = 'git' }
 $dist = Join-Path $root "dist\$Version"
+. (Join-Path $PSScriptRoot 'release-common.ps1')
+Assert-PipelineRun $Version 'write-public-source'   # ADR-123: outside build.ps1 this taints the version
+$dist = Join-Path (Get-DistRoot) $Version
 New-Item -ItemType Directory -Force $dist | Out-Null
 
 # 1. The file list: tracked files (committed or staged) — the repository is the source of truth for what is public.
@@ -45,7 +49,7 @@ $rules = @(
 $termsFile = Join-Path $PSScriptRoot 'privacy-terms.local.txt'
 $terms = @()
 if (Test-Path $termsFile) { $terms = Get-Content $termsFile -Encoding UTF8 | Where-Object { $_.Trim().Length -gt 0 -and -not $_.StartsWith('#') } | ForEach-Object { $_.Trim() } }
-else { Write-Warning "tools\privacy-terms.local.txt not found: only the generic privacy rules ran" }
+else { throw "privacy guard: tools\privacy-terms.local.txt not found - the private term scan cannot run (build.ps1 fetches it from the main clone)" }
 # A term matches as a whole word (so a name doesn't match an ordinary word that contains it); a term with its own
 # punctuation (a domain, a path) matches anywhere.
 $termRx = $terms | ForEach-Object { if ($_ -match '^\w+$') { '(?i)\b' + [regex]::Escape($_) + '\b' } else { '(?i)' + [regex]::Escape($_) } }

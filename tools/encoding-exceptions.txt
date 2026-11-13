@@ -1,0 +1,4 @@
+# Encoding gate exceptions (tools\release-check.ps1, ADR-123): text where the mojibake pattern is genuine. One per line:
+# <key><TAB><exact hit count><TAB><reason>. Keys: README.md / docs/... (repository), dist/<file>, source/<path>,
+# portable/<path>, policy-templates/<path>, addon/<path>. A different count, or a hit anywhere else, fails the release.
+source/src/Vendor/CipherChat/CallHost/app/vendor/post-quantum/ml-kem.js	3	Genuine U+00C2 ("A-hat", the NTT-domain matrix) in three comments of the vendored, pinned noble post-quantum ml-kem.js (ADR-117: vendored files are byte-exact copies)

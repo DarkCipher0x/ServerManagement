@@ -13,6 +13,7 @@
 .gitignore
 DarkCipher.ServerManagement.sln
 Directory.Build.props
+global.json
 LICENSE
 README.md
 THIRD-PARTY-NOTICES.md
@@ -93,6 +94,14 @@ tools/guide/*.csproj
 tools/guide/packages.lock.json
 tools/msix/*.csproj
 tools/msix/packages.lock.json
+tools/pdftext/*.cs
+tools/pdftext/*.csproj
+tools/pdftext/packages.lock.json
+tools/gitleaks.pin
+tools/gitleaks.toml
+tools/encoding-exceptions.txt
+tools/real-ui-test-template.md
+tools/gate-report-template.md
 
 # --- PRIVATE: never published ---
 !docs/history/**

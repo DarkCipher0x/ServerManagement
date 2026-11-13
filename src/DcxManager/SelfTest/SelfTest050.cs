@@ -190,7 +190,7 @@ public static class Release050Tests
                 var html = System.Text.Json.Nodes.JsonNode.Parse(fake.LastBody)!["body"]!["content"]!.GetValue<string>();
                 if (!fake.LastBody.Contains("hostedContents") || !html.Contains("../hostedContents/1/$value") || html.Contains("Hunter2-selftest") || html.Contains("<script>") || !html.Contains("Disk &lt;full&gt;")) throw new Exception("graph body: " + html[..Math.Min(300, html.Length)]);
                 try { await Notify.TeamsShare.SendAsync(hook, "t", "x", png); throw new Exception("an image went to a webhook"); } catch (InvalidOperationException) { }
-                await Notify.TeamsShare.SendAsync(hook, "Hello", "token=abcd1234efgh5678secret", null);
+                await Notify.TeamsShare.SendAsync(hook, "Hello", "token=abcd1234efgh5678secret", null);   // secret-scan: example (synthetic fixture)
                 if (fake.LastHost != "prod-12.westeurope.logic.azure.com" || !fake.LastBody.Contains("AdaptiveCard") || fake.LastBody.Contains("abcd1234efgh5678secret")) throw new Exception("webhook body");
                 s1.TeamsAllowImages = false;
                 try { await Notify.TeamsShare.SendAsync(chan, "t", "x", png); throw new Exception("an image went while images are off"); } catch (InvalidOperationException) { }

@@ -25,8 +25,11 @@
     "update.json.pq.sig"
   ],
   "_publishedAddons": "Add-ons are never published, except the ones listed here by DarkCipher0x: each is the signed package from dist/addons/<id>/, attached to this release and offered on the website. Its source stays private.",
+  "_addonStore": "Where build.ps1 fetches the signed add-on packages (ADR-123): DCX_ADDON_STORE, else this clone's dist/addons, else this path relative to the repository (the main working clone's dist/addons, beside a fresh release clone).",
+  "addonStore": "..\\DarkCipher-ServerManagement\\dist\\addons",
+  "minBundledRuntime": { "version": "10.0.15", "reason": ".NET 10.0.15 (2026-11-10) is a security release (16 CVEs incl. CVE-2026-105544, CVE-2026-114155); 0.6.46 and 0.6.49 bundled 10.0.14" },
   "publishedAddons": [
-    { "id": "com.darkcipher.stream", "version": "0.2.2", "reason": "DarkCipher0x, 2026-11-09: release the stream add-on with 0.6.40; 0.2.2 (NDI Tools) with 0.6.42" }
+    { "id": "com.darkcipher.stream", "version": "0.2.2", "sha256": "af0e5ac23f7a942d8bbb091920eab9dc99fd0bd9794ea7ac18ccb80802630c47", "reason": "DarkCipher0x, 2026-11-09: release the stream add-on with 0.6.40; 0.2.2 (NDI Tools) with 0.6.42" }
   ],
   "website": { "enabled": true, "reason": "launched (DarkCipher0x, 2026-10-24)" },
   "discord": { "enabled": true, "reason": "launched (DarkCipher0x, 2026-10-24)" }

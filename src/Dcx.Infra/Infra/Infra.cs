@@ -92,7 +92,7 @@ public static class Infra
         "unraid" => "Unraid (API key)",
         "vsphere" => "VMware vCenter (vSphere Automation API)",
         "hyperv" => "Microsoft Hyper-V (PowerShell / WinRM)",
-        "dcx-portal" => "DCX-CTL (dcx-ctl/1 over SSH)",
+        "dcx-portal" => "DCX-CTL (dcx-ctl/2 over SSH)",
         "synology" => "Synology DSM (Web API over https)",
         "satellite" => "Red Hat Satellite / Foreman + Katello (REST API)",
         "unifi" => "UniFi Network (Integration API, API key)",

@@ -268,7 +268,7 @@ public static partial class SelfTest
                        "\"docker\":{\"containers\":[{\"id\":\"c1:abcd\",\"names\":[\"/plex\"],\"image\":\"plexinc/pms-docker\",\"state\":\"" + plex + "\",\"status\":\"Up 3 days\",\"autoStart\":true}]}," +
                        "\"vms\":{\"domains\":[{\"id\":\"vm:1\",\"name\":\"win11\",\"state\":\"" + win + "\"}]}}}";
             });
-            var key = new Credential { Name = "unraid key (selftest)", Kind = CredentialKind.Password, Username = "unraid-api", Secret = "unraid-key-31337" };
+            var key = new Credential { Name = "unraid key (selftest)", Kind = CredentialKind.Password, Username = "unraid-api", Secret = "unraid-key-31337" };   // secret-scan: example (synthetic fixture)
             AppData.Current.Credentials.Add(key);
             var ucfg = new Infra.ProviderConfig { Kind = "unraid", Name = "tower", Endpoint = "https://tower.lan", CredentialId = key.Id, Environment = "LAB", AllowChanges = true };
             var un = new Infra.UnraidProvider(ucfg, server) { VerifyFor = TimeSpan.FromSeconds(3), PollEvery = TimeSpan.FromMilliseconds(50) };

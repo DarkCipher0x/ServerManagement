@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Dcx.Browser (0.2.0 phase 6e, docs/PLAN-0.2.0.md): the portal browser engine (ADR-032) â€” bookmarks, profiles per environment, pinned self-signed certificates, the browser add-on kind. Its screens (WebView2) are in the app. -->
+  <!-- Dcx.Browser (0.2.0 phase 6e, docs/PLAN-0.2.0.md): the portal browser engine (ADR-032) — bookmarks, profiles per environment, pinned self-signed certificates, the browser add-on kind. Its screens (WebView2) are in the app. -->
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>

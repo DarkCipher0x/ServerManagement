@@ -1,7 +1,8 @@
+#Requires -Version 7
 # Secret scan over a folder that is about to be published (release pipeline step 4; docs\RELEASE-PIPELINE.md).
 # Runs this project's rules (tools\secret-patterns.txt) over every file, binaries included (read as bytes, so a token
-# compiled into a DLL is found too), and then gitleaks when its pinned copy is installed (tools\gitleaks.pin: version
-# and SHA-256; the binary lives in %LOCALAPPDATA%\DarkCipher\tools, never in the repository, never installed system-wide).
+# compiled into a DLL is found too), and then gitleaks, which is mandatory (tools\gitleaks.pin: version and SHA-256; the
+# binary lives in %LOCALAPPDATA%\DarkCipher\tools, installed by tools\get-gitleaks.ps1, never in the repository).
 # Any finding stops the publish. Findings are printed with the file and line and the matched text masked.
 #
 # Usage: .\tools\secret-scan.ps1 -Path <folder>   (exit code 0 = clean; throws on a finding)
@@ -38,28 +39,22 @@ foreach ($f in $files) {
     }
 }
 
-# gitleaks, when its pinned copy is installed and matches the pin
-$gitleaks = 'not installed (tools\gitleaks.pin missing)'
-$pinFile = Join-Path $PSScriptRoot 'gitleaks.pin'
-if (Test-Path $pinFile) {
-    $pin = [IO.File]::ReadAllText($pinFile) | ConvertFrom-Json
-    $exe = Join-Path $env:LOCALAPPDATA "DarkCipher\tools\gitleaks-$($pin.version)\gitleaks.exe"
-    if (-not (Test-Path $exe)) { throw "gitleaks $($pin.version) is pinned but not installed at $exe - run tools\get-gitleaks.ps1" }
-    $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($hash -ne $pin.exeSha256) { throw "gitleaks at $exe does not match its pin (SHA-256 $hash): refusing to run it" }
-    $report = Join-Path ([IO.Path]::GetTempPath()) ('dcx-gitleaks-' + [guid]::NewGuid().ToString('N') + '.json')
-    & $exe detect --no-git --source $Path --redact --no-banner --report-format json --report-path $report --exit-code 3 2>&1 | Out-Null
-    $code = $LASTEXITCODE
-    try {
-        if ($code -eq 3) {
-            $items = [IO.File]::ReadAllText($report) | ConvertFrom-Json
-            foreach ($it in $items) { $found.Add(("{0}({1}): gitleaks {2}" -f $it.File.Replace($Path, '').TrimStart('\', '/'), $it.StartLine, $it.RuleID)) }
-        }
-        elseif ($code -ne 0) { throw "gitleaks failed (exit $code)" }
+# gitleaks: mandatory (ADR-123). The pinned copy (tools\gitleaks.pin) must be installed and unchanged, or the scan stops;
+# it runs gitleaks' own rules plus tools\gitleaks.toml (project rules and the reviewed allowlist, each with its reason).
+. (Join-Path $PSScriptRoot 'release-common.ps1')
+$gl = Get-PinnedGitleaks
+$report = Join-Path ([IO.Path]::GetTempPath()) ('dcx-gitleaks-' + [guid]::NewGuid().ToString('N') + '.json')
+& $gl.Exe dir $Path --config (Join-Path $PSScriptRoot 'gitleaks.toml') --redact --no-banner --report-format json --report-path $report --exit-code 3 2>&1 | Out-Null
+$code = $LASTEXITCODE
+try {
+    if ($code -eq 3) {
+        $items = [IO.File]::ReadAllText($report) | ConvertFrom-Json
+        foreach ($it in $items) { $found.Add(("{0}({1}): gitleaks {2}" -f $it.File.Replace($Path, '').TrimStart('\', '/'), $it.StartLine, $it.RuleID)) }
     }
-    finally { Remove-Item $report -ErrorAction SilentlyContinue }
-    $gitleaks = "gitleaks $($pin.version)"
+    elseif ($code -ne 0) { throw "gitleaks failed (exit $code)" }
 }
+finally { Remove-Item $report -ErrorAction SilentlyContinue }
+$gitleaks = "gitleaks $($gl.Version)"
 
 if ($found.Count -gt 0) {
     $found | Select-Object -First 50 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }

@@ -362,9 +362,9 @@ Infrastructure → ＋ Add ▾ → **Sophos Central**. In Sophos Central: Global
 **Changes** (with "Allow changes"): ⟳ Check for firmware upgrades (read-only), ⬆ Upgrade the firmware (only to a version Central offers for that firewall; it restarts), 🔍 Start a scan, ⟳ Check for updates, ⛔ Isolate from the network and ✓ Release (verified by re-reading), ✓ Acknowledge an alert (verified gone).
 
 ## DCX-CTL portal (dcx-ctl)
-keywords: darkcipher portal, dcx-ctl, control api, enrolment, julia anne taylor, portal users, invites, website control
+keywords: darkcipher portal, dcx-ctl, control api, enrolment, portal users, invites, website control
 Infrastructure → ＋ Add ▾ → DCX-CTL (a DarkCipher Systems portal). Paste the enrolment string the portal's owner created (dcxctl1.…) and the server's SSH host key fingerprint (SHA256:…). The enrolment key is sealed in the vault; the host key is pinned in Known hosts.
-**Security:** dcx-ctl/1 runs over SSH; every request and response is authenticated (X25519 key agreement, ChaCha20-Poly1305, per-message MACs), so a changed host key or a tampered reply is refused. Providers are PRODUCTION by default.
+**Security:** dcx-ctl/2 runs over SSH; every request and response is authenticated (hybrid X25519 + ML-KEM-768 key agreement, ChaCha20-Poly1305, per-message MACs), so a changed host key or a tampered reply is refused. Providers are PRODUCTION by default.
 
 ## Hetzner Cloud
 keywords: hetzner, hcloud, cloud, project, api token, server, volume, floating ip, primary ip, load balancer, firewall, network, placement group, certificate, snapshot, backup, rescue, rebuild, resize, dns, zone, rate limit

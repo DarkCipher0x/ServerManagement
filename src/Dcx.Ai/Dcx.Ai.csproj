@@ -41,8 +41,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
-    <PackageReference Include="PdfPig" Version="0.1.9" />
-    <PackageReference Include="System.Management" Version="10.0.13" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+    <PackageReference Include="System.Management" Version="10.0.15" />
   </ItemGroup>
 
 </Project>

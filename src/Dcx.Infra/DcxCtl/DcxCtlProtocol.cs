@@ -3,21 +3,29 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using DcxManager.Services;
 
 namespace DcxManager.DcxCtl;
 
 /// <summary>
-/// The DarkCipher Control protocol dcx-ctl/1 (DarkCipherSystems-Website docs/CONTROL-API.md §5; reference implementation
-/// deploy/reports/dcxctl_proto.py — this is a byte-for-byte port of it). Nothing here invents cryptography: X25519 comes
-/// from BouncyCastle (already shipped with SSH.NET), ChaCha20-Poly1305, HMAC-SHA256 and HKDF from .NET. <see cref="SelfTest"/>
-/// checks all of them against the RFC 5869 / 7748 / 8439 vectors and the client refuses to run if any fails.
-/// Every MAC / KDF input is a list of length-prefixed fields (no splicing).
+/// The DarkCipher Control protocol dcx-ctl/2 (DarkCipherSystems-Website docs/CONTROL-API.md §5; reference implementation
+/// deploy/reports/dcxctl_proto.py — this is a byte-for-byte port of it). Nothing here invents cryptography: X25519 and
+/// ML-KEM-768 (FIPS 203, through <see cref="Pqc"/>) come from BouncyCastle, ChaCha20-Poly1305, HMAC-SHA256 and HKDF from
+/// .NET. <see cref="SelfTest"/> checks them against the RFC 5869 / 7748 / 8439 vectors and runs a whole ML-KEM exchange;
+/// the client refuses to run if any fails. Every MAC / KDF input is a list of length-prefixed fields (no splicing).
+/// The session keys come from the X25519 secret AND the ML-KEM secret together, salted with the pre-shared handshake
+/// key, so a recorded session stays private unless both exchanges are broken. Version 1 (X25519 only) is not spoken:
+/// portals refuse it since 2026-11-10, and a portal that doesn't confirm version 2 is refused here.
 /// </summary>
 public static class DcxCtlProtocol
 {
-    public static readonly byte[] Proto = "dcx-ctl/1"u8.ToArray();
-    private static readonly byte[] Magic = "DCXCTL1"u8.ToArray();
-    public const int Version = 1, KeyIdLen = 16, HelloLen = 7 + 1 + 16 + 32 + 32 + 8 + 32, ReplyLen = 96;
+    public static readonly byte[] Proto = "dcx-ctl/2"u8.ToArray();
+    private static readonly byte[] Magic = "DCXCTL2"u8.ToArray();
+    public const int Version = 2, KeyIdLen = 16, KemPub = 1184, KemCt = 1088;
+    /// <summary>magic 7 | version 1 | key id 16 | X25519 32 | ML-KEM public 1184 | nonce 32 | time 8 | MAC 32 = 1,312.</summary>
+    public const int HelloLen = 7 + 1 + KeyIdLen + 32 + KemPub + 32 + 8 + 32;
+    /// <summary>X25519 32 | ML-KEM ciphertext 1088 | nonce 32 | MAC 32 = 1,184.</summary>
+    public const int ReplyLen = 32 + KemCt + 32 + 32;
     public const int MaxFrame = 1024 * 1024 + 64, MaxPlain = MaxFrame - 8 - 16;
     public const long MaxMessages = 1L << 20;
     private const byte DirC2S = 1, DirS2C = 2;
@@ -53,11 +61,11 @@ public static class DcxCtlProtocol
     public static byte[] HkdfExpand(byte[] prk, byte[] info, int length) => HKDF.Expand(HashAlgorithmName.SHA256, prk, length, info);
     private static byte[] Cat(params byte[][] parts) => parts.SelectMany(p => p).ToArray();
 
-    /// <summary>S (32 bytes) → (K_hs, K_auth).</summary>
+    /// <summary>S (32 bytes) → (K_hs, K_auth). These labels did not change with version 2, so an enrolled key works as it is.</summary>
     public static (byte[] Hs, byte[] Auth) ClientKeys(byte[] secret)
     {
         if (secret.Length != 32) throw new ProtocolException("secret must be 32 bytes");
-        var prk = HkdfExtract(Cat(Proto, " client key"u8.ToArray()), secret);
+        var prk = HkdfExtract("dcx-ctl/1 client key"u8.ToArray(), secret);
         return (HkdfExpand(prk, "dcx-ctl/1 handshake"u8.ToArray(), 32), HkdfExpand(prk, "dcx-ctl/1 e2e"u8.ToArray(), 32));
     }
 
@@ -100,7 +108,9 @@ public static class DcxCtlProtocol
         return plain;
     }
 
-    /// <summary>RFC 5869, RFC 7748 and RFC 8439 vectors (the same as the Python side checks). Throws on any mismatch.</summary>
+    /// <summary>RFC 5869, RFC 7748 and RFC 8439 vectors (the same as the Python side checks) and a whole ML-KEM-768 exchange
+    /// (both sides agree, a changed ciphertext or another key never gives the same secret, the sizes fit the wire format).
+    /// Throws on any mismatch.</summary>
     public static void SelfTest()
     {
         static byte[] H(string s) => Convert.FromHexString(s);
@@ -115,6 +125,12 @@ public static class DcxCtlProtocol
         var msg = Encoding.ASCII.GetBytes("Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.");
         var sealedMsg = Seal(Enumerable.Range(0x80, 32).Select(i => (byte)i).ToArray(), H("070000004041424344454647"), H("50515253c0c1c2c3c4c5c6c7"), msg);
         ok = ok && sealedMsg[^16..].SequenceEqual(H("1ae10b594f09e26a7e902ecbd0600691"));
+        var (seed, pub) = Pqc.KemGenerate();
+        var (ct, secret) = Pqc.KemEncapsulate(pub);
+        var changed = (byte[])ct.Clone(); changed[0] ^= 1;
+        ok = ok && pub.Length == KemPub && ct.Length == KemCt && secret.Length == 32 && secret.Any(b => b != 0)
+                && Pqc.KemDecapsulate(seed, ct).SequenceEqual(secret) && !Pqc.KemDecapsulate(seed, changed).SequenceEqual(secret)
+                && !Pqc.KemDecapsulate(Pqc.KemGenerate().Seed, ct).SequenceEqual(secret);
         if (!ok) throw new ProtocolException("cryptographic self-test failed");
     }
 
@@ -151,41 +167,63 @@ public static class DcxCtlProtocol
 
     // ---- handshake ----------------------------------------------------------------------------------------------------
 
-    public static (byte[] Hello, byte[] Priv) MakeHello(byte[] keyId, byte[] kHs, long? now = null)
+    /// <summary>The hello and its one-use private halves (X25519 key, ML-KEM seed); <see cref="CheckReply"/> wipes them.</summary>
+    public static (byte[] Hello, byte[] Priv, byte[] KemSeed) MakeHello(byte[] keyId, byte[] kHs, long? now = null)
     {
         if (keyId.Length != KeyIdLen) throw new ProtocolException("bad key id");
         var (priv, pub) = X25519KeyPair();
-        var body = Cat(Magic, [Version], keyId, pub, RandomNumberGenerator.GetBytes(32), BigEndian(now ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
-        return (Cat(body, Hmac(kHs, body)), priv);
+        var (kemSeed, kemPub) = Pqc.KemGenerate();
+        if (kemPub.Length != KemPub) throw new ProtocolException("ML-KEM-768 public key has the wrong size");
+        var body = Cat(Magic, [(byte)Version], keyId, pub, kemPub, RandomNumberGenerator.GetBytes(32), BigEndian(now ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+        return (Cat(body, Hmac(kHs, body)), priv, kemSeed);
     }
 
     public sealed record Keys(byte[] C2S, byte[] S2C, byte[] Sid, byte[] Th);
 
-    public static Keys CheckReply(byte[] hello, byte[] reply, byte[] kHs, byte[] priv)
+    /// <summary>Client side: the server's MAC covers our hello, its X25519 key, the ML-KEM ciphertext and its nonce, so
+    /// none of them was changed on the way. Wipes <paramref name="priv"/> and <paramref name="kemSeed"/>.</summary>
+    public static Keys CheckReply(byte[] hello, byte[] reply, byte[] kHs, byte[] priv, byte[] kemSeed)
     {
-        if (reply.Length != ReplyLen) throw new ProtocolException("bad reply");
-        var es = reply[..32]; var ns = reply[32..64]; var mac = reply[64..];
-        if (!CryptographicOperations.FixedTimeEquals(Hmac(kHs, Cat("S"u8.ToArray(), hello, es, ns)), mac)) throw new ProtocolException("the server didn't prove it holds the key");
-        return Schedule(kHs, X25519(priv, es), hello, reply);
+        try
+        {
+            if (reply.Length != ReplyLen) throw new ProtocolException("the portal's handshake reply has the wrong size (it must speak dcx-ctl/2)");
+            var body = reply[..^32];
+            if (!CryptographicOperations.FixedTimeEquals(Hmac(kHs, Cat("S"u8.ToArray(), hello, body)), reply[^32..])) throw new ProtocolException("the server didn't prove it holds the key");
+            var dh = X25519(priv, body[..32]);
+            var ss = Pqc.KemDecapsulate(kemSeed, body[32..(32 + KemCt)]);
+            try { return Schedule(kHs, Cat(dh, ss), hello, reply); }
+            finally { CryptographicOperations.ZeroMemory(dh); CryptographicOperations.ZeroMemory(ss); }
+        }
+        finally { CryptographicOperations.ZeroMemory(priv); CryptographicOperations.ZeroMemory(kemSeed); }
     }
 
-    /// <summary>Server side (the self-test's fake portal only).</summary>
-    internal static (byte[] Reply, Keys Keys) MakeReply(byte[] hello, byte[] kHs)
+    /// <summary>Server side (the self-test's fake portal only; it checks what the real gateway checks).</summary>
+    internal static (byte[] Reply, Keys Keys) MakeReply(byte[] hello, byte[] kHs, long? now = null)
     {
-        var ec = hello[(7 + 1 + 16)..(7 + 1 + 16 + 32)];
+        if (hello.Length != HelloLen || !hello.AsSpan(0, 7).SequenceEqual(Magic) || hello[7] != Version) throw new ProtocolException("not a dcx-ctl/2 hello");
         if (!CryptographicOperations.FixedTimeEquals(Hmac(kHs, hello[..^32]), hello[^32..])) throw new ProtocolException("hello MAC");
+        var ts = (long)BinaryPrimitives.ReadUInt64BigEndian(hello.AsSpan(hello.Length - 40, 8));
+        if (Math.Abs((now ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds()) - ts) > 60) throw new ProtocolException("hello clock");
+        var ec = hello[24..56];
+        var kemPub = hello[56..(56 + KemPub)];
         var (priv, pub) = X25519KeyPair();
-        var ns = RandomNumberGenerator.GetBytes(32);
-        var reply = Cat(pub, ns, Hmac(kHs, Cat("S"u8.ToArray(), hello, pub, ns)));
-        return (reply, Schedule(kHs, X25519(priv, ec), hello, reply));
+        var (ct, ss) = Pqc.KemEncapsulate(kemPub);
+        var body = Cat(pub, ct, RandomNumberGenerator.GetBytes(32));
+        var reply = Cat(body, Hmac(kHs, Cat("S"u8.ToArray(), hello, body)));
+        return (reply, Schedule(kHs, Cat(X25519(priv, ec), ss), hello, reply));
     }
 
-    private static Keys Schedule(byte[] kHs, byte[] dh, byte[] hello, byte[] reply)
+    /// <summary>HKDF-Extract(salt = K_hs, ikm = dh | ss), then one key per label bound to the transcript hash.</summary>
+    private static Keys Schedule(byte[] kHs, byte[] secret, byte[] hello, byte[] reply)
     {
         var th = SHA256.HashData(Cat(hello, reply));
-        var prk = HkdfExtract(kHs, dh);
-        return new Keys(HkdfExpand(prk, Cat("dcx-ctl/1 c2s"u8.ToArray(), th), 32), HkdfExpand(prk, Cat("dcx-ctl/1 s2c"u8.ToArray(), th), 32),
-                        HkdfExpand(prk, Cat("dcx-ctl/1 sid"u8.ToArray(), th), 16), th);
+        var prk = HkdfExtract(kHs, secret);
+        try
+        {
+            return new Keys(HkdfExpand(prk, Cat("dcx-ctl/2 c2s"u8.ToArray(), th), 32), HkdfExpand(prk, Cat("dcx-ctl/2 s2c"u8.ToArray(), th), 32),
+                            HkdfExpand(prk, Cat("dcx-ctl/2 sid"u8.ToArray(), th), 16), th);
+        }
+        finally { CryptographicOperations.ZeroMemory(prk); }
     }
 
     // ---- sealed channel -----------------------------------------------------------------------------------------------
@@ -240,7 +278,7 @@ public static class DcxCtlProtocol
     {
         var parts = (text ?? "").Trim().Split('.');
         if (parts.Length != 5 || parts[0] != "dcxctl1" || !System.Text.RegularExpressions.Regex.IsMatch(parts[1], "^[a-z0-9-]{2,32}$") || !System.Text.RegularExpressions.Regex.IsMatch(parts[2], "^[0-9a-f]{32}$"))
-            throw new ProtocolException("not a dcx-ctl/1 enrolment string");
+            throw new ProtocolException("not a dcx-ctl enrolment string (it starts with dcxctl1.)");
         var body = string.Join(".", parts[..4]);
         var check = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(body))).ToLowerInvariant()[..8];
         if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(check), Encoding.ASCII.GetBytes(parts[4]))) throw new ProtocolException("the enrolment string's check digits are wrong (copy it again)");

@@ -309,7 +309,7 @@ public static class InfraApiTests
 
     private static async Task SophosAsync(Action<string> ok)
     {
-        var cred = new Credential { Name = "selftest-sophos", Kind = CredentialKind.Password, Username = "sophos-client-qx9", Secret = "Sophos-Secret-qx9" };
+        var cred = new Credential { Name = "selftest-sophos", Kind = CredentialKind.Password, Username = "sophos-client-qx9", Secret = "Sophos-Secret-qx9" };   // secret-scan: example (synthetic fixture)
         AppData.Current.Credentials.Add(cred);
         try
         {
@@ -322,7 +322,7 @@ public static class InfraApiTests
             {
                 var u = r.RequestUri!;
                 if (u.Host == "id.sophos.com" && u.AbsolutePath == "/api/v2/oauth2/token")
-                    return body.Contains("client_id=sophos-client-qx9") && body.Contains("client_secret=Sophos-Secret-qx9") && body.Contains("scope=token")
+                    return body.Contains("client_id=sophos-client-qx9") && body.Contains("client_secret=Sophos-Secret-qx9") && body.Contains("scope=token")   // secret-scan: example (synthetic fixture)
                         ? J(200, new JsonObject { ["access_token"] = Token, ["expires_in"] = 3600 }) : J(400, new JsonObject { ["errorCode"] = "oauth.invalid_client" });
                 if (r.Headers.Authorization?.ToString() != "Bearer " + Token) return J(401, new JsonObject());
                 if (u.Host == "api.central.sophos.com" && u.AbsolutePath == "/whoami/v1")

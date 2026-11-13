@@ -1,3 +1,4 @@
+#Requires -Version 7
 # Writes the version into README.md (release pipeline; docs\RELEASE-PIPELINE.md): the version badge, and a Release
 # history entry for <ver> from the opening paragraph of docs\release-notes\<ver>.md when there isn't one yet. build.ps1
 # runs it first, so the README is never edited by hand for a release and tools\release-check.ps1 finds it in step.

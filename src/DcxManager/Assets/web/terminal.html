@@ -147,7 +147,13 @@
   term.onSelectionChange(() => send({ t: 'sel', d: term.getSelection() }));
   // Native pastes (Ctrl+V, Shift+Insert, middle-click, context paste) never reach the shell directly: the host
   // inspects them first (multi-line / hidden control characters / risky commands) and sends back what to paste.
-  document.getElementById('term').addEventListener('paste', e => { e.preventDefault(); e.stopImmediatePropagation(); send({ t: 'paste' }); }, true);
+  // One paste request per user action: Ctrl+Shift+V used to ask for a paste from its keydown AND again from the native
+  // paste event the browser then fired (Ctrl+Shift+V = "paste as plain text"), so the text arrived twice. The keydown now
+  // cancels the native paste, and this guard drops any second request inside the same gesture.
+  let lastPasteAt = -1e9;
+  // performance.now() is monotonic: a wall-clock step backwards (NTP, a manual change) can't block pastes.
+  function requestPaste() { const n = performance.now(); if (n - lastPasteAt < 250) return; lastPasteAt = n; send({ t: 'paste' }); }
+  document.getElementById('term').addEventListener('paste', e => { e.preventDefault(); e.stopImmediatePropagation(); requestPaste(); }, true);
   // Drag-and-drop of text would also bypass the check: block it.
   document.addEventListener('drop', e => e.preventDefault(), true);
   document.addEventListener('dragover', e => e.preventDefault(), true);
@@ -171,7 +177,8 @@
   term.attachCustomKeyEventHandler(e => {
     if (e.type !== 'keydown') return true;
     if (e.ctrlKey && e.shiftKey && e.code === 'KeyC') { send({ t: 'copy', d: term.getSelection() }); return false; }
-    if (e.ctrlKey && e.shiftKey && e.code === 'KeyV') { send({ t: 'paste' }); return false; }
+    // Held down, the shortcut auto-repeats: only the first keydown pastes (each paste may ask to confirm).
+    if (e.ctrlKey && e.shiftKey && e.code === 'KeyV') { e.preventDefault(); if (!e.repeat) requestPaste(); return false; }
     if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') { send({ t: 'findbar' }); return false; }
     if (e.ctrlKey && e.shiftKey && e.code === 'KeyP') { send({ t: 'palette' }); return false; }   // 0.6.29: never ^P to the shell
     const c = chord(e);

@@ -25,7 +25,7 @@
     <!-- Version: numeric (assembly, Windows Installer, update checks); it must keep increasing.
          ReleaseLabel: what the release is called (file names, dist folder, shown in the app), e.g. 0.2.0-preview.1 while
          the numeric version is 0.1.21 (a preview has to sort below the final 0.2.0, which upgrades it). Empty = Version. -->
-    <Version>0.6.46</Version>
+    <Version>0.6.54</Version>
     <ReleaseLabel></ReleaseLabel>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
@@ -105,11 +105,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
-    <PackageReference Include="PdfPig" Version="0.1.9" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
     <PackageReference Include="SSH.NET" Version="2026.0.0" />
-    <PackageReference Include="System.IO.Ports" Version="10.0.13" />
-    <PackageReference Include="System.Management" Version="10.0.13" />
-    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.15" />
+    <PackageReference Include="System.Management" Version="10.0.15" />
+    <PackageReference Include="QRCoder" Version="1.8.1" />
   </ItemGroup>
 
   <Target Name="TrimPublishDocs" AfterTargets="Publish">

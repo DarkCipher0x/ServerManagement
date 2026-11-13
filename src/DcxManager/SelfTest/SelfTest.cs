@@ -262,7 +262,7 @@ public static partial class SelfTest
         try { await LibraryAccessTests.RunAsync(Path.GetDirectoryName(reportPath)!, Ok, Fail); }
         catch (Exception ex) { Fail("library access tests", ex); }
 
-        // 0.3.0 preview.8: DarkCipher portals over dcx-ctl/1 (loopback fake gateway + portal).
+        // 0.3.0 preview.8: DarkCipher portals over dcx-ctl/2 since 0.6.54 (loopback fake gateway + portal).
         try { await DcxCtlTests.RunAsync(Ok, Fail); }
         catch (Exception ex) { Fail("dcx-ctl tests", ex); }
 

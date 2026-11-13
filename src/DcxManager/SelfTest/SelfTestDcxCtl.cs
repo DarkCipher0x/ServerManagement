@@ -10,11 +10,13 @@ using static DcxManager.DcxCtl.DcxCtlProtocol;
 namespace DcxManager;
 
 /// <summary>
-/// 0.3.0 preview.8 (§9): the DarkCipher portal client (dcx-ctl/1). RFC vectors pass; the enrolment string's check digits
+/// 0.3.0 preview.8 (§9), dcx-ctl/2 since 0.6.54: the DarkCipher portal client. RFC vectors and an ML-KEM-768 exchange
+/// pass; the hello is 1,312 bytes ("DCXCTL2", version 2) and the reply 1,184; the enrolment string's check digits
 /// catch a typo; against a loopback fake of the gateway + portal (which checks the hello MAC, the open proof, every
 /// request MAC and the strictly increasing sequence, exactly as ctl_api.py does) the provider opens a session, lists the
 /// portal, its sections and users, and a reply whose end-to-end MAC was changed in transit is refused. A wrong key is
-/// refused at the handshake. No real portal is contacted (the live test is on the test VPS, with DarkCipher0x).
+/// refused at the handshake, and so are a portal that doesn't confirm "proto": 2, a version 1 reply (96 bytes) and a
+/// reply whose ML-KEM ciphertext was changed. No real portal is contacted (the live test is on the test VPS, with DarkCipher0x).
 /// </summary>
 public static class DcxCtlTests
 {
@@ -29,6 +31,27 @@ public static class DcxCtlTests
             if (portal != "dcx-test" || !k2.SequenceEqual(kid) || !s2.SequenceEqual(secret)) throw new Exception("enrolment round trip");
             try { ParseEnrolment(enrol[..^1] + (enrol[^1] == 'a' ? 'b' : 'a')); throw new Exception("a typo in the check digits was accepted"); } catch (ProtocolException) { }
             if (Fields("a"u8.ToArray(), "bc").SequenceEqual(Fields("ab"u8.ToArray(), "c"))) throw new Exception("field encoding splices");
+
+            // The wire format of version 2: sizes, magic, version byte; both sides derive the same keys; a version 1 sized
+            // reply and a reply whose ML-KEM ciphertext was changed are refused (the MAC covers the ciphertext).
+            {
+                var (kHs, _) = ClientKeys(secret);
+                var (hello, priv, seed) = MakeHello(kid, kHs);
+                if (HelloLen != 1312 || ReplyLen != 1184 || hello.Length != 1312 || Encoding.ASCII.GetString(hello, 0, 7) != "DCXCTL2" || hello[7] != 2) throw new Exception("hello is not a dcx-ctl/2 hello");
+                var (reply, serverKeys) = MakeReply(hello, kHs);
+                if (reply.Length != 1184) throw new Exception("reply size " + reply.Length);
+                var mine = CheckReply(hello, reply, kHs, (byte[])priv.Clone(), (byte[])seed.Clone());
+                if (!mine.C2S.SequenceEqual(serverKeys.C2S) || !mine.S2C.SequenceEqual(serverKeys.S2C) || !mine.Sid.SequenceEqual(serverKeys.Sid) || mine.C2S.SequenceEqual(mine.S2C))
+                    throw new Exception("the two sides derived different session keys");
+                try { CheckReply(hello, new byte[96], kHs, (byte[])priv.Clone(), (byte[])seed.Clone()); throw new Exception("a version 1 sized reply was accepted"); } catch (ProtocolException) { }
+                var bent = (byte[])reply.Clone(); bent[40] ^= 1;
+                try { CheckReply(hello, bent, kHs, (byte[])priv.Clone(), (byte[])seed.Clone()); throw new Exception("a changed ML-KEM ciphertext was accepted"); } catch (ProtocolException) { }
+                var old = (byte[])hello.Clone(); old[6] = (byte)'1'; old[7] = 1;
+                try { MakeReply(old, kHs); throw new Exception("the fake gateway took a version 1 hello"); } catch (ProtocolException) { }
+                var wiped = (byte[])priv.Clone(); var wipedSeed = (byte[])seed.Clone();
+                CheckReply(hello, reply, kHs, wiped, wipedSeed);
+                if (wiped.Any(b => b != 0) || wipedSeed.Any(b => b != 0)) throw new Exception("the one-use handshake secrets were not wiped");
+            }
 
             using var fake = new FakePortal(kid, secret);
             var cfg = new ProviderConfig { Kind = "dcx-portal", Name = "selftest-portal" };
@@ -61,9 +84,20 @@ public static class DcxCtlTests
             }
             catch (ProtocolException) { }
             catch (System.IO.IOException) { }
-            ok("DarkCipher portals (dcx-ctl/1): RFC 5869/7748/8439 vectors pass; enrolment string with check digits; against a loopback gateway+portal fake the handshake, open proof and per-request MACs verify, sequence numbers strictly increase, the portal, its sections (version 9.9.9) and users are listed with secrets masked; a reply altered in transit and a wrong key are refused");
+
+            // A portal that opens the session without confirming version 2 is refused.
+            fake.OmitProto = true;
+            try
+            {
+                var tcp = new TcpClient(); await tcp.ConnectAsync(IPAddress.Loopback, fake.Port);
+                await using var noProto = await DcxCtlSession.OpenAsync(tcp.GetStream(), enrol, CancellationToken.None, new Closer(tcp));
+                throw new Exception("a portal that didn't confirm version 2 got a session");
+            }
+            catch (ProtocolException ex) when (ex.Message.Contains("version 2")) { }
+            finally { fake.OmitProto = false; }
+            ok("DarkCipher portals (dcx-ctl/2): RFC 5869/7748/8439 vectors and an ML-KEM-768 exchange pass; the hello is 1,312 bytes (DCXCTL2, version 2) and the reply 1,184, both sides derive the same keys from X25519 + ML-KEM-768 and the one-use secrets are wiped; enrolment string with check digits; against a loopback gateway+portal fake the handshake, open proof and per-request MACs verify, sequence numbers strictly increase, the portal, its sections (version 9.9.9) and users are listed with secrets masked; a reply altered in transit, a wrong key, a version 1 hello or reply, a changed ML-KEM ciphertext and a portal that doesn't confirm \"proto\": 2 are refused");
         }
-        catch (Exception ex) { fail("DarkCipher portals (dcx-ctl/1)", ex); }
+        catch (Exception ex) { fail("DarkCipher portals (dcx-ctl/2)", ex); }
         finally { DcxPortalProvider.Connector = null; }
     }
 
@@ -77,6 +111,7 @@ public static class DcxCtlTests
         public int Port { get; }
         public List<long> Seqs { get; } = new();
         public bool TamperNext { get; set; }
+        public bool OmitProto { get; set; }
 
         public FakePortal(byte[] kid, byte[] secret)
         {
@@ -98,7 +133,9 @@ public static class DcxCtlTests
                 var ch = new Channel(s, keys, server: true);
                 var open = await ch.RecvAsync(CancellationToken.None);
                 if (open["proof"]?.GetValue<string>() != OpenProof(_kAuth, _kid, keys.Sid, keys.Th)) { await ch.SendAsync(new JsonObject { ["op"] = "closed", ["error"] = "refused" }, default); return; }
-                await ch.SendAsync(new JsonObject { ["op"] = "opened", ["portal"] = "dcx-test", ["brand"] = "DarkCipher Test", ["account"] = "demo", ["scope"] = "read", ["expires"] = 0 }, default);
+                var opened = new JsonObject { ["op"] = "opened", ["portal"] = "dcx-test", ["brand"] = "DarkCipher Test", ["account"] = "demo", ["scope"] = "read", ["expires"] = 0 };
+                if (!OmitProto) opened["proto"] = 2;
+                await ch.SendAsync(opened, default);
                 long last = -1;
                 while (true)
                 {
@@ -116,7 +153,7 @@ public static class DcxCtlTests
                         reply2 = path switch
                         {
                             "/admin/api/system" => new JsonObject { ["version"] = "9.9.9", ["ok"] = true, ["uptime"] = 1234, ["note"] = "password=hunter2-secret" },
-                            "/admin/api/access/users" => new JsonObject { ["users"] = new JsonArray(new JsonObject { ["username"] = "demo", ["role"] = "owner" }, new JsonObject { ["username"] = "jat", ["role"] = "admin" }) },
+                            "/admin/api/access/users" => new JsonObject { ["users"] = new JsonArray(new JsonObject { ["username"] = "demo", ["role"] = "owner" }, new JsonObject { ["username"] = "sam", ["role"] = "admin" }) },
                             _ => new JsonObject { ["ok"] = true },
                         };
                     }
